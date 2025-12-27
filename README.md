@@ -57,7 +57,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/yourusername/hokusai.git", from: "1.0.0")
+    .package(url: "https://github.com/ivantokar/hokusai.git", from: "1.0.0")
 ]
 
 targets: [
@@ -188,9 +188,9 @@ let smartCropped = try image.smartCrop(
 
 ```swift
 // Fast 90° rotations
-let rotated90 = try image.rotate(angle: .d90)
-let rotated180 = try image.rotate(angle: .d180)
-let rotated270 = try image.rotate(angle: .d270)
+let rotated90 = try image.rotate(angle: .degree90)
+let rotated180 = try image.rotate(angle: .degree180)
+let rotated270 = try image.rotate(angle: .degree270)
 
 // Arbitrary angle
 let rotated = try image.rotate(
@@ -356,7 +356,7 @@ do {
 - Use fontconfig font names or absolute paths
 
 ### Docker
-See the [hokusai-vapor](../hokusai-vapor) package for Docker deployment examples.
+See the [hokusai-vapor-example](https://github.com/ivantokar/hokusai-vapor-example) demo app for a complete Docker deployment example.
 
 ## Troubleshooting
 
@@ -410,9 +410,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 Built with:
 - [libvips](https://www.libvips.org/) - Fast image processing library
 - [ImageMagick](https://imagemagick.org/) - Advanced image manipulation
-- Inspired by [sharp](https://sharp.pixelplumbing.com/) (Node.js) and [vips-kit](https://github.com/yourusername/vips-kit)
+- Inspired by [sharp](https://sharp.pixelplumbing.com/) (Node.js)
 
 ## Related Projects
 
-- [hokusai-vapor](../hokusai-vapor) - Vapor framework integration
-- [vips-kit](../vips-kit) - Pure libvips Swift wrapper
+- [hokusai-vapor](https://github.com/ivantokar/hokusai-vapor) - Vapor framework integration
+- [hokusai-vapor-example](https://github.com/ivantokar/hokusai-vapor-example) - Complete demo app with web UI
