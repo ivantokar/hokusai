@@ -1,0 +1,4 @@
+module CImageMagick {
+    header "shim.h"
+    export *
+}

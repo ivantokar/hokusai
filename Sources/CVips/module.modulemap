@@ -1,0 +1,5 @@
+module CVips {
+    header "shim.h"
+    link "vips"
+    export *
+}
