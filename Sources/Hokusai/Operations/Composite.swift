@@ -60,35 +60,41 @@ extension HokusaiImage {
         let overlayBackend = try overlay.ensureVipsBackend()
 
         let basePointer = try baseBackend.getPointer()
-        var overlayPointer = try overlayBackend.getPointer()
+        let overlayPointer = try overlayBackend.getPointer()
 
         let baseWidth = try baseBackend.getWidth()
         let baseHeight = try baseBackend.getHeight()
-        let overlayWidth = try overlayBackend.getWidth()
-        let overlayHeight = try overlayBackend.getHeight()
-
-        // Apply opacity if needed
-        if options.opacity < 1.0 {
-            overlayPointer = try applyOpacity(to: overlayPointer, opacity: options.opacity)
-        }
-
-        // If overlay needs to be positioned, embed it on a transparent canvas
-        var positionedOverlay = overlayPointer
-        if x != 0 || y != 0 {
-            positionedOverlay = try embedOverlay(
-                overlayPointer,
-                x: x,
-                y: y,
-                baseWidth: baseWidth,
-                baseHeight: baseHeight,
-                overlayWidth: overlayWidth,
-                overlayHeight: overlayHeight
-            )
-        }
 
         // Ensure both images have alpha channel
         let baseWithAlpha = try ensureAlpha(basePointer)
-        let overlayWithAlpha = try ensureAlpha(positionedOverlay)
+        let overlayWithAlpha = try ensureAlpha(overlayPointer)
+
+        // If overlay needs to be positioned, embed it on a transparent canvas
+        let positionedOverlay: UnsafeMutablePointer<CVips.VipsImage>
+        if x != 0 || y != 0 {
+            let background: [Double] = [0, 0, 0, 0]
+            let backgroundArray = background.withUnsafeBufferPointer { ptr in
+                swift_vips_array_double_new(ptr.baseAddress, Int32(background.count))
+            }
+
+            var embedded: UnsafeMutablePointer<CVips.VipsImage>?
+            let embedResult = swift_vips_embed(
+                overlayWithAlpha,
+                &embedded,
+                Int32(x),
+                Int32(y),
+                Int32(baseWidth),
+                Int32(baseHeight),
+                backgroundArray
+            )
+
+            guard embedResult == 0, let emb = embedded else {
+                throw HokusaiError.vipsError(VipsBackend.getLastError())
+            }
+            positionedOverlay = emb
+        } else {
+            positionedOverlay = overlayWithAlpha
+        }
 
         // Map blend mode to VipsBlendMode
         let vipsMode: VipsBlendMode
@@ -103,7 +109,7 @@ extension HokusaiImage {
 
         // Perform composite
         var output: UnsafeMutablePointer<CVips.VipsImage>?
-        let result = swift_vips_composite2(baseWithAlpha, overlayWithAlpha, &output, vipsMode)
+        let result = swift_vips_composite2(baseWithAlpha, positionedOverlay, &output, vipsMode)
 
         guard result == 0, let out = output else {
             throw HokusaiError.vipsError(VipsBackend.getLastError())
@@ -113,56 +119,6 @@ extension HokusaiImage {
     }
 
     // MARK: - Private Helpers
-
-    /// Apply opacity to an image by multiplying the alpha channel
-    private func applyOpacity(to image: UnsafeMutablePointer<CVips.VipsImage>, opacity: Double) throws -> UnsafeMutablePointer<CVips.VipsImage> {
-        // Ensure image has alpha
-        let withAlpha = try ensureAlpha(image)
-
-        // Multiply alpha channel by opacity
-        var output: UnsafeMutablePointer<CVips.VipsImage>?
-        let result = swift_vips_linear1(withAlpha, &output, opacity, 0.0)
-
-        guard result == 0, let out = output else {
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
-        }
-
-        return out
-    }
-
-    /// Embed overlay image on a transparent canvas matching base dimensions
-    private func embedOverlay(
-        _ overlay: UnsafeMutablePointer<CVips.VipsImage>,
-        x: Int,
-        y: Int,
-        baseWidth: Int,
-        baseHeight: Int,
-        overlayWidth: Int,
-        overlayHeight: Int
-    ) throws -> UnsafeMutablePointer<CVips.VipsImage> {
-        // Create transparent background (RGBA: 0, 0, 0, 0)
-        let background: [Double] = [0, 0, 0, 0]
-        let backgroundArray = background.withUnsafeBufferPointer { ptr in
-            swift_vips_array_double_new(ptr.baseAddress, Int32(background.count))
-        }
-
-        var output: UnsafeMutablePointer<CVips.VipsImage>?
-        let result = swift_vips_embed(
-            overlay,
-            &output,
-            Int32(x),
-            Int32(y),
-            Int32(baseWidth),
-            Int32(baseHeight),
-            backgroundArray
-        )
-
-        guard result == 0, let out = output else {
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
-        }
-
-        return out
-    }
 
     /// Ensure image has alpha channel
     private func ensureAlpha(_ image: UnsafeMutablePointer<CVips.VipsImage>) throws -> UnsafeMutablePointer<CVips.VipsImage> {
