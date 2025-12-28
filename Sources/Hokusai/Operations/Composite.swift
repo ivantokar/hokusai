@@ -96,11 +96,6 @@ extension HokusaiImage {
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }
 
-        // Unreference background array after use
-        defer {
-            vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
-        }
-
         // Map blend mode to VipsBlendMode
         let vipsMode: VipsBlendMode
         switch options.mode {
@@ -117,8 +112,12 @@ extension HokusaiImage {
         let result = swift_vips_composite2(baseWithAlpha, embedded, &output, vipsMode)
 
         guard result == 0, let out = output else {
+            vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }
+
+        // Unreference background array after successful composite
+        vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
 
         return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
     }
