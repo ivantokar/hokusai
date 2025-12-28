@@ -72,8 +72,12 @@ extension HokusaiImage {
         // Embed overlay on a transparent canvas matching base dimensions
         // (vips_composite requires all images to be the same size)
         let background: [Double] = [0, 0, 0, 0]
-        let backgroundArray = background.withUnsafeBufferPointer { ptr in
+        let vipsBackground = background.withUnsafeBufferPointer { ptr in
             swift_vips_array_double_new(ptr.baseAddress, Int32(background.count))
+        }
+
+        guard let bgArray = vipsBackground else {
+            throw HokusaiError.vipsError("Failed to create background array")
         }
 
         var positionedOverlay: UnsafeMutablePointer<CVips.VipsImage>?
@@ -84,11 +88,17 @@ extension HokusaiImage {
             Int32(y),
             Int32(baseWidth),
             Int32(baseHeight),
-            backgroundArray
+            bgArray
         )
 
         guard embedResult == 0, let embedded = positionedOverlay else {
+            vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
             throw HokusaiError.vipsError(VipsBackend.getLastError())
+        }
+
+        // Unreference background array after use
+        defer {
+            vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
         }
 
         // Map blend mode to VipsBlendMode
