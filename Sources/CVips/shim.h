@@ -187,11 +187,11 @@ static inline int swift_vips_composite2(
     VipsImage *base,
     VipsImage *overlay,
     VipsImage **out,
-    VipsBlendMode mode
+    VipsBlendMode mode,
+    int x,
+    int y
 ) {
-    VipsImage *in[2] = {base, overlay};
-    int modes[1] = {mode};
-    return vips_composite(in, out, 2, modes, 1, NULL);
+    return vips_composite2(base, overlay, out, mode, "x", x, "y", y, NULL);
 }
 
 // MARK: - Array Helpers
@@ -211,6 +211,15 @@ static inline int swift_vips_extract_area(
     int height
 ) {
     return vips_extract_area(in, out, left, top, width, height, NULL);
+}
+
+static inline int swift_vips_extract_band(
+    VipsImage *in,
+    VipsImage **out,
+    int band,
+    int n
+) {
+    return vips_extract_band(in, out, band, "n", n, NULL);
 }
 
 static inline int swift_vips_smartcrop(

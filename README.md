@@ -2,7 +2,7 @@
 
 A hybrid Swift image processing library combining the power of **ImageMagick** for advanced text rendering and **libvips** for high-performance image operations.
 
-[![Swift](https://img.shields.io/badge/Swift-5.9+-orange.svg)](https://swift.org)
+[![Swift](https://img.shields.io/badge/Swift-6.0+-orange.svg)](https://swift.org)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20|%20Linux-lightgrey.svg)](https://swift.org)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -17,24 +17,25 @@ The library handles backend switching transparently, converting between formats 
 ## Features
 
 ### Text Rendering (ImageMagick)
-- ✅ Custom TrueType/OpenType fonts via file path or system font name
-- ✅ Text stroke (outline) with configurable width and color
-- ✅ Advanced typography: font size, color, kerning, rotation
-- ✅ High-quality antialiasing
+- Custom TrueType/OpenType fonts via file path or system font name
+- Text stroke (outline) with configurable width and color
+- Advanced typography: font size, color, kerning, rotation
+- High-quality antialiasing
 
 ### Image Operations (libvips)
-- ✅ **Resize** - Multiple fit modes (fill, contain, cover, inside, outside)
-- ✅ **Crop** - Manual and smart cropping with attention detection
-- ✅ **Rotate** - Fast 90° rotations and arbitrary angle rotation
-- ✅ **Convert** - Support for JPEG, PNG, WebP, AVIF, GIF, TIFF formats
-- ✅ **Metadata** - Extract dimensions, format, color space, EXIF data
+- **Resize** - Multiple fit modes (fill, contain, cover, inside, outside)
+- **Crop** - Manual and smart cropping with attention detection
+- **Rotate** - Fast 90° rotations and arbitrary angle rotation
+- **Convert** - Support for JPEG, PNG, WebP, AVIF, GIF, TIFF formats
+- **Composite** - Overlay images with blend modes and opacity
+- **Metadata** - Extract dimensions, channels, and alpha (format optional)
 
 ### Architecture
-- 🔄 Automatic backend switching based on operation type
-- 🚀 Streaming processing keeps memory usage low (libvips)
-- 🔒 Thread-safe with NSLock protection
-- 🎯 Fluent, chainable API
-- 📦 Single unified `HokusaiImage` type
+- Automatic backend switching based on operation type
+- Streaming processing keeps memory usage low (libvips)
+- Thread-safe with NSLock protection
+- Fluent, chainable API
+- Single unified `HokusaiImage` type
 
 ## Installation
 
@@ -57,7 +58,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/ivantokar/hokusai.git", from: "1.0.0")
+    .package(url: "https://github.com/ivantokar/hokusai.git", from: "0.1.0")
 ]
 
 targets: [
@@ -216,6 +217,25 @@ let pngData = try image.toBuffer(format: "png", quality: 9)
 let webpData = try image.toBuffer(format: "webp", quality: 80)
 ```
 
+AVIF/HEIF output requires libvips built with libheif support.
+
+### Composite / Watermark
+
+```swift
+let base = try await Hokusai.image(from: "photo.jpg")
+let overlay = try await Hokusai.image(from: "watermark.png")
+
+let options = CompositeOptions(mode: .over, opacity: 0.6)
+let composited = try base.composite(
+    overlay: overlay,
+    x: 16,
+    y: 16,
+    options: options
+)
+
+try composited.toFile("watermarked.png")
+```
+
 ### Metadata
 
 ```swift
@@ -225,7 +245,7 @@ print(metadata.width)      // 3206
 print(metadata.height)     // 2266
 print(metadata.channels)   // 4 (RGBA)
 print(metadata.hasAlpha)   // true
-print(metadata.format)     // Optional(ImageFormat.jpeg)
+print(metadata.format)     // Optional(ImageFormat.jpeg) (may be nil)
 ```
 
 ### Direct Property Access
@@ -259,6 +279,7 @@ Hokusai automatically routes operations to the optimal backend:
     │  Crop   │      │ Rendering│
     │  Rotate │      │          │
     │ Convert │      │          │
+    │Composite│      │          │
     └─────────┘      └──────────┘
 ```
 
@@ -321,6 +342,47 @@ let options4 = TextOptions(font: "./assets/CustomFont.otf")
 // On Linux, use fontconfig names
 let options5 = TextOptions(font: "DejaVu Sans")
 let options6 = TextOptions(font: "Liberation Serif")
+```
+
+### iOS Client Example
+
+Hokusai runs on macOS/Linux (libvips + ImageMagick) and is intended for server use. iOS apps should call a HokusaiVapor server instead.
+
+This example calls the HokusaiVapor `/api/images/convert` endpoint from an iOS app:
+
+```swift
+import UIKit
+
+func convertToWebP(_ image: UIImage, baseURL: URL) async throws -> UIImage {
+    guard let data = image.jpegData(compressionQuality: 0.9) else {
+        throw URLError(.cannotDecodeRawData)
+    }
+
+    var components = URLComponents(
+        url: baseURL.appendingPathComponent("api/images/convert"),
+        resolvingAgainstBaseURL: false
+    )
+    components?.queryItems = [
+        URLQueryItem(name: "format", value: "webp"),
+        URLQueryItem(name: "quality", value: "80")
+    ]
+
+    guard let url = components?.url else {
+        throw URLError(.badURL)
+    }
+
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+    request.httpBody = data
+
+    let (responseData, _) = try await URLSession.shared.data(for: request)
+    guard let processed = UIImage(data: responseData) else {
+        throw URLError(.cannotDecodeRawData)
+    }
+
+    return processed
+}
 ```
 
 ### Error Handling
@@ -391,6 +453,15 @@ textOptions.font = "MyCustomFont"
 // Use absolute path
 textOptions.font = "/usr/share/fonts/truetype/MyCustomFont.ttf"
 ```
+
+## Testing
+
+```bash
+swift test
+```
+
+Tests use Swift Testing (Swift 6+).
+If your Swift 6 toolchain does not ship the `Testing` module yet, keep the `swift-testing` package dependency.
 
 ## Contributing
 

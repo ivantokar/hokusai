@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -14,7 +14,9 @@ let package = Package(
             targets: ["Hokusai"]
         )
     ],
-    dependencies: [],
+    dependencies: [
+        .package(url: "https://github.com/apple/swift-testing.git", from: "0.7.0"),
+    ],
     targets: [
         // System library wrapper for libvips
         .systemLibrary(
@@ -45,7 +47,10 @@ let package = Package(
         // Test target
         .testTarget(
             name: "HokusaiTests",
-            dependencies: ["Hokusai"],
+            dependencies: [
+                "Hokusai",
+                .product(name: "Testing", package: "swift-testing"),
+            ],
             resources: [
                 .copy("Fixtures")
             ]

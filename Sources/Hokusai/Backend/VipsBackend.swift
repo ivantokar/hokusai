@@ -88,6 +88,8 @@ final class VipsBackend: ImageBackend {
             result = swift_vips_pngsave(pointer, path, Int32(quality ?? 6), 0)
         case "webp":
             result = swift_vips_webpsave(pointer, path, Int32(quality ?? 80), 0, 4)
+        case "avif", "heif", "heic":
+            result = swift_vips_heifsave(pointer, path, Int32(quality ?? 80), 0, 4)
         case "tiff", "tif":
             result = swift_vips_tiffsave(pointer, path, 0)
         case "gif":
@@ -116,6 +118,8 @@ final class VipsBackend: ImageBackend {
             result = swift_vips_pngsave_buffer(pointer, &buffer, &length, Int32(quality ?? 6))
         case "webp":
             result = swift_vips_webpsave_buffer(pointer, &buffer, &length, Int32(quality ?? 80), 0)
+        case "avif", "heif", "heic":
+            result = swift_vips_heifsave_buffer(pointer, &buffer, &length, Int32(quality ?? 80))
         case "tiff", "tif":
             result = swift_vips_tiffsave_buffer(pointer, &buffer, &length)
         case "gif":

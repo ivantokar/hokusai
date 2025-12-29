@@ -55,172 +55,26 @@ extension HokusaiImage {
         y: Int = 0,
         options: CompositeOptions = CompositeOptions()
     ) throws -> HokusaiImage {
-        print("[Composite] ===== FUNCTION ENTRY =====")
-        fflush(stdout)
-        print("[Composite] START")
-        fflush(stdout)
-        print("[Composite] x=\(x), y=\(y)")
-        fflush(stdout)
-
-        // Ensure both images use VipsBackend
-        print("[Composite] Ensuring backends...")
-        fflush(stdout)
-
-        print("[Composite] Getting base backend...")
-        fflush(stdout)
         let baseBackend = try ensureVipsBackend()
-        print("[Composite] Base backend obtained")
-        fflush(stdout)
-
-        print("[Composite] Getting overlay backend...")
-        fflush(stdout)
         let overlayBackend = try overlay.ensureVipsBackend()
-        print("[Composite] Overlay backend obtained")
-        fflush(stdout)
 
-        print("[Composite] Backends OK")
-        fflush(stdout)
-
-        print("[Composite] Getting pointers...")
-        fflush(stdout)
-
-        print("[Composite] Getting base pointer...")
-        fflush(stdout)
         let basePointer = try baseBackend.getPointer()
-        print("[Composite] Base pointer obtained")
-        fflush(stdout)
-
-        print("[Composite] Getting overlay pointer...")
-        fflush(stdout)
         let overlayPointer = try overlayBackend.getPointer()
-        print("[Composite] Overlay pointer obtained")
-        fflush(stdout)
 
-        print("[Composite] Pointers OK")
-        fflush(stdout)
-
-        print("[Composite] Getting dimensions...")
-        fflush(stdout)
-
-        print("[Composite] Getting base width...")
-        fflush(stdout)
-        let baseWidth = try baseBackend.getWidth()
-        print("[Composite] Base width: \(baseWidth)")
-        fflush(stdout)
-
-        print("[Composite] Getting base height...")
-        fflush(stdout)
-        let baseHeight = try baseBackend.getHeight()
-        print("[Composite] Base dimensions: \(baseWidth)x\(baseHeight)")
-        fflush(stdout)
-
-        // Ensure both images are RGBA (same colorspace and bands)
-        print("[Composite] Converting to RGBA...")
-        fflush(stdout)
-
-        print("[Composite] Converting base to RGBA...")
-        fflush(stdout)
+        // Normalize inputs to RGBA so compositing behaves consistently.
         let baseWithAlpha = try ensureRGBA(basePointer)
-        print("[Composite] Base RGBA OK")
-        fflush(stdout)
+        defer { g_object_unref(baseWithAlpha) }
 
-        print("[Composite] Converting overlay to RGBA...")
-        fflush(stdout)
         let overlayWithAlpha = try ensureRGBA(overlayPointer)
-        print("[Composite] Overlay RGBA OK")
-        fflush(stdout)
-
-        // Debug: log image properties
-        print("[Composite] Logging image properties...")
-        fflush(stdout)
-
-        print("[Composite] Getting base properties...")
-        fflush(stdout)
-        let baseW = vips_image_get_width(baseWithAlpha)
-        let baseH = vips_image_get_height(baseWithAlpha)
-        let baseBands = vips_image_get_bands(baseWithAlpha)
-        print("[Composite] Base: \(baseW)x\(baseH), bands: \(baseBands)")
-        fflush(stdout)
-
-        print("[Composite] Getting overlay properties...")
-        fflush(stdout)
-        let overlayW = vips_image_get_width(overlayWithAlpha)
-        let overlayH = vips_image_get_height(overlayWithAlpha)
-        let overlayBands = vips_image_get_bands(overlayWithAlpha)
-        print("[Composite] Overlay: \(overlayW)x\(overlayH), bands: \(overlayBands)")
-        fflush(stdout)
-
-        print("[Composite] Position: x=\(x), y=\(y)")
-        fflush(stdout)
-
-        // Embed overlay on a transparent canvas matching base dimensions
-        // (vips_composite requires all images to be the same size)
-        print("[Composite] Creating background array...")
-        fflush(stdout)
-        let background: [Double] = [0, 0, 0, 0]
-        let vipsBackground = background.withUnsafeBufferPointer { ptr in
-            swift_vips_array_double_new(ptr.baseAddress, Int32(background.count))
+        var overlayForComposite = overlayWithAlpha
+        if options.opacity < 1.0 {
+            overlayForComposite = try applyOpacity(overlayWithAlpha, opacity: options.opacity)
+            if overlayForComposite != overlayWithAlpha {
+                g_object_unref(overlayWithAlpha)
+            }
         }
-        print("[Composite] Background array created")
-        fflush(stdout)
+        defer { g_object_unref(overlayForComposite) }
 
-        guard let bgArray = vipsBackground else {
-            print("[Composite] ERROR: Background array is nil!")
-            fflush(stdout)
-            throw HokusaiError.vipsError("Failed to create background array")
-        }
-        print("[Composite] Background array validated")
-        fflush(stdout)
-
-        print("[Composite] Calling swift_vips_embed...")
-        fflush(stdout)
-        var positionedOverlay: UnsafeMutablePointer<CVips.VipsImage>?
-        let embedResult = swift_vips_embed(
-            overlayWithAlpha,
-            &positionedOverlay,
-            Int32(x),
-            Int32(y),
-            Int32(baseWidth),
-            Int32(baseHeight),
-            bgArray
-        )
-        print("[Composite] Embed call complete, result=\(embedResult)")
-        fflush(stdout)
-
-        print("[Composite] Checking embed result...")
-        fflush(stdout)
-
-        guard embedResult == 0, let embedded = positionedOverlay else {
-            // Cleanup on embed failure
-            print("[Composite] ERROR: Embed failed with result=\(embedResult), positionedOverlay=\(String(describing: positionedOverlay))")
-            fflush(stdout)
-            g_object_unref(baseWithAlpha)
-            g_object_unref(overlayWithAlpha)
-            vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
-        }
-
-        print("[Composite] Embed succeeded, embedded image pointer: \(String(describing: embedded))")
-        fflush(stdout)
-
-        print("[Composite] Getting embedded image dimensions...")
-        fflush(stdout)
-        let embeddedWidth = vips_image_get_width(embedded)
-        print("[Composite] Embedded width: \(embeddedWidth)")
-        fflush(stdout)
-
-        let embeddedHeight = vips_image_get_height(embedded)
-        print("[Composite] Embedded height: \(embeddedHeight)")
-        fflush(stdout)
-
-        let embeddedBands = vips_image_get_bands(embedded)
-        print("[Composite] Embedded: \(embeddedWidth)x\(embeddedHeight), bands: \(embeddedBands)")
-        fflush(stdout)
-
-        print("[Composite] Calling vips_composite...")
-        fflush(stdout)
-
-        // Map blend mode to VipsBlendMode
         let vipsMode: VipsBlendMode
         switch options.mode {
         case .over:
@@ -231,141 +85,117 @@ extension HokusaiImage {
             vipsMode = VIPS_BLEND_MODE_MULTIPLY
         }
 
-        // Perform composite
-        print("[Composite] About to call swift_vips_composite2 with mode=\(vipsMode)...")
-        fflush(stdout)
-
         var output: UnsafeMutablePointer<CVips.VipsImage>?
-        print("[Composite] Calling NOW...")
-        fflush(stdout)
-
-        let result = swift_vips_composite2(baseWithAlpha, embedded, &output, vipsMode)
-
-        print("[Composite] swift_vips_composite2 RETURNED, result=\(result)")
-        fflush(stdout)
-
-        print("[Composite] vips_composite result=\(result), output=\(String(describing: output))")
-        fflush(stdout)
+        let result = swift_vips_composite2(
+            baseWithAlpha,
+            overlayForComposite,
+            &output,
+            vipsMode,
+            Int32(x),
+            Int32(y)
+        )
 
         guard result == 0, let out = output else {
-            print("[Composite] ERROR: Composite failed with result=\(result)")
-            // Cleanup on error
-            g_object_unref(baseWithAlpha)
-            g_object_unref(overlayWithAlpha)
-            g_object_unref(embedded)
-            vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }
-
-        // Cleanup: unreference intermediate images that are no longer needed
-        g_object_unref(baseWithAlpha)
-        g_object_unref(overlayWithAlpha)
-        g_object_unref(embedded)
-        vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
 
         return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
     }
 
     // MARK: - Private Helpers
 
+    private func applyOpacity(
+        _ image: UnsafeMutablePointer<CVips.VipsImage>,
+        opacity: Double
+    ) throws -> UnsafeMutablePointer<CVips.VipsImage> {
+        guard opacity < 1.0 else { return image }
+
+        var rgbImage: UnsafeMutablePointer<CVips.VipsImage>?
+        let rgbResult = swift_vips_extract_band(image, &rgbImage, 0, 3)
+        guard rgbResult == 0, let rgb = rgbImage else {
+            throw HokusaiError.vipsError(VipsBackend.getLastError())
+        }
+
+        var alphaImage: UnsafeMutablePointer<CVips.VipsImage>?
+        let alphaResult = swift_vips_extract_band(image, &alphaImage, 3, 1)
+        guard alphaResult == 0, let alpha = alphaImage else {
+            g_object_unref(rgb)
+            throw HokusaiError.vipsError(VipsBackend.getLastError())
+        }
+
+        var scaledAlphaImage: UnsafeMutablePointer<CVips.VipsImage>?
+        let scaleResult = swift_vips_linear1(alpha, &scaledAlphaImage, opacity, 0)
+        guard scaleResult == 0, let scaledAlpha = scaledAlphaImage else {
+            g_object_unref(rgb)
+            g_object_unref(alpha)
+            throw HokusaiError.vipsError(VipsBackend.getLastError())
+        }
+
+        var output: UnsafeMutablePointer<CVips.VipsImage>?
+        var inputs: [UnsafeMutablePointer<CVips.VipsImage>?] = [rgb, scaledAlpha]
+        let joinResult = inputs.withUnsafeMutableBufferPointer { buffer -> Int32 in
+            guard let baseAddress = buffer.baseAddress else {
+                return -1
+            }
+            return swift_vips_bandjoin(baseAddress, &output, Int32(buffer.count))
+        }
+
+        g_object_unref(rgb)
+        g_object_unref(alpha)
+        g_object_unref(scaledAlpha)
+
+        guard joinResult == 0, let out = output else {
+            throw HokusaiError.vipsError(VipsBackend.getLastError())
+        }
+
+        return out
+    }
+
     /// Ensure image is RGBA (4 bands: RGB with alpha)
     /// Converts grayscale to RGB if needed, then adds alpha channel if needed
     private func ensureRGBA(_ image: UnsafeMutablePointer<CVips.VipsImage>) throws -> UnsafeMutablePointer<CVips.VipsImage> {
-        print("[ensureRGBA] START")
-        fflush(stdout)
-
-        print("[ensureRGBA] Getting bands...")
-        fflush(stdout)
         let bands = vips_image_get_bands(image)
-        print("[ensureRGBA] Input bands: \(bands)")
-        fflush(stdout)
 
-        // If already RGBA (4 bands), return a copy
+        // If already RGBA (4 bands), return a copy.
         if bands == 4 {
-            print("[ensureRGBA] Already 4 bands, copying...")
-            fflush(stdout)
             var output: UnsafeMutablePointer<CVips.VipsImage>?
             let result = swift_vips_copy(image, &output)
             guard result == 0, let out = output else {
-                print("[ensureRGBA] ERROR: Copy failed")
-                fflush(stdout)
                 throw HokusaiError.vipsError(VipsBackend.getLastError())
             }
-            print("[ensureRGBA] Already RGBA, returning copy")
-            fflush(stdout)
             return out
         }
 
-        // If grayscale (1 or 2 bands), convert to RGB
-        // vips_colourspace preserves alpha channel automatically
+        // If grayscale (1 or 2 bands), convert to RGB.
         var rgbImage = image
         if bands == 1 || bands == 2 {
-            print("[ensureRGBA] Converting grayscale to RGB...")
             var converted: UnsafeMutablePointer<CVips.VipsImage>?
-
-            // Convert to sRGB colorspace (preserves alpha if present)
             let convertResult = swift_vips_colourspace(image, &converted, VIPS_INTERPRETATION_sRGB)
-
             guard convertResult == 0, let conv = converted else {
                 throw HokusaiError.vipsError(VipsBackend.getLastError())
             }
-
             rgbImage = conv
-            print("[ensureRGBA] Converted to RGB, now bands: \(vips_image_get_bands(rgbImage))")
         }
 
-        // Now add alpha channel if not already present
         let currentBands = vips_image_get_bands(rgbImage)
         if currentBands == 3 {
-            print("[ensureRGBA] Adding alpha channel (3 bands -> 4 bands)...")
             var output: UnsafeMutablePointer<CVips.VipsImage>?
             let result = swift_vips_addalpha(rgbImage, &output)
 
             guard result == 0, let out = output else {
-                // Clean up on error
                 if rgbImage != image {
                     g_object_unref(rgbImage)
                 }
                 throw HokusaiError.vipsError(VipsBackend.getLastError())
             }
 
-            // Success: clean up intermediate RGB image
             if rgbImage != image {
                 g_object_unref(rgbImage)
             }
 
-            print("[ensureRGBA] Final bands: \(vips_image_get_bands(out))")
             return out
         }
 
-        // Already 4 bands after colorspace conversion
-        print("[ensureRGBA] Final bands: \(vips_image_get_bands(rgbImage))")
         return rgbImage
-    }
-
-    /// Ensure image has alpha channel
-    private func ensureAlpha(_ image: UnsafeMutablePointer<CVips.VipsImage>) throws -> UnsafeMutablePointer<CVips.VipsImage> {
-        let bands = vips_image_get_bands(image)
-
-        // If already has alpha (4 bands for RGB, 2 for grayscale), return as-is
-        if bands == 4 || bands == 2 {
-            // Need to copy to avoid modifying original
-            var output: UnsafeMutablePointer<CVips.VipsImage>?
-            let result = swift_vips_copy(image, &output)
-            guard result == 0, let out = output else {
-                throw HokusaiError.vipsError(VipsBackend.getLastError())
-            }
-            return out
-        }
-
-        // Add alpha channel
-        var output: UnsafeMutablePointer<CVips.VipsImage>?
-        let result = swift_vips_addalpha(image, &output)
-
-        guard result == 0, let out = output else {
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
-        }
-
-        return out
     }
 }
