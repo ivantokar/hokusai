@@ -55,19 +55,30 @@ extension HokusaiImage {
         y: Int = 0,
         options: CompositeOptions = CompositeOptions()
     ) throws -> HokusaiImage {
+        print("[Composite] START: x=\(x), y=\(y), mode=\(options.mode)")
+
         // Ensure both images use VipsBackend
+        print("[Composite] Ensuring backends...")
         let baseBackend = try ensureVipsBackend()
         let overlayBackend = try overlay.ensureVipsBackend()
+        print("[Composite] Backends OK")
 
+        print("[Composite] Getting pointers...")
         let basePointer = try baseBackend.getPointer()
         let overlayPointer = try overlayBackend.getPointer()
+        print("[Composite] Pointers OK")
 
+        print("[Composite] Getting dimensions...")
         let baseWidth = try baseBackend.getWidth()
         let baseHeight = try baseBackend.getHeight()
+        print("[Composite] Base dimensions: \(baseWidth)x\(baseHeight)")
 
         // Ensure both images have alpha channel
+        print("[Composite] Adding alpha channels...")
         let baseWithAlpha = try ensureAlpha(basePointer)
+        print("[Composite] Base alpha OK")
         let overlayWithAlpha = try ensureAlpha(overlayPointer)
+        print("[Composite] Overlay alpha OK")
 
         // Debug: log image properties
         print("[Composite] Base: \(vips_image_get_width(baseWithAlpha))x\(vips_image_get_height(baseWithAlpha)), bands: \(vips_image_get_bands(baseWithAlpha))")
