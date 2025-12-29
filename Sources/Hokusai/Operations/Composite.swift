@@ -100,9 +100,19 @@ extension HokusaiImage {
         fflush(stdout)
 
         print("[Composite] Getting dimensions...")
+        fflush(stdout)
+
+        print("[Composite] Getting base width...")
+        fflush(stdout)
         let baseWidth = try baseBackend.getWidth()
+        print("[Composite] Base width: \(baseWidth)")
+        fflush(stdout)
+
+        print("[Composite] Getting base height...")
+        fflush(stdout)
         let baseHeight = try baseBackend.getHeight()
         print("[Composite] Base dimensions: \(baseWidth)x\(baseHeight)")
+        fflush(stdout)
 
         // Ensure both images are RGBA (same colorspace and bands)
         print("[Composite] Converting to RGBA...")
