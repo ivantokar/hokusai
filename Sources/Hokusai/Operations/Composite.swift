@@ -155,15 +155,25 @@ extension HokusaiImage {
 
         // Embed overlay on a transparent canvas matching base dimensions
         // (vips_composite requires all images to be the same size)
+        print("[Composite] Creating background array...")
+        fflush(stdout)
         let background: [Double] = [0, 0, 0, 0]
         let vipsBackground = background.withUnsafeBufferPointer { ptr in
             swift_vips_array_double_new(ptr.baseAddress, Int32(background.count))
         }
+        print("[Composite] Background array created")
+        fflush(stdout)
 
         guard let bgArray = vipsBackground else {
+            print("[Composite] ERROR: Background array is nil!")
+            fflush(stdout)
             throw HokusaiError.vipsError("Failed to create background array")
         }
+        print("[Composite] Background array validated")
+        fflush(stdout)
 
+        print("[Composite] Calling swift_vips_embed...")
+        fflush(stdout)
         var positionedOverlay: UnsafeMutablePointer<CVips.VipsImage>?
         let embedResult = swift_vips_embed(
             overlayWithAlpha,
@@ -174,6 +184,8 @@ extension HokusaiImage {
             Int32(baseHeight),
             bgArray
         )
+        print("[Composite] Embed call complete, result=\(embedResult)")
+        fflush(stdout)
 
         guard embedResult == 0, let embedded = positionedOverlay else {
             // Cleanup on embed failure
