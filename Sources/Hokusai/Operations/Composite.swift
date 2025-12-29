@@ -187,17 +187,38 @@ extension HokusaiImage {
         print("[Composite] Embed call complete, result=\(embedResult)")
         fflush(stdout)
 
+        print("[Composite] Checking embed result...")
+        fflush(stdout)
+
         guard embedResult == 0, let embedded = positionedOverlay else {
             // Cleanup on embed failure
+            print("[Composite] ERROR: Embed failed with result=\(embedResult), positionedOverlay=\(String(describing: positionedOverlay))")
+            fflush(stdout)
             g_object_unref(baseWithAlpha)
             g_object_unref(overlayWithAlpha)
             vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
-            print("[Composite] ERROR: Embed failed with result=\(embedResult)")
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }
 
-        print("[Composite] Embedded: \(vips_image_get_width(embedded))x\(vips_image_get_height(embedded)), bands: \(vips_image_get_bands(embedded))")
+        print("[Composite] Embed succeeded, embedded image pointer: \(String(describing: embedded))")
+        fflush(stdout)
+
+        print("[Composite] Getting embedded image dimensions...")
+        fflush(stdout)
+        let embeddedWidth = vips_image_get_width(embedded)
+        print("[Composite] Embedded width: \(embeddedWidth)")
+        fflush(stdout)
+
+        let embeddedHeight = vips_image_get_height(embedded)
+        print("[Composite] Embedded height: \(embeddedHeight)")
+        fflush(stdout)
+
+        let embeddedBands = vips_image_get_bands(embedded)
+        print("[Composite] Embedded: \(embeddedWidth)x\(embeddedHeight), bands: \(embeddedBands)")
+        fflush(stdout)
+
         print("[Composite] Calling vips_composite...")
+        fflush(stdout)
 
         // Map blend mode to VipsBlendMode
         let vipsMode: VipsBlendMode
