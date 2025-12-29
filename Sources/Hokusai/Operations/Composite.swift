@@ -82,9 +82,22 @@ extension HokusaiImage {
         fflush(stdout)
 
         print("[Composite] Getting pointers...")
+        fflush(stdout)
+
+        print("[Composite] Getting base pointer...")
+        fflush(stdout)
         let basePointer = try baseBackend.getPointer()
+        print("[Composite] Base pointer obtained")
+        fflush(stdout)
+
+        print("[Composite] Getting overlay pointer...")
+        fflush(stdout)
         let overlayPointer = try overlayBackend.getPointer()
+        print("[Composite] Overlay pointer obtained")
+        fflush(stdout)
+
         print("[Composite] Pointers OK")
+        fflush(stdout)
 
         print("[Composite] Getting dimensions...")
         let baseWidth = try baseBackend.getWidth()
