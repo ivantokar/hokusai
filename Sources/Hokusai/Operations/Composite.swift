@@ -196,23 +196,28 @@ extension HokusaiImage {
         // Now add alpha channel if not already present
         let currentBands = vips_image_get_bands(rgbImage)
         if currentBands == 3 {
-            print("[ensureRGBA] Adding alpha channel...")
+            print("[ensureRGBA] Adding alpha channel (3 bands -> 4 bands)...")
             var output: UnsafeMutablePointer<CVips.VipsImage>?
             let result = swift_vips_addalpha(rgbImage, &output)
 
-            // Clean up RGB image if it was converted
-            if rgbImage != image {
-                g_object_unref(rgbImage)
+            guard result == 0, let out = output else {
+                // Clean up on error
+                if rgbImage != image {
+                    g_object_unref(rgbImage)
+                }
+                throw HokusaiError.vipsError(VipsBackend.getLastError())
             }
 
-            guard result == 0, let out = output else {
-                throw HokusaiError.vipsError(VipsBackend.getLastError())
+            // Success: clean up intermediate RGB image
+            if rgbImage != image {
+                g_object_unref(rgbImage)
             }
 
             print("[ensureRGBA] Final bands: \(vips_image_get_bands(out))")
             return out
         }
 
+        // Already 4 bands after colorspace conversion
         print("[ensureRGBA] Final bands: \(vips_image_get_bands(rgbImage))")
         return rgbImage
     }
