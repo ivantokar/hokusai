@@ -116,10 +116,19 @@ extension HokusaiImage {
 
         // Ensure both images are RGBA (same colorspace and bands)
         print("[Composite] Converting to RGBA...")
+        fflush(stdout)
+
+        print("[Composite] Converting base to RGBA...")
+        fflush(stdout)
         let baseWithAlpha = try ensureRGBA(basePointer)
         print("[Composite] Base RGBA OK")
+        fflush(stdout)
+
+        print("[Composite] Converting overlay to RGBA...")
+        fflush(stdout)
         let overlayWithAlpha = try ensureRGBA(overlayPointer)
         print("[Composite] Overlay RGBA OK")
+        fflush(stdout)
 
         // Debug: log image properties
         print("[Composite] Base: \(vips_image_get_width(baseWithAlpha))x\(vips_image_get_height(baseWithAlpha)), bands: \(vips_image_get_bands(baseWithAlpha))")
@@ -201,18 +210,28 @@ extension HokusaiImage {
     /// Ensure image is RGBA (4 bands: RGB with alpha)
     /// Converts grayscale to RGB if needed, then adds alpha channel if needed
     private func ensureRGBA(_ image: UnsafeMutablePointer<CVips.VipsImage>) throws -> UnsafeMutablePointer<CVips.VipsImage> {
-        let bands = vips_image_get_bands(image)
+        print("[ensureRGBA] START")
+        fflush(stdout)
 
+        print("[ensureRGBA] Getting bands...")
+        fflush(stdout)
+        let bands = vips_image_get_bands(image)
         print("[ensureRGBA] Input bands: \(bands)")
+        fflush(stdout)
 
         // If already RGBA (4 bands), return a copy
         if bands == 4 {
+            print("[ensureRGBA] Already 4 bands, copying...")
+            fflush(stdout)
             var output: UnsafeMutablePointer<CVips.VipsImage>?
             let result = swift_vips_copy(image, &output)
             guard result == 0, let out = output else {
+                print("[ensureRGBA] ERROR: Copy failed")
+                fflush(stdout)
                 throw HokusaiError.vipsError(VipsBackend.getLastError())
             }
             print("[ensureRGBA] Already RGBA, returning copy")
+            fflush(stdout)
             return out
         }
 
