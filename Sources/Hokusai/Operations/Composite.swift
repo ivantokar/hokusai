@@ -55,10 +55,16 @@ extension HokusaiImage {
         y: Int = 0,
         options: CompositeOptions = CompositeOptions()
     ) throws -> HokusaiImage {
-        print("[Composite] START: x=\(x), y=\(y), mode=\(options.mode)")
+        print("[Composite] ===== FUNCTION ENTRY =====")
+        fflush(stdout)
+        print("[Composite] START")
+        fflush(stdout)
+        print("[Composite] x=\(x), y=\(y)")
+        fflush(stdout)
 
         // Ensure both images use VipsBackend
         print("[Composite] Ensuring backends...")
+        fflush(stdout)
         let baseBackend = try ensureVipsBackend()
         let overlayBackend = try overlay.ensureVipsBackend()
         print("[Composite] Backends OK")
