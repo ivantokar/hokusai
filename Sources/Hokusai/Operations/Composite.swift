@@ -232,10 +232,20 @@ extension HokusaiImage {
         }
 
         // Perform composite
+        print("[Composite] About to call swift_vips_composite2 with mode=\(vipsMode)...")
+        fflush(stdout)
+
         var output: UnsafeMutablePointer<CVips.VipsImage>?
+        print("[Composite] Calling NOW...")
+        fflush(stdout)
+
         let result = swift_vips_composite2(baseWithAlpha, embedded, &output, vipsMode)
 
+        print("[Composite] swift_vips_composite2 RETURNED, result=\(result)")
+        fflush(stdout)
+
         print("[Composite] vips_composite result=\(result), output=\(String(describing: output))")
+        fflush(stdout)
 
         guard result == 0, let out = output else {
             print("[Composite] ERROR: Composite failed with result=\(result)")
