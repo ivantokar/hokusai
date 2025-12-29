@@ -36,16 +36,32 @@ public final class HokusaiImage: @unchecked Sendable {
 
     /// Ensure the image is using VipsBackend (convert if needed)
     func ensureVipsBackend() throws -> VipsBackend {
+        print("[ensureVipsBackend] START")
+        fflush(stdout)
+
+        print("[ensureVipsBackend] Acquiring lock...")
+        fflush(stdout)
         lock.lock()
         defer { lock.unlock() }
+        print("[ensureVipsBackend] Lock acquired")
+        fflush(stdout)
+
+        print("[ensureVipsBackend] Checking imageData type...")
+        fflush(stdout)
 
         switch imageData {
         case .vips(let backend):
+            print("[ensureVipsBackend] Already VipsBackend, returning")
+            fflush(stdout)
             return backend
         case .magick(let backend):
+            print("[ensureVipsBackend] MagickBackend detected, converting to Vips...")
+            fflush(stdout)
             // Convert magick → vips
             let vipsBackend = try magickToVips(backend)
             imageData = .vips(vipsBackend)
+            print("[ensureVipsBackend] Conversion complete")
+            fflush(stdout)
             return vipsBackend
         }
     }
