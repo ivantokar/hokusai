@@ -73,12 +73,12 @@ extension HokusaiImage {
         let baseHeight = try baseBackend.getHeight()
         print("[Composite] Base dimensions: \(baseWidth)x\(baseHeight)")
 
-        // Ensure both images have alpha channel
-        print("[Composite] Adding alpha channels...")
-        let baseWithAlpha = try ensureAlpha(basePointer)
-        print("[Composite] Base alpha OK")
-        let overlayWithAlpha = try ensureAlpha(overlayPointer)
-        print("[Composite] Overlay alpha OK")
+        // Ensure both images are RGBA (same colorspace and bands)
+        print("[Composite] Converting to RGBA...")
+        let baseWithAlpha = try ensureRGBA(basePointer)
+        print("[Composite] Base RGBA OK")
+        let overlayWithAlpha = try ensureRGBA(overlayPointer)
+        print("[Composite] Overlay RGBA OK")
 
         // Debug: log image properties
         print("[Composite] Base: \(vips_image_get_width(baseWithAlpha))x\(vips_image_get_height(baseWithAlpha)), bands: \(vips_image_get_bands(baseWithAlpha))")
@@ -156,6 +156,80 @@ extension HokusaiImage {
     }
 
     // MARK: - Private Helpers
+
+    /// Ensure image is RGBA (4 bands: RGB with alpha)
+    /// Converts grayscale to RGB if needed, then adds alpha channel if needed
+    private func ensureRGBA(_ image: UnsafeMutablePointer<CVips.VipsImage>) throws -> UnsafeMutablePointer<CVips.VipsImage> {
+        let bands = vips_image_get_bands(image)
+
+        print("[ensureRGBA] Input bands: \(bands)")
+
+        // If already RGBA (4 bands), return a copy
+        if bands == 4 {
+            var output: UnsafeMutablePointer<CVips.VipsImage>?
+            let result = swift_vips_copy(image, &output)
+            guard result == 0, let out = output else {
+                throw HokusaiError.vipsError(VipsBackend.getLastError())
+            }
+            print("[ensureRGBA] Already RGBA, returning copy")
+            return out
+        }
+
+        // If grayscale (1 or 2 bands), convert to RGB first
+        var rgbImage = image
+        if bands == 1 || bands == 2 {
+            print("[ensureRGBA] Converting grayscale to RGB...")
+            var converted: UnsafeMutablePointer<CVips.VipsImage>?
+
+            // First, extract just the color channel (remove alpha if present)
+            if bands == 2 {
+                var colorOnly: UnsafeMutablePointer<CVips.VipsImage>?
+                let extractResult = swift_vips_extract_band(image, &colorOnly, 0, 1)
+                guard extractResult == 0, let extracted = colorOnly else {
+                    throw HokusaiError.vipsError(VipsBackend.getLastError())
+                }
+                rgbImage = extracted
+            }
+
+            // Convert grayscale to RGB (VIPS_INTERPRETATION_sRGB)
+            let convertResult = swift_vips_colourspace(rgbImage, &converted, VIPS_INTERPRETATION_sRGB)
+
+            // Clean up intermediate if we extracted a band
+            if bands == 2 {
+                g_object_unref(rgbImage)
+            }
+
+            guard convertResult == 0, let conv = converted else {
+                throw HokusaiError.vipsError(VipsBackend.getLastError())
+            }
+
+            rgbImage = conv
+            print("[ensureRGBA] Converted to RGB, now bands: \(vips_image_get_bands(rgbImage))")
+        }
+
+        // Now add alpha channel if not already present
+        let currentBands = vips_image_get_bands(rgbImage)
+        if currentBands == 3 {
+            print("[ensureRGBA] Adding alpha channel...")
+            var output: UnsafeMutablePointer<CVips.VipsImage>?
+            let result = swift_vips_addalpha(rgbImage, &output)
+
+            // Clean up RGB image if it was converted
+            if rgbImage != image {
+                g_object_unref(rgbImage)
+            }
+
+            guard result == 0, let out = output else {
+                throw HokusaiError.vipsError(VipsBackend.getLastError())
+            }
+
+            print("[ensureRGBA] Final bands: \(vips_image_get_bands(out))")
+            return out
+        }
+
+        print("[ensureRGBA] Final bands: \(vips_image_get_bands(rgbImage))")
+        return rgbImage
+    }
 
     /// Ensure image has alpha channel
     private func ensureAlpha(_ image: UnsafeMutablePointer<CVips.VipsImage>) throws -> UnsafeMutablePointer<CVips.VipsImage> {
