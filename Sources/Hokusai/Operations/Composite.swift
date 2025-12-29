@@ -175,29 +175,15 @@ extension HokusaiImage {
             return out
         }
 
-        // If grayscale (1 or 2 bands), convert to RGB first
+        // If grayscale (1 or 2 bands), convert to RGB
+        // vips_colourspace preserves alpha channel automatically
         var rgbImage = image
         if bands == 1 || bands == 2 {
             print("[ensureRGBA] Converting grayscale to RGB...")
             var converted: UnsafeMutablePointer<CVips.VipsImage>?
 
-            // First, extract just the color channel (remove alpha if present)
-            if bands == 2 {
-                var colorOnly: UnsafeMutablePointer<CVips.VipsImage>?
-                let extractResult = swift_vips_extract_band(image, &colorOnly, 0, 1)
-                guard extractResult == 0, let extracted = colorOnly else {
-                    throw HokusaiError.vipsError(VipsBackend.getLastError())
-                }
-                rgbImage = extracted
-            }
-
-            // Convert grayscale to RGB (VIPS_INTERPRETATION_sRGB)
-            let convertResult = swift_vips_colourspace(rgbImage, &converted, VIPS_INTERPRETATION_sRGB)
-
-            // Clean up intermediate if we extracted a band
-            if bands == 2 {
-                g_object_unref(rgbImage)
-            }
+            // Convert to sRGB colorspace (preserves alpha if present)
+            let convertResult = swift_vips_colourspace(image, &converted, VIPS_INTERPRETATION_sRGB)
 
             guard convertResult == 0, let conv = converted else {
                 throw HokusaiError.vipsError(VipsBackend.getLastError())
