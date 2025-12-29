@@ -92,6 +92,9 @@ extension HokusaiImage {
         )
 
         guard embedResult == 0, let embedded = positionedOverlay else {
+            // Cleanup on embed failure
+            g_object_unref(baseWithAlpha)
+            g_object_unref(overlayWithAlpha)
             vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }
@@ -111,13 +114,15 @@ extension HokusaiImage {
         var output: UnsafeMutablePointer<CVips.VipsImage>?
         let result = swift_vips_composite2(baseWithAlpha, embedded, &output, vipsMode)
 
+        // Cleanup: unreference intermediate images that are no longer needed
+        g_object_unref(baseWithAlpha)
+        g_object_unref(overlayWithAlpha)
+        g_object_unref(embedded)
+        vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
+
         guard result == 0, let out = output else {
-            vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }
-
-        // Unreference background array after successful composite
-        vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
 
         return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
     }
