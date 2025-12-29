@@ -131,9 +131,27 @@ extension HokusaiImage {
         fflush(stdout)
 
         // Debug: log image properties
-        print("[Composite] Base: \(vips_image_get_width(baseWithAlpha))x\(vips_image_get_height(baseWithAlpha)), bands: \(vips_image_get_bands(baseWithAlpha))")
-        print("[Composite] Overlay: \(vips_image_get_width(overlayWithAlpha))x\(vips_image_get_height(overlayWithAlpha)), bands: \(vips_image_get_bands(overlayWithAlpha))")
-        print("[Composite] Position: x=\(x), y=\(y), mode=\(options.mode)")
+        print("[Composite] Logging image properties...")
+        fflush(stdout)
+
+        print("[Composite] Getting base properties...")
+        fflush(stdout)
+        let baseW = vips_image_get_width(baseWithAlpha)
+        let baseH = vips_image_get_height(baseWithAlpha)
+        let baseBands = vips_image_get_bands(baseWithAlpha)
+        print("[Composite] Base: \(baseW)x\(baseH), bands: \(baseBands)")
+        fflush(stdout)
+
+        print("[Composite] Getting overlay properties...")
+        fflush(stdout)
+        let overlayW = vips_image_get_width(overlayWithAlpha)
+        let overlayH = vips_image_get_height(overlayWithAlpha)
+        let overlayBands = vips_image_get_bands(overlayWithAlpha)
+        print("[Composite] Overlay: \(overlayW)x\(overlayH), bands: \(overlayBands)")
+        fflush(stdout)
+
+        print("[Composite] Position: x=\(x), y=\(y)")
+        fflush(stdout)
 
         // Embed overlay on a transparent canvas matching base dimensions
         // (vips_composite requires all images to be the same size)
