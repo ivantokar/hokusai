@@ -69,6 +69,11 @@ extension HokusaiImage {
         let baseWithAlpha = try ensureAlpha(basePointer)
         let overlayWithAlpha = try ensureAlpha(overlayPointer)
 
+        // Debug: log image properties
+        print("[Composite] Base: \(vips_image_get_width(baseWithAlpha))x\(vips_image_get_height(baseWithAlpha)), bands: \(vips_image_get_bands(baseWithAlpha))")
+        print("[Composite] Overlay: \(vips_image_get_width(overlayWithAlpha))x\(vips_image_get_height(overlayWithAlpha)), bands: \(vips_image_get_bands(overlayWithAlpha))")
+        print("[Composite] Position: x=\(x), y=\(y), mode=\(options.mode)")
+
         // Embed overlay on a transparent canvas matching base dimensions
         // (vips_composite requires all images to be the same size)
         let background: [Double] = [0, 0, 0, 0]
@@ -96,8 +101,12 @@ extension HokusaiImage {
             g_object_unref(baseWithAlpha)
             g_object_unref(overlayWithAlpha)
             vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
+            print("[Composite] ERROR: Embed failed with result=\(embedResult)")
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }
+
+        print("[Composite] Embedded: \(vips_image_get_width(embedded))x\(vips_image_get_height(embedded)), bands: \(vips_image_get_bands(embedded))")
+        print("[Composite] Calling vips_composite...")
 
         // Map blend mode to VipsBlendMode
         let vipsMode: VipsBlendMode
@@ -114,15 +123,23 @@ extension HokusaiImage {
         var output: UnsafeMutablePointer<CVips.VipsImage>?
         let result = swift_vips_composite2(baseWithAlpha, embedded, &output, vipsMode)
 
+        print("[Composite] vips_composite result=\(result), output=\(String(describing: output))")
+
+        guard result == 0, let out = output else {
+            print("[Composite] ERROR: Composite failed with result=\(result)")
+            // Cleanup on error
+            g_object_unref(baseWithAlpha)
+            g_object_unref(overlayWithAlpha)
+            g_object_unref(embedded)
+            vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
+            throw HokusaiError.vipsError(VipsBackend.getLastError())
+        }
+
         // Cleanup: unreference intermediate images that are no longer needed
         g_object_unref(baseWithAlpha)
         g_object_unref(overlayWithAlpha)
         g_object_unref(embedded)
         vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
-
-        guard result == 0, let out = output else {
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
-        }
 
         return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
     }
