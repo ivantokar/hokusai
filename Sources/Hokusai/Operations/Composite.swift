@@ -65,9 +65,21 @@ extension HokusaiImage {
         // Ensure both images use VipsBackend
         print("[Composite] Ensuring backends...")
         fflush(stdout)
+
+        print("[Composite] Getting base backend...")
+        fflush(stdout)
         let baseBackend = try ensureVipsBackend()
+        print("[Composite] Base backend obtained")
+        fflush(stdout)
+
+        print("[Composite] Getting overlay backend...")
+        fflush(stdout)
         let overlayBackend = try overlay.ensureVipsBackend()
+        print("[Composite] Overlay backend obtained")
+        fflush(stdout)
+
         print("[Composite] Backends OK")
+        fflush(stdout)
 
         print("[Composite] Getting pointers...")
         let basePointer = try baseBackend.getPointer()
