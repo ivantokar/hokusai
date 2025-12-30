@@ -14,13 +14,13 @@ Built for modern Swift server applications with async/await support, comprehensi
 
 ## Key Features
 
-- ⚡️ **High Performance** - Streaming processing with minimal memory footprint via libvips
-- 🎨 **Advanced Text** - Professional text rendering with Google Fonts, stroke, shadow, kerning, rotation
-- 🔄 **Format Support** - JPEG, PNG, WebP, AVIF, GIF, TIFF with quality control
-- 📐 **Smart Resizing** - Multiple fit modes (cover, contain, fill) with intelligent cropping
-- 🎭 **Compositing** - Layer images with blend modes and opacity control
-- 🔗 **Chainable API** - Fluent interface for combining operations
-- 🦺 **Type Safe** - Full Swift concurrency support with comprehensive error types
+- **High Performance** - Streaming processing with minimal memory footprint via libvips
+- **Advanced Text** - Professional text rendering with Google Fonts, stroke, shadow, kerning, rotation
+- **Format Support** - JPEG, PNG, WebP, AVIF, GIF, TIFF with quality control
+- **Smart Resizing** - Multiple fit modes (cover, contain, fill) with intelligent cropping
+- **Compositing** - Layer images with blend modes and opacity control
+- **Chainable API** - Fluent interface for combining operations
+- **Type Safe** - Full Swift concurrency support with comprehensive error types
 
 ## Use Cases
 
