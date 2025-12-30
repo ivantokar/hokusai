@@ -1,41 +1,42 @@
 # Hokusai
 
-A hybrid Swift image processing library combining the power of **ImageMagick** for advanced text rendering and **libvips** for high-performance image operations.
+**Fast, hybrid image processing for Swift server-side applications**
+
+Hokusai is a high-performance image processing library that combines the best of both worlds:
+- **libvips** for blazing-fast operations (resize, crop, rotate, format conversion)
+- **ImageMagick** for advanced text rendering with custom fonts, strokes, shadows, and typography controls
+
+Built for modern Swift server applications with async/await support, comprehensive error handling, and a clean, chainable API.
 
 [![Swift](https://img.shields.io/badge/Swift-6.0+-orange.svg)](https://swift.org)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20|%20Linux-lightgrey.svg)](https://swift.org)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## Overview
+## Key Features
+
+- ⚡️ **High Performance** - Streaming processing with minimal memory footprint via libvips
+- 🎨 **Advanced Text** - Professional text rendering with Google Fonts, stroke, shadow, kerning, rotation
+- 🔄 **Format Support** - JPEG, PNG, WebP, AVIF, GIF, TIFF with quality control
+- 📐 **Smart Resizing** - Multiple fit modes (cover, contain, fill) with intelligent cropping
+- 🎭 **Compositing** - Layer images with blend modes and opacity control
+- 🔗 **Chainable API** - Fluent interface for combining operations
+- 🦺 **Type Safe** - Full Swift concurrency support with comprehensive error types
+
+## Use Cases
+
+- Certificate and badge generation with custom text
+- Social media image automation (Open Graph, Twitter Cards)
+- E-commerce product image pipelines
+- Avatar and thumbnail generation
+- Watermarking and branding workflows
+
+## How It Works
 
 Hokusai provides a unified Swift API that automatically routes operations to the optimal backend:
 - **ImageMagick (MagickWand)** - Advanced text rendering with custom fonts, strokes, shadows, and kerning
 - **libvips** - High-performance image operations (resize, crop, rotate, convert)
 
 The library handles backend switching transparently, converting between formats as needed via lossless PNG buffers.
-
-## Features
-
-### Text Rendering (ImageMagick)
-- Custom TrueType/OpenType fonts via file path or system font name
-- Text stroke (outline) with configurable width and color
-- Advanced typography: font size, color, kerning, rotation
-- High-quality antialiasing
-
-### Image Operations (libvips)
-- **Resize** - Multiple fit modes (fill, contain, cover, inside, outside)
-- **Crop** - Manual and smart cropping with attention detection
-- **Rotate** - Fast 90° rotations and arbitrary angle rotation
-- **Convert** - Support for JPEG, PNG, WebP, AVIF, GIF, TIFF formats
-- **Composite** - Overlay images with blend modes and opacity
-- **Metadata** - Extract dimensions, channels, and alpha (format optional)
-
-### Architecture
-- Automatic backend switching based on operation type
-- Streaming processing keeps memory usage low (libvips)
-- Thread-safe with NSLock protection
-- Fluent, chainable API
-- Single unified `HokusaiImage` type
 
 ## Installation
 
