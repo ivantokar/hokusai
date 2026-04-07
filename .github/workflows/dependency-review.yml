@@ -1,0 +1,38 @@
+name: Dependency Review
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check dependency graph availability
+        id: dependency_graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status="$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/dependency-graph/sbom")"
+
+          if [[ "${status}" == "200" ]]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+            echo "::warning::Dependency Graph is not enabled for this repository. Enable it in Settings > Security > Advanced Security."
+          fi
+
+      - name: Dependency review
+        if: steps.dependency_graph.outputs.enabled == 'true'
+        uses: actions/dependency-review-action@v4
