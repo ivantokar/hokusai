@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-tag:
+    name: Validate tag format
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Ensure stable semver tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag '${TAG}' must match vX.Y.Z"
+            exit 1
+          fi
+
+  test-macos:
+    name: Release checks (macOS)
+    needs: validate-tag
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install vips imagemagick pkg-config
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
+
+  test-linux:
+    name: Release checks (Linux)
+    needs: validate-tag
+    runs-on: ubuntu-24.04
+    container:
+      image: swift:6.0-jammy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y libvips-dev libmagick++-dev libmagickwand-dev pkg-config
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
+
+  create-draft-release:
+    name: Create draft release
+    needs: [test-macos, test-linux]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Create release draft
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true

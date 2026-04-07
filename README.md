@@ -1,3 +1,7 @@
+<p align="center">
+<img src="./hokusai-logo.png" alt="" width="200">
+</p>
+
 # Hokusai
 
 **Fast, hybrid image processing for Swift server-side applications**
@@ -41,6 +45,10 @@ The library handles backend switching transparently, converting between formats 
 ## Installation
 
 ### Requirements
+
+- Swift 6.0+
+- macOS 13+ or Linux (Ubuntu/Debian tested)
+- `pkg-config` plus the native libraries below
 
 **macOS:**
 ```bash
@@ -458,11 +466,29 @@ textOptions.font = "/usr/share/fonts/truetype/MyCustomFont.ttf"
 ## Testing
 
 ```bash
+swift build
 swift test
 ```
 
-Tests use Swift Testing (Swift 6+).
-If your Swift 6 toolchain does not ship the `Testing` module yet, keep the `swift-testing` package dependency.
+Tests are implemented with `XCTest` and run with standard SwiftPM tooling.
+The package keeps a minimal `swift-testing` dependency to support toolchains where SwiftPM still expects the `Testing` module at test runtime.
+
+## Releases
+
+Hokusai follows semantic version tags in the format `vX.Y.Z`.
+
+- Pull requests and pushes to `main` run CI on macOS and Linux.
+- Pushing a semantic version tag runs release validation and creates a **draft** GitHub Release with generated notes.
+
+## Swift Package Index
+
+This repository is structured to be compatible with Swift Package Index:
+
+- semantic version tags (`vX.Y.Z`)
+- CI coverage on macOS and Linux
+- clear installation/usage docs in this README
+
+Recommended next step when API docs grow: add a lightweight DocC catalog at `Sources/Hokusai/Hokusai.docc` and let SPI host the generated documentation.
 
 ## Contributing
 

@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test-macos:
+    name: Build and Test (macOS)
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install vips imagemagick pkg-config
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
+
+  test-linux:
+    name: Build and Test (Linux)
+    runs-on: ubuntu-24.04
+    container:
+      image: swift:6.0-jammy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y libvips-dev libmagick++-dev libmagickwand-dev pkg-config
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
