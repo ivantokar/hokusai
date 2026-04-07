@@ -41,7 +41,7 @@ jobs:
           languages: swift
 
       - name: Build
-        run: swift build
+        run: swift build --target Hokusai
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3
