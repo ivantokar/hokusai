@@ -1,6 +1,13 @@
 #ifndef CIMAGEMAGICK_SHIM_H
 #define CIMAGEMAGICK_SHIM_H
 
+// On Linux, import select/types before ImageMagick headers to keep fd_set
+// layout consistent with other C modules (e.g. CDispatch, CVips).
+#if defined(__linux__)
+#include <sys/types.h>
+#include <sys/select.h>
+#endif
+
 // Define required ImageMagick macros
 #define MAGICKCORE_HDRI_ENABLE 1
 #define MAGICKCORE_QUANTUM_DEPTH 16
