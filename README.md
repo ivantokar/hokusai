@@ -1,5 +1,5 @@
 <p align="center">
-<img src="./hokusai-logo.png" alt="" width="200">
+<img src="./hokusai-logo.png" alt="" width="100%">
 </p>
 
 # Hokusai
