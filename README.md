@@ -334,15 +334,34 @@ await withTaskGroup(of: Void.self) { group in
 
 ## Performance
 
-### Benchmarks (3206x2266 image on M1 Mac)
+### Benchmarks (measured with `hokusai` CLI)
 
-| Operation | Time | Memory |
-|-----------|------|--------|
-| Load JPEG | 45ms | 28MB |
-| Resize 800px | 12ms | 3MB |
-| Rotate 90° | 8ms | 28MB |
-| Text overlay | 35ms | 32MB |
-| Save JPEG (q=85) | 28ms | - |
+Environment:
+- Apple M4 Pro
+- macOS 26.5 (build 25F5053d)
+- release binary build
+
+Method:
+- warmup: 5 runs
+- measured iterations: 20 runs
+
+Input: `certifcate.png` (3206x2266, RGBA)
+
+| Case | Mean | P95 | Ops/s |
+| --- | ---: | ---: | ---: |
+| resize:1200x800 | 4.79 ms | 5.99 ms | 208.94 |
+| convert:webp:q80 | 203.20 ms | 208.16 ms | 4.92 |
+| rotate:33 | 35.56 ms | 38.90 ms | 28.12 |
+| text:stroke-shadow | 105.26 ms | 107.66 ms | 9.50 |
+
+Text-only benchmark on the same input:
+- mean: 99.66 ms
+- median: 98.05 ms
+- p95: 103.16 ms
+- ops/s: 10.03
+
+Note: these are measured reference values on one machine, not universal performance guarantees.
+Use `hokusai benchmark suite` / `hokusai benchmark op` to reproduce on your hardware.
 
 ### Memory Management
 
