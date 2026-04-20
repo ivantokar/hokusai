@@ -2,8 +2,12 @@ import Foundation
 
 /// Options for text rendering
 public struct TextOptions: Sendable {
-    /// Font family name (e.g., "Arial", "Helvetica") or path to TTF file
+    /// Font family name or Pango font description (e.g., "Arial", "Helvetica Bold")
+    /// Backward-compatible: this may also be a path to a TTF/OTF font file.
     public var font: String
+
+    /// Optional explicit font file path (TTF/OTF). When set, `font` remains the family/style descriptor.
+    public var fontFile: String?
 
     /// Font size in points
     public var fontSize: Int
@@ -23,7 +27,7 @@ public struct TextOptions: Sendable {
     /// Text height limit
     public var height: Int?
 
-    // MARK: - Advanced ImageMagick Features
+    // MARK: - Advanced Text Features (best-effort via libvips)
 
     /// Stroke (outline) color [R, G, B, A] (0-255)
     public var strokeColor: [Double]?
@@ -57,6 +61,7 @@ public struct TextOptions: Sendable {
 
     public init(
         font: String = "sans",
+        fontFile: String? = nil,
         fontSize: Int = 24,
         color: [Double] = [0, 0, 0, 255],  // Black
         align: TextAlignment = .left,
@@ -75,6 +80,7 @@ public struct TextOptions: Sendable {
         rotation: Double? = nil
     ) {
         self.font = font
+        self.fontFile = fontFile
         self.fontSize = fontSize
         self.color = color
         self.align = align
@@ -101,7 +107,7 @@ public enum TextAlignment: String, Sendable {
     case right
 }
 
-/// Text gravity for ImageMagick positioning
+/// Text gravity for image positioning
 public enum TextGravity: String, Sendable {
     case center
     case north

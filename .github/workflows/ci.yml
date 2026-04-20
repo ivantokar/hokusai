@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies
         env:
           HOMEBREW_NO_AUTO_UPDATE: "1"
-        run: brew install vips imagemagick pkg-config
+        run: brew install vips pkg-config
 
       - name: Build
         run: swift build
@@ -45,7 +45,7 @@ jobs:
       - name: Install dependencies
         run: |
           apt-get update
-          apt-get install -y libvips-dev libmagick++-dev libmagickwand-dev pkg-config
+          apt-get install -y libvips-dev pkg-config
 
       - name: Build
         run: swift build

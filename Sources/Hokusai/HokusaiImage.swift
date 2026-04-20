@@ -1,11 +1,9 @@
 import Foundation
 import CVips
-import CImageMagick
 
 /// Storage for backend image data
 enum ImageData {
     case vips(VipsBackend)
-    case magick(MagickBackend)
 }
 
 /// Unified image wrapper with automatic backend routing
@@ -18,17 +16,9 @@ public final class HokusaiImage: @unchecked Sendable {
         self.imageData = backend
     }
 
-    /// Current backend type
-    private var currentBackend: BackendType {
-        switch imageData {
-        case .vips: return .vips
-        case .magick: return .magick
-        }
-    }
-
     // MARK: - Backend Management
 
-    /// Ensure the image is using VipsBackend (convert if needed)
+    /// Ensure the image is using VipsBackend
     func ensureVipsBackend() throws -> VipsBackend {
         lock.lock()
         defer { lock.unlock() }
@@ -36,48 +26,7 @@ public final class HokusaiImage: @unchecked Sendable {
         switch imageData {
         case .vips(let backend):
             return backend
-        case .magick(let backend):
-            // Convert magick → vips
-            let vipsBackend = try magickToVips(backend)
-            imageData = .vips(vipsBackend)
-            return vipsBackend
         }
-    }
-
-    /// Ensure the image is using MagickBackend (convert if needed)
-    func ensureMagickBackend() throws -> MagickBackend {
-        lock.lock()
-        defer { lock.unlock() }
-
-        switch imageData {
-        case .magick(let backend):
-            return backend
-        case .vips(let backend):
-            // Convert vips → magick
-            let magickBackend = try vipsToMagick(backend)
-            imageData = .magick(magickBackend)
-            return magickBackend
-        }
-    }
-
-    // MARK: - Backend Conversion
-
-    /// Convert VipsBackend to MagickBackend via PNG buffer
-    private func vipsToMagick(_ vipsBackend: VipsBackend) throws -> MagickBackend {
-        // Convert to PNG buffer (lossless, fast compression)
-        let buffer = try vipsBackend.toBuffer(format: "png", quality: 0)
-
-        // Load into MagickWand
-        return try MagickBackend.loadFromBuffer(buffer)
-    }
-
-    /// Convert MagickBackend to VipsBackend via PNG buffer
-    private func magickToVips(_ magickBackend: MagickBackend) throws -> VipsBackend {
-        // Convert to PNG buffer (lossless)
-        let buffer = try magickBackend.toBuffer(format: "png", quality: 0)
-
-        // Load into libvips
-        return try VipsBackend.loadFromBuffer(buffer)
     }
 
     // MARK: - Metadata Access
@@ -87,8 +36,6 @@ public final class HokusaiImage: @unchecked Sendable {
         get throws {
             switch imageData {
             case .vips(let backend):
-                return try backend.getWidth()
-            case .magick(let backend):
                 return try backend.getWidth()
             }
         }
@@ -100,8 +47,6 @@ public final class HokusaiImage: @unchecked Sendable {
             switch imageData {
             case .vips(let backend):
                 return try backend.getHeight()
-            case .magick(let backend):
-                return try backend.getHeight()
             }
         }
     }
@@ -112,8 +57,6 @@ public final class HokusaiImage: @unchecked Sendable {
             switch imageData {
             case .vips(let backend):
                 return try backend.getBands()
-            case .magick(let backend):
-                return try backend.getBands()
             }
         }
     }
@@ -123,8 +66,6 @@ public final class HokusaiImage: @unchecked Sendable {
         get throws {
             switch imageData {
             case .vips(let backend):
-                return try backend.hasAlpha()
-            case .magick(let backend):
                 return try backend.hasAlpha()
             }
         }
@@ -146,14 +87,20 @@ public final class HokusaiImage: @unchecked Sendable {
         )
     }
 
+    /// Get extended libvips-derived metadata as key/value pairs.
+    public func extendedMetadata() throws -> [String: String] {
+        switch imageData {
+        case .vips(let backend):
+            return try backend.extendedMetadata()
+        }
+    }
+
     // MARK: - Save Operations
 
     /// Save image to file
     public func toFile(_ path: String, format: String? = nil, quality: Int? = nil) throws {
         switch imageData {
         case .vips(let backend):
-            try backend.saveToFile(path, format: format, quality: quality)
-        case .magick(let backend):
             try backend.saveToFile(path, format: format, quality: quality)
         }
     }
@@ -162,8 +109,6 @@ public final class HokusaiImage: @unchecked Sendable {
     public func toBuffer(format: String? = nil, quality: Int? = nil) throws -> Data {
         switch imageData {
         case .vips(let backend):
-            return try backend.toBuffer(format: format, quality: quality)
-        case .magick(let backend):
             return try backend.toBuffer(format: format, quality: quality)
         }
     }
@@ -174,11 +119,5 @@ public final class HokusaiImage: @unchecked Sendable {
     func getVipsPointer() throws -> UnsafeMutablePointer<CVips.VipsImage> {
         let backend = try ensureVipsBackend()
         return try backend.getPointer()
-    }
-
-    /// Get MagickBackend wand (used by magick operations)
-    func getMagickWand() throws -> OpaquePointer {
-        let backend = try ensureMagickBackend()
-        return try backend.getWandPointer()
     }
 }

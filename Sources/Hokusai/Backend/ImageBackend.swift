@@ -30,5 +30,4 @@ protocol ImageBackend {
 /// Backend type identifier
 enum BackendType {
     case vips    // libvips - fast, streaming, memory-efficient
-    case magick  // ImageMagick - advanced text rendering, effects
 }

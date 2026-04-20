@@ -27,19 +27,10 @@ let package = Package(
                 .brew(["vips"]),
             ]
         ),
-        // System library wrapper for ImageMagick MagickWand
-        .systemLibrary(
-            name: "CImageMagick",
-            pkgConfig: "MagickWand",
-            providers: [
-                .apt(["libmagick++-dev", "libmagickwand-dev"]),
-                .brew(["imagemagick"]),
-            ]
-        ),
         // Main Hokusai library target
         .target(
             name: "Hokusai",
-            dependencies: ["CVips", "CImageMagick"],
+            dependencies: ["CVips"],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
             ]

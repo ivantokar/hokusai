@@ -4,12 +4,9 @@
 
 # Hokusai
 
-**Fast, hybrid image processing for Swift server-side applications**
+**Fast, libvips-powered image processing for Swift server-side applications**
 
-Hokusai is a high-performance image processing library that combines the best of both worlds:
-- **libvips** for blazing-fast operations (resize, crop, rotate, format conversion)
-- **ImageMagick** for advanced text rendering with custom fonts, strokes, shadows, and typography controls
-
+Hokusai is a high-performance image processing library built on **libvips** for blazing-fast operations (resize, crop, rotate, convert, composite) and text rendering via **Pango/Cairo through libvips**.
 Built for modern Swift server applications with async/await support, comprehensive error handling, and a clean, chainable API.
 
 [![Swift](https://img.shields.io/badge/Swift-6.0+-orange.svg)](https://swift.org)
@@ -36,11 +33,7 @@ Built for modern Swift server applications with async/await support, comprehensi
 
 ## How It Works
 
-Hokusai provides a unified Swift API that automatically routes operations to the optimal backend:
-- **ImageMagick (MagickWand)** - Advanced text rendering with custom fonts, strokes, shadows, and kerning
-- **libvips** - High-performance image operations (resize, crop, rotate, convert)
-
-The library handles backend switching transparently, converting between formats as needed via lossless PNG buffers.
+Hokusai provides a unified Swift API backed by libvips for all operations, including text rendering.
 
 ## Installation
 
@@ -52,13 +45,13 @@ The library handles backend switching transparently, converting between formats 
 
 **macOS:**
 ```bash
-brew install vips imagemagick pkg-config
+brew install vips pkg-config
 ```
 
 **Ubuntu/Debian:**
 ```bash
 sudo apt update
-sudo apt install libvips-dev libmagick++-dev libmagickwand-dev pkg-config
+sudo apt install libvips-dev pkg-config
 ```
 
 ### Swift Package Manager
@@ -116,7 +109,7 @@ try processed.toFile("output.jpg", quality: 85)
 ### Initialization
 
 ```swift
-// Initialize both libvips and ImageMagick
+// Initialize libvips backend
 try Hokusai.initialize()
 
 // Shutdown when done (call at app teardown)
@@ -124,7 +117,6 @@ Hokusai.shutdown()
 
 // Get version info
 print(Hokusai.vipsVersion)    // "8.15.1"
-print(Hokusai.magickVersion)  // "6.9.11-60"
 ```
 
 ### Loading Images
@@ -268,34 +260,27 @@ let hasAlpha = try image.hasAlpha
 
 ## Architecture
 
-### Backend Switching
-
-Hokusai automatically routes operations to the optimal backend:
+### Single Backend
 
 ```
 ┌─────────────────────────────────────┐
-│         HokusaiImage                │
-│  (Unified API with Auto-Routing)    │
-└──────────┬─────────────┬────────────┘
-           │             │
-    ┌──────▼──────┐ ┌───▼──────────┐
-    │ VipsBackend │ │MagickBackend │
-    │  (libvips)  │ │ (ImageMagick)│
-    └─────────────┘ └──────────────┘
-         │                │
-    ┌────▼────┐      ┌───▼──────┐
-    │  Resize │      │   Text   │
-    │  Crop   │      │ Rendering│
-    │  Rotate │      │          │
-    │ Convert │      │          │
-    │Composite│      │          │
-    └─────────┘      └──────────┘
+│            HokusaiImage             │
+│      (Unified API, libvips only)    │
+└──────────────────┬──────────────────┘
+                   │
+            ┌──────▼──────┐
+            │ VipsBackend │
+            │  (libvips)  │
+            └─────────────┘
+                   │
+            ┌──────▼──────┐
+            │ Resize/Crop │
+            │ Rotate/Text │
+            │ Convert/Comp│
+            └─────────────┘
 ```
 
-**Conversion Strategy:**
-- Operations on the same backend: Zero overhead
-- Backend switching: Lossless PNG buffer conversion (< 50ms typical)
-- Memory efficient: Only one backend active at a time
+All operations are executed by libvips, with text rendering powered by Pango/Cairo through `vips_text`.
 
 ### Thread Safety
 
@@ -326,7 +311,6 @@ await withTaskGroup(of: Void.self) { group in
 | Rotate 90° | 8ms | 28MB |
 | Text overlay | 35ms | 32MB |
 | Save JPEG (q=85) | 28ms | - |
-| Backend switch | 42ms | 28MB |
 
 ### Memory Management
 
@@ -355,7 +339,7 @@ let options6 = TextOptions(font: "Liberation Serif")
 
 ### iOS Client Example
 
-Hokusai runs on macOS/Linux (libvips + ImageMagick) and is intended for server use. iOS apps should call a HokusaiVapor server instead.
+Hokusai runs on macOS/Linux (libvips) and is intended for server use. iOS apps should call a HokusaiVapor server instead.
 
 This example calls the HokusaiVapor `/api/images/convert` endpoint from an iOS app:
 
@@ -407,8 +391,6 @@ do {
     print("Failed to load image: \(message)")
 } catch HokusaiError.vipsError(let message) {
     print("libvips error: \(message)")
-} catch HokusaiError.magickError(let message) {
-    print("ImageMagick error: \(message)")
 } catch {
     print("Unexpected error: \(error)")
 }
@@ -417,13 +399,10 @@ do {
 ## Platform-Specific Notes
 
 ### macOS
-- ImageMagick 7 installed via Homebrew
-- Headers at `/opt/homebrew/include/ImageMagick-7/`
-- Supports both file paths and font names
+- Install libvips via Homebrew (`brew install vips`)
 
 ### Linux (Ubuntu/Debian)
-- ImageMagick 6 from apt
-- Headers at `/usr/include/ImageMagick-6/`
+- Install libvips via apt (`sudo apt install libvips-dev`)
 - Use fontconfig font names or absolute paths
 
 ### Docker
@@ -478,7 +457,8 @@ The package keeps a minimal `swift-testing` dependency to support toolchains whe
 Hokusai follows semantic version tags in the format `vX.Y.Z`.
 
 - Pull requests and pushes to `main` run CI on macOS and Linux.
-- Pushing a semantic version tag runs release validation and creates a **draft** GitHub Release with generated notes.
+- Pushing a semantic version tag runs release validation and publishes a GitHub Release with generated notes.
+- Human-curated release notes are tracked in [CHANGELOG.md](CHANGELOG.md).
 
 ## Swift Package Index
 
@@ -507,7 +487,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 Built with:
 - [libvips](https://www.libvips.org/) - Fast image processing library
-- [ImageMagick](https://imagemagick.org/) - Advanced image manipulation
 - Inspired by [sharp](https://sharp.pixelplumbing.com/) (Node.js)
 
 ## Related Projects
