@@ -101,8 +101,6 @@ hokusai --help
 
 If you have not published the formula yet, use `swift run hokusai ...` until the tap is live.
 
-Distribution details: [docs/cli-distribution.md](docs/cli-distribution.md)
-
 ## Quick Start
 
 ```swift
