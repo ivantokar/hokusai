@@ -10,6 +10,7 @@ public enum HokusaiError: Error {
     case conversionFailed(String)  // Backend conversion errors
     case textRenderingFailed(String)
     case vipsError(String)
+    @available(*, deprecated, message: "ImageMagick backend was removed.")
     case magickError(String)
     case memoryAllocationFailed
     case fileNotFound(String)
@@ -37,7 +38,7 @@ extension HokusaiError: LocalizedError {
         case .vipsError(let message):
             return "libvips error: \(message)"
         case .magickError(let message):
-            return "ImageMagick error: \(message)"
+            return "Legacy ImageMagick error (compatibility only): \(message)"
         case .memoryAllocationFailed:
             return "Memory allocation failed"
         case .fileNotFound(let path):

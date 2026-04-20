@@ -6,16 +6,14 @@ public struct Hokusai {
 
     // MARK: - Lifecycle Management
 
-    /// Initialize both libvips and ImageMagick (call once at app startup)
+    /// Initialize libvips (call once at app startup)
     public static func initialize() throws {
         try VipsBackend.initialize()
-        MagickBackend.initialize()
     }
 
-    /// Shutdown both backends (call at app teardown)
+    /// Shutdown libvips backend (call at app teardown)
     public static func shutdown() {
         VipsBackend.shutdown()
-        MagickBackend.shutdown()
     }
 
     // MARK: - Image Loading
@@ -62,13 +60,14 @@ public struct Hokusai {
         return VipsBackend.version
     }
 
-    /// Get ImageMagick version
+    /// Legacy ImageMagick version shim kept for API compatibility.
+    @available(*, deprecated, message: "ImageMagick backend was removed. Use vipsVersion instead.")
     public static var magickVersion: String {
-        return MagickBackend.version
+        return "removed (libvips-only)"
     }
 
     /// Get combined version string
     public static var version: String {
-        return "Hokusai (libvips \(vipsVersion), ImageMagick \(magickVersion))"
+        return "Hokusai (libvips \(vipsVersion))"
     }
 }

@@ -156,6 +156,58 @@ final class VipsBackend: ImageBackend {
         return vips_image_hasalpha(pointer) != 0
     }
 
+    func extendedMetadata() throws -> [String: String] {
+        let pointer = try getPointer()
+        var metadata: [String: String] = [:]
+
+        if let fields = swift_vips_image_get_fields(pointer) {
+            defer { swift_vips_g_strfreev(fields) }
+
+            var index = 0
+            while let fieldPointer = fields[index] {
+                let field = String(cString: fieldPointer)
+                if let valuePointer = swift_vips_image_get_as_string(pointer, field) {
+                    metadata[field] = String(cString: valuePointer)
+                    swift_vips_g_free(valuePointer)
+                }
+                index += 1
+            }
+        }
+
+        // Add convenient normalized aliases for frequent UI/API consumers.
+        metadata["width"] = metadata["width"] ?? String(Int(vips_image_get_width(pointer)))
+        metadata["height"] = metadata["height"] ?? String(Int(vips_image_get_height(pointer)))
+        metadata["bands"] = metadata["bands"] ?? String(Int(vips_image_get_bands(pointer)))
+        metadata["hasAlpha"] = metadata["hasAlpha"] ?? String(vips_image_hasalpha(pointer) != 0)
+
+        let interpretation = swift_vips_image_get_interpretation(pointer)
+        metadata["interpretation"] = metadata["interpretation"] ?? String(interpretation)
+        if metadata["interpretationNick"] == nil, let nick = swift_vips_interpretation_nick(interpretation) {
+            metadata["interpretationNick"] = String(cString: nick)
+        }
+
+        let bandFormat = swift_vips_image_get_band_format(pointer)
+        metadata["bandFormat"] = metadata["bandFormat"] ?? String(bandFormat)
+        if metadata["bandFormatNick"] == nil, let nick = swift_vips_band_format_nick(bandFormat) {
+            metadata["bandFormatNick"] = String(cString: nick)
+        }
+
+        let coding = swift_vips_image_get_coding(pointer)
+        metadata["coding"] = metadata["coding"] ?? String(coding)
+        if metadata["codingNick"] == nil, let nick = swift_vips_coding_nick(coding) {
+            metadata["codingNick"] = String(cString: nick)
+        }
+
+        let xres = swift_vips_image_get_xres(pointer)
+        let yres = swift_vips_image_get_yres(pointer)
+        metadata["xres"] = metadata["xres"] ?? String(xres)
+        metadata["yres"] = metadata["yres"] ?? String(yres)
+        metadata["xresDpi"] = metadata["xresDpi"] ?? String(xres * 25.4)
+        metadata["yresDpi"] = metadata["yresDpi"] ?? String(yres * 25.4)
+
+        return metadata
+    }
+
     // MARK: - Helper Methods
 
     private func detectFormat(from path: String) -> String {

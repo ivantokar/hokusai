@@ -98,6 +98,62 @@ static inline int swift_vips_text(VipsImage **out, const char *text, const char 
     return vips_text(out, text, "font", font, "dpi", dpi, "align", align, NULL);
 }
 
+static inline int swift_vips_text_full(
+    VipsImage **out,
+    const char *text,
+    const char *font,
+    int width,
+    int height,
+    int dpi,
+    VipsAlign align,
+    int spacing,
+    int rgba
+) {
+    return vips_text(
+        out,
+        text,
+        "font", font,
+        "width", width,
+        "height", height,
+        "dpi", dpi,
+        "align", align,
+        "spacing", spacing,
+        "rgba", rgba,
+        NULL
+    );
+}
+
+static inline int swift_vips_text_full_fontfile(
+    VipsImage **out,
+    const char *text,
+    const char *font,
+    const char *fontfile,
+    int width,
+    int height,
+    int dpi,
+    VipsAlign align,
+    int spacing,
+    int rgba
+) {
+    if (fontfile && fontfile[0] != '\0') {
+        return vips_text(
+            out,
+            text,
+            "font", font,
+            "fontfile", fontfile,
+            "width", width,
+            "height", height,
+            "dpi", dpi,
+            "align", align,
+            "spacing", spacing,
+            "rgba", rgba,
+            NULL
+        );
+    }
+
+    return swift_vips_text_full(out, text, font, width, height, dpi, align, spacing, rgba);
+}
+
 static inline int swift_vips_find_trim(
     VipsImage *in,
     int *left,
@@ -113,6 +169,10 @@ static inline int swift_vips_linear1(VipsImage *in, VipsImage **out, double a, d
     return vips_linear1(in, out, a, b, NULL);
 }
 
+static inline int swift_vips_gaussblur(VipsImage *in, VipsImage **out, double sigma) {
+    return vips_gaussblur(in, out, sigma, NULL);
+}
+
 static inline int swift_vips_addalpha(VipsImage *in, VipsImage **out) {
     return vips_addalpha(in, out, NULL);
 }
@@ -123,6 +183,85 @@ static inline int swift_vips_bandjoin_const(VipsImage *in, VipsImage **out, cons
 
 static inline int swift_vips_bandjoin(VipsImage **in, VipsImage **out, int n) {
     return vips_bandjoin(in, out, n, NULL);
+}
+
+// MARK: - Metadata Helpers
+
+static inline int swift_vips_image_get_int_field(VipsImage *in, const char *name, int *out) {
+    if (vips_image_get_typeof(in, name) == 0) {
+        return -1;
+    }
+    return vips_image_get_int(in, name, out);
+}
+
+static inline int swift_vips_image_get_double_field(VipsImage *in, const char *name, double *out) {
+    if (vips_image_get_typeof(in, name) == 0) {
+        return -1;
+    }
+    return vips_image_get_double(in, name, out);
+}
+
+static inline const char *swift_vips_image_get_string_field(VipsImage *in, const char *name) {
+    const char *value = NULL;
+    if (vips_image_get_typeof(in, name) == 0) {
+        return NULL;
+    }
+    if (vips_image_get_string(in, name, &value) != 0) {
+        return NULL;
+    }
+    return value;
+}
+
+static inline char **swift_vips_image_get_fields(VipsImage *in) {
+    return vips_image_get_fields(in);
+}
+
+static inline char *swift_vips_image_get_as_string(VipsImage *in, const char *name) {
+    char *out = NULL;
+    if (vips_image_get_as_string(in, name, &out) != 0) {
+        return NULL;
+    }
+    return out;
+}
+
+static inline void swift_vips_g_strfreev(char **str_array) {
+    g_strfreev(str_array);
+}
+
+static inline void swift_vips_g_free(void *ptr) {
+    g_free(ptr);
+}
+
+static inline int swift_vips_image_get_interpretation(VipsImage *in) {
+    return (int) in->Type;
+}
+
+static inline int swift_vips_image_get_band_format(VipsImage *in) {
+    return (int) in->BandFmt;
+}
+
+static inline int swift_vips_image_get_coding(VipsImage *in) {
+    return (int) in->Coding;
+}
+
+static inline double swift_vips_image_get_xres(VipsImage *in) {
+    return in->Xres;
+}
+
+static inline double swift_vips_image_get_yres(VipsImage *in) {
+    return in->Yres;
+}
+
+static inline const char *swift_vips_interpretation_nick(int value) {
+    return vips_enum_nick(VIPS_TYPE_INTERPRETATION, value);
+}
+
+static inline const char *swift_vips_band_format_nick(int value) {
+    return vips_enum_nick(VIPS_TYPE_BAND_FORMAT, value);
+}
+
+static inline const char *swift_vips_coding_nick(int value) {
+    return vips_enum_nick(VIPS_TYPE_CODING, value);
 }
 
 static inline int swift_vips_flatten(VipsImage *in, VipsImage **out, VipsArrayDouble *background) {
@@ -230,12 +369,6 @@ static inline int swift_vips_smartcrop(
     VipsInteresting interesting
 ) {
     return vips_smartcrop(in, out, width, height, "interesting", interesting, NULL);
-}
-
-// MARK: - Enum Helpers
-
-static inline const char* swift_vips_interpretation_nick(VipsInterpretation interpretation) {
-    return vips_enum_nick(VIPS_TYPE_INTERPRETATION, interpretation);
 }
 
 #endif /* CVIPS_SHIM_H */
