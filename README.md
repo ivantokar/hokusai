@@ -483,8 +483,8 @@ The package keeps a minimal `swift-testing` dependency to support toolchains whe
 
 Hokusai follows semantic version tags in the format `vX.Y.Z`.
 
-- Pull requests and pushes to `main` run CI on macOS and Linux.
-- Pushing a semantic version tag runs release validation and publishes a GitHub Release with generated notes.
+- Releases are managed manually via semantic version tags (`vX.Y.Z`).
+- This repository intentionally does not run GitHub Actions workflows to reduce OSS costs.
 - Human-curated release notes are tracked in [CHANGELOG.md](CHANGELOG.md).
 
 ## Swift Package Index
@@ -492,7 +492,7 @@ Hokusai follows semantic version tags in the format `vX.Y.Z`.
 This repository is structured to be compatible with Swift Package Index:
 
 - semantic version tags (`vX.Y.Z`)
-- CI coverage on macOS and Linux
+- local validation with `swift build` and `swift test`
 - clear installation/usage docs in this README
 
 Recommended next step when API docs grow: add a lightweight DocC catalog at `Sources/Hokusai/Hokusai.docc` and let SPI host the generated documentation.
