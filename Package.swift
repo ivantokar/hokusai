@@ -12,10 +12,16 @@ let package = Package(
         .library(
             name: "Hokusai",
             targets: ["Hokusai"]
-        )
+        ),
+        .executable(
+            name: "hokusai",
+            targets: ["HokusaiCLI"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-testing.git", from: "0.7.0"),
+        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
+        .package(url: "https://github.com/ivantokar/prompt.git", from: "1.0.0"),
     ],
     targets: [
         // System library wrapper for libvips
@@ -33,6 +39,14 @@ let package = Package(
             dependencies: ["CVips"],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
+            ]
+        ),
+        .executableTarget(
+            name: "HokusaiCLI",
+            dependencies: [
+                "Hokusai",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "Prompt", package: "prompt"),
             ]
         ),
         // Test target

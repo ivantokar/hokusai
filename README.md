@@ -60,7 +60,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/ivantokar/hokusai.git", from: "0.1.0")
+    .package(url: "https://github.com/ivantokar/hokusai.git", from: "0.2.0")
 ]
 
 targets: [
@@ -70,6 +70,33 @@ targets: [
     )
 ]
 ```
+
+## CLI
+
+Hokusai ships with a first-party CLI target: `hokusai`.
+
+### Run from source
+
+```bash
+swift run hokusai --help
+swift run hokusai info
+swift run hokusai inspect --input ./input.jpg
+swift run hokusai resize --input ./input.jpg --output ./out.jpg --width 1200 --height 800 --fit cover
+```
+
+### Install via Homebrew (recommended for users)
+
+Use a dedicated tap repository (recommended: `ivantokar/homebrew-tap`) with a `hokusai` formula.
+
+```bash
+brew tap ivantokar/homebrew-tap
+brew install hokusai
+hokusai --help
+```
+
+If you have not published the formula yet, use `swift run hokusai ...` until the tap is live.
+
+Distribution details: [docs/cli-distribution.md](docs/cli-distribution.md)
 
 ## Quick Start
 
