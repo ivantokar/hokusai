@@ -31,6 +31,11 @@ Built for modern Swift server applications with async/await support, comprehensi
 - Avatar and thumbnail generation
 - Watermarking and branding workflows
 
+## Related Projects
+
+- [hokusai-vapor](https://github.com/ivantokar/hokusai-vapor) - Vapor framework integration
+- [hokusai-vapor-example](https://github.com/ivantokar/hokusai-vapor-example) - Complete demo app with web UI
+
 ## How It Works
 
 Hokusai provides a unified Swift API backed by libvips for all operations, including text rendering.
@@ -515,8 +520,3 @@ MIT License - see [LICENSE](LICENSE) file for details.
 Built with:
 - [libvips](https://www.libvips.org/) - Fast image processing library
 - Inspired by [sharp](https://sharp.pixelplumbing.com/) (Node.js)
-
-## Related Projects
-
-- [hokusai-vapor](https://github.com/ivantokar/hokusai-vapor) - Vapor framework integration
-- [hokusai-vapor-example](https://github.com/ivantokar/hokusai-vapor-example) - Complete demo app with web UI
