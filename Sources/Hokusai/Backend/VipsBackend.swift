@@ -1,12 +1,19 @@
 import Foundation
 import CVips
 
-/// libvips backend implementation for high-performance image operations
+/// PURPOSE: Own libvips image pointer lifecycle and encode/decode primitives.
+/// CONSTRAINTS:
+/// - Maintain single-pointer ownership semantics.
+/// - Free pointer exactly once in `deinit`.
+/// AI HINTS:
+/// - Keep libvips calls centralized here.
+/// - Do not bypass `getPointer()` from higher layers.
 final class VipsBackend: ImageBackend {
     private var imagePointer: UnsafeMutablePointer<CVips.VipsImage>?
     private let lock = NSLock()
 
-    /// Initialize libvips (call once at app startup)
+    /// PURPOSE: Initialize process-wide libvips runtime.
+    /// SIDE EFFECTS: Global libvips initialization.
     static func initialize() throws {
         let result = vips_init("Hokusai")
         guard result == 0 else {
@@ -14,12 +21,14 @@ final class VipsBackend: ImageBackend {
         }
     }
 
-    /// Shutdown libvips (call at app teardown)
+    /// PURPOSE: Shutdown process-wide libvips runtime.
+    /// SIDE EFFECTS: Global libvips teardown.
     static func shutdown() {
         vips_shutdown()
     }
 
-    /// Internal initializer with vips image pointer
+    /// PURPOSE: Adopt ownership of an existing libvips image pointer.
+    /// INPUT: `pointer` must be a valid owned `VipsImage*`.
     init(takingOwnership pointer: UnsafeMutablePointer<CVips.VipsImage>) {
         self.imagePointer = pointer
     }
@@ -34,7 +43,9 @@ final class VipsBackend: ImageBackend {
         }
     }
 
-    /// Get the underlying pointer (for internal use)
+    /// PURPOSE: Return currently owned `VipsImage*`.
+    /// OUTPUT: Live non-null pointer.
+    /// CONSTRAINTS: Throws if pointer already released.
     func getPointer() throws -> UnsafeMutablePointer<CVips.VipsImage> {
         lock.lock()
         defer { lock.unlock() }

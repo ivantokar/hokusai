@@ -3,6 +3,12 @@ import ArgumentParser
 import Hokusai
 import Prompt
 
+/// PURPOSE: CLI entrypoint exposing operational and benchmark commands.
+/// CONSTRAINTS:
+/// - Commands must initialize/shutdown Hokusai runtime per invocation.
+/// - Keep output human-readable for local operator workflows.
+/// AI HINTS:
+/// - Prefer additive subcommands over behavior changes in existing commands.
 @main
 struct HokusaiCLI: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -27,6 +33,7 @@ struct InfoCommand: AsyncParsableCommand {
         abstract: "Show Hokusai and libvips version information."
     )
 
+    /// PURPOSE: Print runtime versions for Hokusai and libvips.
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
@@ -50,6 +57,7 @@ struct InspectCommand: AsyncParsableCommand {
     @Option(name: .shortAndLong, help: "Input image path.")
     var input: String
 
+    /// PURPOSE: Show decoded metadata for a local image file.
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
@@ -99,6 +107,7 @@ struct ResizeCommand: AsyncParsableCommand {
     @Flag(help: "Prevent downscaling.")
     var withoutReduction = false
 
+    /// PURPOSE: Resize an input image and save to destination path.
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
@@ -157,6 +166,7 @@ struct ConvertCommand: AsyncParsableCommand {
     @Option(help: "Encoder effort where supported.")
     var effort: Int?
 
+    /// PURPOSE: Re-encode image with explicit format and encoder options.
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
@@ -202,6 +212,7 @@ struct RotateCommand: AsyncParsableCommand {
     @Option(help: "Optional background RGBA (comma-separated), e.g. 255,255,255,255")
     var background: String?
 
+    /// PURPOSE: Rotate image by arbitrary degree angle and save result.
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()

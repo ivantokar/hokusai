@@ -1,24 +1,35 @@
 import Foundation
 
-/// Main API entry point for Hokusai image processing
+/// PURPOSE: Main static API entry point for Hokusai image processing.
+/// CONSTRAINTS:
+/// - Initialize libvips exactly once during process startup.
+/// - Do not instantiate this type directly.
+/// AI HINTS:
+/// - Keep this surface minimal and stable.
+/// - Route all image loading through libvips-backed helpers.
 public struct Hokusai {
     private init() {} // Prevent instantiation
 
     // MARK: - Lifecycle Management
 
-    /// Initialize libvips (call once at app startup)
+    /// PURPOSE: Initialize libvips runtime for all future image operations.
+    /// SIDE EFFECTS: Initializes global libvips state.
+    /// DO NOT: Call repeatedly in hot paths.
     public static func initialize() throws {
         try VipsBackend.initialize()
     }
 
-    /// Shutdown libvips backend (call at app teardown)
+    /// PURPOSE: Shutdown libvips runtime during app teardown.
+    /// SIDE EFFECTS: Releases global libvips resources.
     public static func shutdown() {
         VipsBackend.shutdown()
     }
 
     // MARK: - Image Loading
 
-    /// Load image from file path (uses libvips backend by default)
+    /// PURPOSE: Asynchronously load an image from a filesystem path.
+    /// INPUT: `path` must reference a readable image file.
+    /// OUTPUT: `HokusaiImage` backed by libvips.
     ///
     /// Example:
     /// ```swift
@@ -28,7 +39,9 @@ public struct Hokusai {
         return try loadFromFile(path)
     }
 
-    /// Load image from data buffer (uses libvips backend by default)
+    /// PURPOSE: Asynchronously load an image from in-memory bytes.
+    /// INPUT: `data` must contain a valid encoded image payload.
+    /// OUTPUT: `HokusaiImage` backed by libvips.
     ///
     /// Example:
     /// ```swift
@@ -39,14 +52,16 @@ public struct Hokusai {
         return try loadFromBuffer(data)
     }
 
-    /// Synchronous load from file
+    /// PURPOSE: Synchronous load from file for non-async call sites.
+    /// CONSTRAINTS: Uses libvips-only backend.
     public static func loadFromFile(_ path: String) throws -> HokusaiImage {
         // Load using VipsBackend (efficient for most operations)
         let vipsBackend = try VipsBackend.loadFromFile(path)
         return HokusaiImage(backend: .vips(vipsBackend))
     }
 
-    /// Synchronous load from buffer
+    /// PURPOSE: Synchronous load from encoded bytes for non-async call sites.
+    /// CONSTRAINTS: Uses libvips-only backend.
     public static func loadFromBuffer(_ data: Data) throws -> HokusaiImage {
         // Load using VipsBackend (efficient for most operations)
         let vipsBackend = try VipsBackend.loadFromBuffer(data)
@@ -55,7 +70,7 @@ public struct Hokusai {
 
     // MARK: - Version Information
 
-    /// Get libvips version
+    /// PURPOSE: Return runtime libvips version string.
     public static var vipsVersion: String {
         return VipsBackend.version
     }

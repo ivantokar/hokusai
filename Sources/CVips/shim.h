@@ -3,6 +3,16 @@
 
 #include <vips/vips.h>
 
+/**
+ * @brief PURPOSE: Thin C bridge that exposes libvips APIs to Swift.
+ * CONSTRAINTS:
+ * - Keep wrappers minimal and side-effect equivalent to libvips calls.
+ * - Avoid policy/business logic in this layer.
+ * AI HINTS:
+ * - Add new wrappers only when Swift interop requires it.
+ * - Preserve ownership/NULL semantics from underlying libvips APIs.
+ */
+
 // Export commonly used vips enums and types for Swift
 typedef VipsKernel VipsKernel;
 typedef VipsBlendMode VipsBlendMode;
@@ -14,10 +24,12 @@ typedef VipsDirection VipsDirection;
 
 // MARK: - Image Loading
 
+/** @brief Load image from path and return owned VipsImage pointer. */
 static inline VipsImage *swift_vips_image_new_from_file(const char *path) {
     return vips_image_new_from_file(path, NULL);
 }
 
+/** @brief Load image from encoded bytes and return owned VipsImage pointer. */
 static inline VipsImage *swift_vips_image_new_from_buffer(const void *buf, size_t size) {
     return vips_image_new_from_buffer(buf, size, "", NULL);
 }
@@ -109,6 +121,7 @@ static inline int swift_vips_text_full(
     int spacing,
     int rgba
 ) {
+    // PURPOSE: Render text with explicit layout parameters and RGBA output.
     return vips_text(
         out,
         text,
@@ -135,6 +148,7 @@ static inline int swift_vips_text_full_fontfile(
     int spacing,
     int rgba
 ) {
+    // PURPOSE: Render text with optional explicit font file override.
     if (fontfile && fontfile[0] != '\0') {
         return vips_text(
             out,
@@ -187,6 +201,7 @@ static inline int swift_vips_bandjoin(VipsImage **in, VipsImage **out, int n) {
 
 // MARK: - Metadata Helpers
 
+/** @brief Read integer metadata field if present; return -1 when absent. */
 static inline int swift_vips_image_get_int_field(VipsImage *in, const char *name, int *out) {
     if (vips_image_get_typeof(in, name) == 0) {
         return -1;
@@ -194,6 +209,7 @@ static inline int swift_vips_image_get_int_field(VipsImage *in, const char *name
     return vips_image_get_int(in, name, out);
 }
 
+/** @brief Read double metadata field if present; return -1 when absent. */
 static inline int swift_vips_image_get_double_field(VipsImage *in, const char *name, double *out) {
     if (vips_image_get_typeof(in, name) == 0) {
         return -1;

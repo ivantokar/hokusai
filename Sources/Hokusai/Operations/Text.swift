@@ -3,7 +3,15 @@ import CVips
 
 /// Text rendering operations using libvips text rendering (Pango/Cairo)
 extension HokusaiImage {
-    /// Draw text on the image at specified position.
+    /// PURPOSE: Render styled text and composite it onto the base image.
+    /// INPUT:
+    /// - `text`: source text/markup content.
+    /// - `x`/`y`: anchor offset (used with optional gravity).
+    /// - `options`: typography, stroke, shadow, and layout controls.
+    /// OUTPUT: New image with rendered text overlay.
+    /// AI HINTS:
+    /// - Keep render flow: primary -> shadow -> stroke -> final text.
+    /// - Preserve out-of-bounds checks before each composite call.
     public func drawText(
         _ text: String,
         x: Int,
@@ -106,7 +114,7 @@ extension HokusaiImage {
         return result
     }
 
-    /// Draw text with automatic positioning.
+    /// PURPOSE: Draw text by semantic position with optional padding.
     public func drawText(
         _ text: String,
         position: Position,
@@ -126,6 +134,8 @@ extension HokusaiImage {
         options: TextOptions,
         color: [Double]
     ) throws -> HokusaiImage {
+        // PURPOSE: Build a text-only RGBA image layer using libvips text rendering.
+        // DO NOT: Composite here; composition happens in caller.
         var renderedText: UnsafeMutablePointer<CVips.VipsImage>?
 
         let (fontSpec, fontFile) = fontSpecAndFile(from: options)
@@ -205,6 +215,7 @@ extension HokusaiImage {
         textHeight: Int,
         gravity: TextGravity?
     ) -> (Int, Int) {
+        // PURPOSE: Convert gravity + offsets into absolute top-left origin.
         guard let gravity else {
             return (x, y)
         }
