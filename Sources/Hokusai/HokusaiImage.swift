@@ -6,7 +6,13 @@ enum ImageData {
     case vips(VipsBackend)
 }
 
-/// Unified image wrapper with automatic backend routing
+/// PURPOSE: Unified image wrapper used by all public image operations.
+/// CONSTRAINTS:
+/// - Backed by libvips only.
+/// - All backend access must remain thread-safe.
+/// AI HINTS:
+/// - Preserve lock boundaries around mutable backend state.
+/// - Keep this as a thin façade over backend operations.
 public final class HokusaiImage: @unchecked Sendable {
     private var imageData: ImageData
     private let lock = NSLock()
@@ -18,7 +24,9 @@ public final class HokusaiImage: @unchecked Sendable {
 
     // MARK: - Backend Management
 
-    /// Ensure the image is using VipsBackend
+    /// PURPOSE: Resolve and return the active libvips backend instance.
+    /// OUTPUT: Live `VipsBackend` for this image.
+    /// CONSTRAINTS: Must hold lock while reading backend storage.
     func ensureVipsBackend() throws -> VipsBackend {
         lock.lock()
         defer { lock.unlock() }
@@ -71,7 +79,10 @@ public final class HokusaiImage: @unchecked Sendable {
         }
     }
 
-    /// Get image metadata
+    /// PURPOSE: Return normalized metadata common to all API consumers.
+    /// OUTPUT: `ImageMetadata` with dimensions/channels/alpha and optional fields.
+    /// AI HINTS:
+    /// - Keep optional fields nil unless we can extract them reliably.
     public func metadata() throws -> ImageMetadata {
         return ImageMetadata(
             width: try width,
@@ -87,7 +98,8 @@ public final class HokusaiImage: @unchecked Sendable {
         )
     }
 
-    /// Get extended libvips-derived metadata as key/value pairs.
+    /// PURPOSE: Return extended libvips-derived metadata key/value map.
+    /// OUTPUT: Best-effort dictionary with normalized convenience aliases.
     public func extendedMetadata() throws -> [String: String] {
         switch imageData {
         case .vips(let backend):
@@ -97,7 +109,9 @@ public final class HokusaiImage: @unchecked Sendable {
 
     // MARK: - Save Operations
 
-    /// Save image to file
+    /// PURPOSE: Encode and write image to file.
+    /// INPUT: Destination `path`; optional `format` and `quality` overrides.
+    /// SIDE EFFECTS: Filesystem write.
     public func toFile(_ path: String, format: String? = nil, quality: Int? = nil) throws {
         switch imageData {
         case .vips(let backend):
@@ -105,7 +119,8 @@ public final class HokusaiImage: @unchecked Sendable {
         }
     }
 
-    /// Convert image to data buffer
+    /// PURPOSE: Encode image into an in-memory buffer.
+    /// OUTPUT: Encoded bytes in requested or inferred format.
     public func toBuffer(format: String? = nil, quality: Int? = nil) throws -> Data {
         switch imageData {
         case .vips(let backend):

@@ -2,7 +2,14 @@ import Foundation
 import CVips
 
 extension HokusaiImage {
-    /// Resize image with various fit modes
+    /// PURPOSE: Resize image using libvips with fit and kernel controls.
+    /// INPUT:
+    /// - `width`/`height`: optional target bounds.
+    /// - `options`: fit, kernel, and constraint flags.
+    /// OUTPUT: New resized image instance.
+    /// AI HINTS:
+    /// - Keep geometry math deterministic.
+    /// - Preserve cover/contain post-processing behavior.
     public func resize(width: Int? = nil, height: Int? = nil, options: ResizeOptions = ResizeOptions()) throws -> HokusaiImage {
         let vipsBackend = try ensureVipsBackend()
         let pointer = try vipsBackend.getPointer()
@@ -72,21 +79,22 @@ extension HokusaiImage {
         }
     }
 
-    /// Resize to exact dimensions (ignoring aspect ratio)
+    /// PURPOSE: Force exact output dimensions.
+    /// CONSTRAINTS: Ignores source aspect ratio (`fit = .fill`).
     public func resize(width: Int, height: Int) throws -> HokusaiImage {
         var options = ResizeOptions()
         options.fit = .fill
         return try resize(width: width, height: height, options: options)
     }
 
-    /// Resize to fit within dimensions (preserving aspect ratio)
+    /// PURPOSE: Resize to fit inside bounds without cropping.
     public func resizeToFit(width: Int? = nil, height: Int? = nil) throws -> HokusaiImage {
         var options = ResizeOptions()
         options.fit = .inside
         return try resize(width: width, height: height, options: options)
     }
 
-    /// Resize and crop to cover dimensions (preserving aspect ratio)
+    /// PURPOSE: Resize to fully cover bounds and crop overflow.
     public func resizeToCover(width: Int, height: Int, position: Position = .center) throws -> HokusaiImage {
         var options = ResizeOptions()
         options.fit = .cover
@@ -105,6 +113,10 @@ extension HokusaiImage {
         withoutEnlargement: Bool,
         withoutReduction: Bool
     ) throws -> (width: Int, height: Int) {
+        // PURPOSE: Resolve final output dimensions before libvips resize call.
+        // CONSTRAINTS:
+        // - Always return positive dimensions.
+        // - Honor no-enlarge/no-reduction flags after fit calculation.
         let aspectRatio = Double(currentWidth) / Double(currentHeight)
 
         var finalWidth: Int

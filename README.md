@@ -343,7 +343,7 @@ Method:
 - warmup: 5 runs
 - measured iterations: 20 runs
 
-Input: `certifcate.png` (3206x2266, RGBA)
+Input: `certificate.png` (3206x2266, RGBA)
 
 | Case | Mean | P95 | Ops/s |
 | --- | ---: | ---: | ---: |
