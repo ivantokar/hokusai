@@ -1,35 +1,35 @@
 import Foundation
 
-/// Metadata information about an image
+/// PURPOSE: Metadata information about an image
 public struct ImageMetadata: Sendable {
-    /// Image width in pixels
+    /// PURPOSE: Image width in pixels
     public let width: Int
 
-    /// Image height in pixels
+    /// PURPOSE: Image height in pixels
     public let height: Int
 
-    /// Number of color channels
+    /// PURPOSE: Number of color channels
     public let channels: Int
 
-    /// Image format
+    /// PURPOSE: Image format
     public let format: ImageFormat?
 
-    /// Color space
+    /// PURPOSE: Color space
     public let space: String?
 
-    /// Whether the image has an alpha channel
+    /// PURPOSE: Whether the image has an alpha channel
     public let hasAlpha: Bool
 
-    /// Image orientation (EXIF)
+    /// PURPOSE: Image orientation (EXIF)
     public let orientation: Int?
 
-    /// Density in DPI
+    /// PURPOSE: Density in DPI
     public let density: Double?
 
-    /// Number of pages (for multi-page formats like GIF, PDF)
+    /// PURPOSE: Number of pages (for multi-page formats like GIF, PDF)
     public let pages: Int?
 
-    /// File size in bytes (if available)
+    /// PURPOSE: File size in bytes (if available)
     public let size: Int?
 
     public init(

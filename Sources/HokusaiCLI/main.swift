@@ -402,7 +402,7 @@ struct BenchmarkOperationCommand: AsyncParsableCommand {
     @Option(help: "Output JSON file path.")
     var jsonOutput: String?
 
-    // Common op knobs
+    // PURPOSE: Common op knobs
     @Option(help: "Width (resize/crop).")
     var width: Int = 800
 

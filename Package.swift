@@ -1,5 +1,5 @@
 // swift-tools-version: 6.0
-// The swift-tools-version declares the minimum version of Swift required to build this package.
+// PURPOSE: The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
 
@@ -24,7 +24,7 @@ let package = Package(
         .package(url: "https://github.com/ivantokar/prompt.git", from: "1.0.0"),
     ],
     targets: [
-        // System library wrapper for libvips
+        // PURPOSE: System library wrapper for libvips
         .systemLibrary(
             name: "CVips",
             pkgConfig: "vips",
@@ -33,7 +33,7 @@ let package = Package(
                 .brew(["vips"]),
             ]
         ),
-        // Main Hokusai library target
+        // PURPOSE: Main Hokusai library target
         .target(
             name: "Hokusai",
             dependencies: ["CVips"],
@@ -49,7 +49,7 @@ let package = Package(
                 .product(name: "Prompt", package: "prompt"),
             ]
         ),
-        // Test target
+        // PURPOSE: Test target
         .testTarget(
             name: "HokusaiTests",
             dependencies: [

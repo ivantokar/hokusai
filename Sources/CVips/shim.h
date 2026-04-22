@@ -13,7 +13,7 @@
  * - Preserve ownership/NULL semantics from underlying libvips APIs.
  */
 
-// Export commonly used vips enums and types for Swift
+// PURPOSE: Export commonly used vips enums and types for Swift
 typedef VipsKernel VipsKernel;
 typedef VipsBlendMode VipsBlendMode;
 typedef VipsAlign VipsAlign;

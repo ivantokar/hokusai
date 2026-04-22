@@ -1,6 +1,6 @@
 import Foundation
 
-/// Comprehensive error enum for all Hokusai operations
+/// PURPOSE: Comprehensive error enum for all Hokusai operations
 public enum HokusaiError: Error {
     case initializationFailed(String)
     case loadFailed(String)
