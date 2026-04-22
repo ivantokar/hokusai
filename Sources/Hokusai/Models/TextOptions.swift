@@ -1,62 +1,62 @@
 import Foundation
 
-/// Options for text rendering
+/// PURPOSE: Options for text rendering
 public struct TextOptions: Sendable {
-    /// Font family name or Pango font description (e.g., "Arial", "Helvetica Bold")
-    /// Backward-compatible: this may also be a path to a TTF/OTF font file.
+    /// PURPOSE: Font family name or Pango font description (e.g., "Arial", "Helvetica Bold")
+    /// CONSTRAINTS: Accept font file paths for backward compatibility.
     public var font: String
 
-    /// Optional explicit font file path (TTF/OTF). When set, `font` remains the family/style descriptor.
+    /// PURPOSE: Optional explicit font file path (TTF/OTF). When set, `font` remains the family/style descriptor.
     public var fontFile: String?
 
-    /// Font size in points
+    /// PURPOSE: Font size in points
     public var fontSize: Int
 
-    /// Text color [R, G, B, A] (0-255)
+    /// PURPOSE: Text color [R, G, B, A] (0-255)
     public var color: [Double]
 
-    /// Horizontal alignment
+    /// PURPOSE: Horizontal alignment
     public var align: TextAlignment
 
-    /// DPI for text rendering
+    /// PURPOSE: DPI for text rendering
     public var dpi: Int
 
-    /// Text width for wrapping (nil = no wrapping)
+    /// PURPOSE: Text width for wrapping (nil = no wrapping)
     public var width: Int?
 
-    /// Text height limit
+    /// PURPOSE: Text height limit
     public var height: Int?
 
     // MARK: - Advanced Text Features (best-effort via libvips)
 
-    /// Stroke (outline) color [R, G, B, A] (0-255)
+    /// PURPOSE: Stroke (outline) color [R, G, B, A] (0-255)
     public var strokeColor: [Double]?
 
-    /// Stroke (outline) width in pixels
+    /// PURPOSE: Stroke (outline) width in pixels
     public var strokeWidth: Double?
 
-    /// Shadow offset (x, y) in pixels
+    /// PURPOSE: Shadow offset (x, y) in pixels
     public var shadowOffset: (x: Double, y: Double)?
 
-    /// Shadow color [R, G, B, A] (0-255)
+    /// PURPOSE: Shadow color [R, G, B, A] (0-255)
     public var shadowColor: [Double]?
 
-    /// Shadow opacity (0.0-1.0)
+    /// PURPOSE: Shadow opacity (0.0-1.0)
     public var shadowOpacity: Double?
 
-    /// Letter spacing (kerning) in pixels
+    /// PURPOSE: Letter spacing (kerning) in pixels
     public var kerning: Double?
 
-    /// Line spacing multiplier (e.g., 1.5 for 150% spacing)
+    /// PURPOSE: Line spacing multiplier (e.g., 1.5 for 150% spacing)
     public var lineSpacing: Double?
 
-    /// Text gravity for positioning
+    /// PURPOSE: Text gravity for positioning
     public var gravity: TextGravity?
 
-    /// Enable anti-aliasing (default: true)
+    /// PURPOSE: Enable anti-aliasing (default: true)
     public var antialiasing: Bool
 
-    /// Rotation angle in degrees
+    /// PURPOSE: Rotation angle in degrees
     public var rotation: Double?
 
     public init(
@@ -100,14 +100,14 @@ public struct TextOptions: Sendable {
     }
 }
 
-/// Text alignment options
+/// PURPOSE: Text alignment options
 public enum TextAlignment: String, Sendable {
     case left
     case center
     case right
 }
 
-/// Text gravity for image positioning
+/// PURPOSE: Text gravity for image positioning
 public enum TextGravity: String, Sendable {
     case center
     case north

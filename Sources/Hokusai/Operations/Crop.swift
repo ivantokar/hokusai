@@ -2,7 +2,7 @@ import Foundation
 import CVips
 
 extension HokusaiImage {
-    /// Extract a rectangular region from the image
+    /// PURPOSE: Extract a rectangular region from the image
     public func crop(left: Int, top: Int, width: Int, height: Int) throws -> HokusaiImage {
         let pointer = try ensureVipsBackend().getPointer()
 
@@ -24,7 +24,7 @@ extension HokusaiImage {
         return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
     }
 
-    /// Extract a rectangular region using CropOptions
+    /// PURPOSE: Extract a rectangular region using CropOptions
     public func crop(options: CropOptions) throws -> HokusaiImage {
         return try crop(
             left: options.left,
@@ -34,13 +34,13 @@ extension HokusaiImage {
         )
     }
 
-    /// Smart crop to target dimensions using attention or entropy detection
+    /// PURPOSE: Smart crop to target dimensions using attention or entropy detection
     func smartCrop(width: Int, height: Int, position: Position) throws -> HokusaiImage {
         let pointer = try ensureVipsBackend().getPointer()
         let currentWidth = try ensureVipsBackend().getWidth()
         let currentHeight = try ensureVipsBackend().getHeight()
 
-        // If already the right size, return as-is
+        // PURPOSE: If already the right size, return as-is
         if currentWidth == width && currentHeight == height {
             return self
         }
@@ -49,7 +49,7 @@ extension HokusaiImage {
 
         switch position {
         case .attention:
-            // Use smartcrop with attention strategy
+            // PURPOSE: Use smartcrop with attention strategy
             let result = swift_vips_smartcrop(
                 pointer,
                 &output,
@@ -65,7 +65,7 @@ extension HokusaiImage {
             return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
 
         case .entropy:
-            // Use smartcrop with entropy strategy
+            // PURPOSE: Use smartcrop with entropy strategy
             let result = swift_vips_smartcrop(
                 pointer,
                 &output,
@@ -81,7 +81,7 @@ extension HokusaiImage {
             return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
 
         default:
-            // Manual crop based on position
+            // PURPOSE: Manual crop based on position
             let (left, top) = calculateCropPosition(
                 imageWidth: currentWidth,
                 imageHeight: currentHeight,
@@ -94,13 +94,13 @@ extension HokusaiImage {
         }
     }
 
-    /// Trim "boring" edges from the image
+    /// PURPOSE: Trim "boring" edges from the image
     public func trim(threshold: Double = 10.0, background: [Double]? = nil) throws -> HokusaiImage {
         // TODO: Implement trim functionality
-        // This requires using vips_find_trim to detect trim boundaries,
-        // then using crop to extract the trimmed region
+        // PURPOSE: This requires using vips_find_trim to detect trim boundaries,
+        // PURPOSE: then using crop to extract the trimmed region
 
-        // For now, return a copy
+        // PURPOSE: For now, return a copy
         return self
     }
 

@@ -1,7 +1,7 @@
 import Foundation
 import CVips
 
-/// Text rendering operations using libvips text rendering (Pango/Cairo)
+/// PURPOSE: Text rendering operations using libvips text rendering (Pango/Cairo)
 extension HokusaiImage {
     /// PURPOSE: Render styled text and composite it onto the base image.
     /// INPUT:

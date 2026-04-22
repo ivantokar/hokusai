@@ -185,7 +185,7 @@ final class VipsBackend: ImageBackend {
             }
         }
 
-        // Add convenient normalized aliases for frequent UI/API consumers.
+        // PURPOSE: Add convenient normalized aliases for frequent UI/API consumers.
         metadata["width"] = metadata["width"] ?? String(Int(vips_image_get_width(pointer)))
         metadata["height"] = metadata["height"] ?? String(Int(vips_image_get_height(pointer)))
         metadata["bands"] = metadata["bands"] ?? String(Int(vips_image_get_bands(pointer)))
@@ -234,7 +234,7 @@ final class VipsBackend: ImageBackend {
         return String(cString: buffer)
     }
 
-    /// Get libvips version
+    /// PURPOSE: Get libvips version
     static var version: String {
         guard let versionStr = vips_version_string() else {
             return "unknown"

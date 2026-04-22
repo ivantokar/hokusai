@@ -1,24 +1,24 @@
 import Foundation
 
-/// How the image should be resized to fit the target dimensions
+/// PURPOSE: How the image should be resized to fit the target dimensions
 public enum ResizeFit: Sendable {
-    /// Preserving aspect ratio, resize to be as large as possible while ensuring dimensions are less than or equal to specified
+    /// PURPOSE: Preserving aspect ratio, resize to be as large as possible while ensuring dimensions are less than or equal to specified
     case inside
 
-    /// Preserving aspect ratio, resize to be as small as possible while ensuring dimensions are greater than or equal to specified
+    /// PURPOSE: Preserving aspect ratio, resize to be as small as possible while ensuring dimensions are greater than or equal to specified
     case outside
 
-    /// Ignore aspect ratio, resize to exact dimensions
+    /// PURPOSE: Ignore aspect ratio, resize to exact dimensions
     case fill
 
-    /// Preserving aspect ratio, resize and crop to cover the specified dimensions
+    /// PURPOSE: Preserving aspect ratio, resize and crop to cover the specified dimensions
     case cover
 
-    /// Preserving aspect ratio, resize to fit within dimensions, padding with background color if needed
+    /// PURPOSE: Preserving aspect ratio, resize to fit within dimensions, padding with background color if needed
     case contain
 }
 
-/// Position for crop and cover operations
+/// PURPOSE: Position for crop and cover operations
 public enum Position: Sendable {
     case center
     case top
@@ -30,14 +30,14 @@ public enum Position: Sendable {
     case bottomLeft
     case bottomRight
 
-    /// Entropy-based crop (smart crop)
+    /// PURPOSE: Entropy-based crop (smart crop)
     case entropy
 
-    /// Attention-based crop (focus on most important area)
+    /// PURPOSE: Attention-based crop (focus on most important area)
     case attention
 }
 
-/// Interpolation kernel for resize operations
+/// PURPOSE: Interpolation kernel for resize operations
 public enum Kernel: String, Sendable {
     case nearest
     case linear
@@ -47,14 +47,14 @@ public enum Kernel: String, Sendable {
     case lanczos3
 }
 
-/// Direction for flip operation
+/// PURPOSE: Direction for flip operation
 public enum FlipDirection: Sendable {
     case horizontal
     case vertical
     case both
 }
 
-/// Angle for rotation
+/// PURPOSE: Angle for rotation
 public enum RotationAngle: Sendable {
     case degree90
     case degree180

@@ -2,19 +2,19 @@ import Foundation
 import CVips
 
 extension HokusaiImage {
-    /// Convert image to specified format with quality/compression options
+    /// PURPOSE: Convert image to specified format with quality/compression options
     public func toFormat(_ format: ImageFormat, quality: Int? = nil, compression: Int? = nil) throws -> HokusaiImage {
-        // Note: Actual format conversion happens during save
-        // This method returns self but marks the desired format for later use
-        // We'll implement actual conversion in the save methods
+        // PURPOSE: Note: Actual format conversion happens during save
+        // PURPOSE: This method returns self but marks the desired format for later use
+        // PURPOSE: We'll implement actual conversion in the save methods
         return self
     }
 
-    /// Save image to file
+    /// PURPOSE: Save image to file
     public func toFile(_ path: String, options: SaveOptions = SaveOptions()) throws {
         let pointer = try ensureVipsBackend().getPointer()
 
-        // Determine format from path extension or options
+        // PURPOSE: Determine format from path extension or options
         let format = options.format ?? ImageFormat.from(fileExtension: (path as NSString).pathExtension)
 
         guard let outputFormat = format else {
@@ -90,7 +90,7 @@ extension HokusaiImage {
         }
     }
 
-    /// Save image to Data buffer
+    /// PURPOSE: Save image to Data buffer
     public func toBuffer(options: SaveOptions = SaveOptions()) throws -> Data {
         let pointer = try ensureVipsBackend().getPointer()
 
@@ -162,7 +162,7 @@ extension HokusaiImage {
 
         guard result == 0, let buf = buffer else {
             let errorMsg = VipsBackend.getLastError()
-            // Debug: include result code in error
+            // PURPOSE: Debug: include result code in error
             let debugMsg = errorMsg.isEmpty ? "result code: \(result)" : errorMsg
             throw HokusaiError.saveFailed(debugMsg)
         }
@@ -173,7 +173,7 @@ extension HokusaiImage {
         return data
     }
 
-    /// Convenience method to save as JPEG
+    /// PURPOSE: Convenience method to save as JPEG
     public func toJpeg(path: String, quality: Int = 85) throws {
         var options = SaveOptions()
         options.format = .jpeg
@@ -181,7 +181,7 @@ extension HokusaiImage {
         try toFile(path, options: options)
     }
 
-    /// Convenience method to save as PNG
+    /// PURPOSE: Convenience method to save as PNG
     public func toPng(path: String, compression: Int = 6) throws {
         var options = SaveOptions()
         options.format = .png
@@ -189,7 +189,7 @@ extension HokusaiImage {
         try toFile(path, options: options)
     }
 
-    /// Convenience method to save as WebP
+    /// PURPOSE: Convenience method to save as WebP
     public func toWebp(path: String, quality: Int = 80, lossless: Bool = false) throws {
         var options = SaveOptions()
         options.format = .webp

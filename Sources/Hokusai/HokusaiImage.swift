@@ -1,7 +1,7 @@
 import Foundation
 import CVips
 
-/// Storage for backend image data
+/// PURPOSE: Storage for backend image data
 enum ImageData {
     case vips(VipsBackend)
 }
@@ -17,7 +17,7 @@ public final class HokusaiImage: @unchecked Sendable {
     private var imageData: ImageData
     private let lock = NSLock()
 
-    /// Internal initializer with backend data
+    /// PURPOSE: Internal initializer with backend data
     init(backend: ImageData) {
         self.imageData = backend
     }
@@ -39,7 +39,7 @@ public final class HokusaiImage: @unchecked Sendable {
 
     // MARK: - Metadata Access
 
-    /// Get image width
+    /// PURPOSE: Get image width
     public var width: Int {
         get throws {
             switch imageData {
@@ -49,7 +49,7 @@ public final class HokusaiImage: @unchecked Sendable {
         }
     }
 
-    /// Get image height
+    /// PURPOSE: Get image height
     public var height: Int {
         get throws {
             switch imageData {
@@ -59,7 +59,7 @@ public final class HokusaiImage: @unchecked Sendable {
         }
     }
 
-    /// Get number of bands (channels)
+    /// PURPOSE: Get number of bands (channels)
     public var bands: Int {
         get throws {
             switch imageData {
@@ -69,7 +69,7 @@ public final class HokusaiImage: @unchecked Sendable {
         }
     }
 
-    /// Check if image has alpha channel
+    /// PURPOSE: Check if image has alpha channel
     public var hasAlpha: Bool {
         get throws {
             switch imageData {
@@ -130,7 +130,7 @@ public final class HokusaiImage: @unchecked Sendable {
 
     // MARK: - Get Backend (for operations)
 
-    /// Get VipsBackend pointer (used by vips operations)
+    /// PURPOSE: Get VipsBackend pointer (used by vips operations)
     func getVipsPointer() throws -> UnsafeMutablePointer<CVips.VipsImage> {
         let backend = try ensureVipsBackend()
         return try backend.getPointer()

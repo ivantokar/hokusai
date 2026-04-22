@@ -1,29 +1,29 @@
 import Foundation
 
-/// Options for resize operations
+/// PURPOSE: Options for resize operations
 public struct ResizeOptions: Sendable {
-    /// Target width (nil to auto-calculate)
+    /// PURPOSE: Target width (nil to auto-calculate)
     public var width: Int?
 
-    /// Target height (nil to auto-calculate)
+    /// PURPOSE: Target height (nil to auto-calculate)
     public var height: Int?
 
-    /// How to fit the image
+    /// PURPOSE: How to fit the image
     public var fit: ResizeFit
 
-    /// Position for cover/contain operations
+    /// PURPOSE: Position for cover/contain operations
     public var position: Position
 
-    /// Interpolation kernel
+    /// PURPOSE: Interpolation kernel
     public var kernel: Kernel
 
-    /// Don't enlarge if the input is smaller than the target
+    /// PURPOSE: Don't enlarge if the input is smaller than the target
     public var withoutEnlargement: Bool
 
-    /// Don't reduce if the input is larger than the target
+    /// PURPOSE: Don't reduce if the input is larger than the target
     public var withoutReduction: Bool
 
-    /// Background color for contain mode [R, G, B, A]
+    /// PURPOSE: Background color for contain mode [R, G, B, A]
     public var background: [Double]?
 
     public init(
@@ -47,27 +47,27 @@ public struct ResizeOptions: Sendable {
     }
 }
 
-/// Options for format conversion and saving
+/// PURPOSE: Options for format conversion and saving
 public struct SaveOptions: Sendable {
-    /// Output format
+    /// PURPOSE: Output format
     public var format: ImageFormat?
 
-    /// Quality (1-100, for lossy formats)
+    /// PURPOSE: Quality (1-100, for lossy formats)
     public var quality: Int?
 
-    /// Compression level (0-9, for PNG)
+    /// PURPOSE: Compression level (0-9, for PNG)
     public var compression: Int?
 
-    /// Enable progressive/interlaced output
+    /// PURPOSE: Enable progressive/interlaced output
     public var progressive: Bool
 
-    /// Strip metadata
+    /// PURPOSE: Strip metadata
     public var stripMetadata: Bool
 
-    /// Enable lossless compression (for WebP)
+    /// PURPOSE: Enable lossless compression (for WebP)
     public var lossless: Bool
 
-    /// Effort level (1-9, for AVIF/WebP)
+    /// PURPOSE: Effort level (1-9, for AVIF/WebP)
     public var effort: Int?
 
     public init(
@@ -89,18 +89,18 @@ public struct SaveOptions: Sendable {
     }
 }
 
-/// Options for crop operations
+/// PURPOSE: Options for crop operations
 public struct CropOptions: Sendable {
-    /// Left offset
+    /// PURPOSE: Left offset
     public var left: Int
 
-    /// Top offset
+    /// PURPOSE: Top offset
     public var top: Int
 
-    /// Width
+    /// PURPOSE: Width
     public var width: Int
 
-    /// Height
+    /// PURPOSE: Height
     public var height: Int
 
     public init(left: Int, top: Int, width: Int, height: Int) {

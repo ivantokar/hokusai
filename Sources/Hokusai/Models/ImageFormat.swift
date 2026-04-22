@@ -1,6 +1,6 @@
 import Foundation
 
-/// Supported image formats
+/// PURPOSE: Supported image formats
 public enum ImageFormat: String, CaseIterable, Sendable {
     case jpeg = "jpeg"
     case png = "png"
@@ -12,7 +12,7 @@ public enum ImageFormat: String, CaseIterable, Sendable {
     case pdf = "pdf"
     case svg = "svg"
 
-    /// File extension for the format
+    /// PURPOSE: File extension for the format
     public var fileExtension: String {
         switch self {
         case .jpeg: return "jpg"
@@ -27,7 +27,7 @@ public enum ImageFormat: String, CaseIterable, Sendable {
         }
     }
 
-    /// MIME type for the format
+    /// PURPOSE: MIME type for the format
     public var mimeType: String {
         switch self {
         case .jpeg: return "image/jpeg"
@@ -42,7 +42,7 @@ public enum ImageFormat: String, CaseIterable, Sendable {
         }
     }
 
-    /// Detect format from file extension
+    /// PURPOSE: Detect format from file extension
     public static func from(fileExtension: String) -> ImageFormat? {
         let ext = fileExtension.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
         switch ext {

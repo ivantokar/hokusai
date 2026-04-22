@@ -55,7 +55,7 @@ public struct Hokusai {
     /// PURPOSE: Synchronous load from file for non-async call sites.
     /// CONSTRAINTS: Uses libvips-only backend.
     public static func loadFromFile(_ path: String) throws -> HokusaiImage {
-        // Load using VipsBackend (efficient for most operations)
+        // PURPOSE: Load using VipsBackend (efficient for most operations)
         let vipsBackend = try VipsBackend.loadFromFile(path)
         return HokusaiImage(backend: .vips(vipsBackend))
     }
@@ -63,7 +63,7 @@ public struct Hokusai {
     /// PURPOSE: Synchronous load from encoded bytes for non-async call sites.
     /// CONSTRAINTS: Uses libvips-only backend.
     public static func loadFromBuffer(_ data: Data) throws -> HokusaiImage {
-        // Load using VipsBackend (efficient for most operations)
+        // PURPOSE: Load using VipsBackend (efficient for most operations)
         let vipsBackend = try VipsBackend.loadFromBuffer(data)
         return HokusaiImage(backend: .vips(vipsBackend))
     }
@@ -75,13 +75,13 @@ public struct Hokusai {
         return VipsBackend.version
     }
 
-    /// Legacy ImageMagick version shim kept for API compatibility.
+    /// PURPOSE: Legacy ImageMagick version shim kept for API compatibility.
     @available(*, deprecated, message: "ImageMagick backend was removed. Use vipsVersion instead.")
     public static var magickVersion: String {
         return "removed (libvips-only)"
     }
 
-    /// Get combined version string
+    /// PURPOSE: Get combined version string
     public static var version: String {
         return "Hokusai (libvips \(vipsVersion))"
     }

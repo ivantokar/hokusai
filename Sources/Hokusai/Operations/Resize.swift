@@ -17,7 +17,7 @@ extension HokusaiImage {
         let currentWidth = try vipsBackend.getWidth()
         let currentHeight = try vipsBackend.getHeight()
 
-        // Merge provided dimensions with options
+        // PURPOSE: Merge provided dimensions with options
         let targetWidth = width ?? options.width
         let targetHeight = height ?? options.height
 
@@ -25,7 +25,7 @@ extension HokusaiImage {
             throw HokusaiError.invalidOperation("Must specify at least width or height")
         }
 
-        // Calculate target dimensions based on fit mode
+        // PURPOSE: Calculate target dimensions based on fit mode
         let (finalWidth, finalHeight) = try calculateDimensions(
             currentWidth: currentWidth,
             currentHeight: currentHeight,
@@ -36,16 +36,16 @@ extension HokusaiImage {
             withoutReduction: options.withoutReduction
         )
 
-        // Calculate scale factors
+        // PURPOSE: Calculate scale factors
         let hscale = Double(finalWidth) / Double(currentWidth)
         let vscale = Double(finalHeight) / Double(currentHeight)
 
         var output: UnsafeMutablePointer<CVips.VipsImage>?
 
-        // Map kernel to vips kernel
+        // PURPOSE: Map kernel to vips kernel
         let vipsKernel = mapKernel(options.kernel)
 
-        // Perform resize
+        // PURPOSE: Perform resize
         let result = swift_vips_resize(pointer, &output, hscale, vscale, vipsKernel)
 
         guard result == 0, let out = output else {
@@ -54,7 +54,7 @@ extension HokusaiImage {
 
         let resized = HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
 
-        // Handle fit modes that require cropping or embedding
+        // PURPOSE: Handle fit modes that require cropping or embedding
         switch options.fit {
         case .cover:
             if let w = targetWidth, let h = targetHeight {
@@ -115,8 +115,8 @@ extension HokusaiImage {
     ) throws -> (width: Int, height: Int) {
         // PURPOSE: Resolve final output dimensions before libvips resize call.
         // CONSTRAINTS:
-        // - Always return positive dimensions.
-        // - Honor no-enlarge/no-reduction flags after fit calculation.
+        // PURPOSE: - Always return positive dimensions.
+        // PURPOSE: - Honor no-enlarge/no-reduction flags after fit calculation.
         let aspectRatio = Double(currentWidth) / Double(currentHeight)
 
         var finalWidth: Int
@@ -129,7 +129,7 @@ extension HokusaiImage {
 
         case .inside, .contain:
             if let w = targetWidth, let h = targetHeight {
-                // Both dimensions specified
+                // PURPOSE: Both dimensions specified
                 let targetAspect = Double(w) / Double(h)
                 if aspectRatio > targetAspect {
                     finalWidth = w
@@ -139,11 +139,11 @@ extension HokusaiImage {
                     finalWidth = Int(Double(h) * aspectRatio)
                 }
             } else if let w = targetWidth {
-                // Only width specified
+                // PURPOSE: Only width specified
                 finalWidth = w
                 finalHeight = Int(Double(w) / aspectRatio)
             } else if let h = targetHeight {
-                // Only height specified
+                // PURPOSE: Only height specified
                 finalHeight = h
                 finalWidth = Int(Double(h) * aspectRatio)
             } else {
@@ -152,7 +152,7 @@ extension HokusaiImage {
 
         case .outside, .cover:
             if let w = targetWidth, let h = targetHeight {
-                // Both dimensions specified
+                // PURPOSE: Both dimensions specified
                 let targetAspect = Double(w) / Double(h)
                 if aspectRatio > targetAspect {
                     finalHeight = h
@@ -162,11 +162,11 @@ extension HokusaiImage {
                     finalHeight = Int(Double(w) / aspectRatio)
                 }
             } else if let w = targetWidth {
-                // Only width specified
+                // PURPOSE: Only width specified
                 finalWidth = w
                 finalHeight = Int(Double(w) / aspectRatio)
             } else if let h = targetHeight {
-                // Only height specified
+                // PURPOSE: Only height specified
                 finalHeight = h
                 finalWidth = Int(Double(h) * aspectRatio)
             } else {
@@ -174,7 +174,7 @@ extension HokusaiImage {
             }
         }
 
-        // Apply enlargement/reduction constraints
+        // PURPOSE: Apply enlargement/reduction constraints
         if withoutEnlargement {
             if finalWidth > currentWidth || finalHeight > currentHeight {
                 finalWidth = currentWidth
@@ -209,7 +209,7 @@ extension HokusaiImage {
         let currentWidth = try vipsBackend.getWidth()
         let currentHeight = try vipsBackend.getHeight()
 
-        // Calculate position
+        // PURPOSE: Calculate position
         let (x, y) = calculateEmbedPosition(
             imageWidth: currentWidth,
             imageHeight: currentHeight,
@@ -220,7 +220,7 @@ extension HokusaiImage {
 
         var output: UnsafeMutablePointer<CVips.VipsImage>?
 
-        // Create background array for vips
+        // PURPOSE: Create background array for vips
         let vipsBackground = background.withUnsafeBufferPointer { ptr in
             swift_vips_array_double_new(ptr.baseAddress, Int32(background.count))
         }
