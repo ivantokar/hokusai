@@ -361,6 +361,45 @@ Text-only benchmark on the same input:
 Note: these are measured reference values on one machine, not universal performance guarantees.
 Use `hokusai benchmark suite` / `hokusai benchmark op` to reproduce on your hardware.
 
+### WebP encoding
+
+Input: `2.webp` (800x450, RGB) — libvips 8.18.2 — Apple M4 Pro — 12 cores
+
+**Format comparison** (`toBuffer`, same input):
+
+| Case | Mean | P95 | Ops/s |
+| --- | ---: | ---: | ---: |
+| jpeg:q80 | 1.13 ms | 1.21 ms | 881 |
+| webp:q80:effort0 | 6.13 ms | 6.31 ms | 163 |
+| webp:q80:effort2 | 10.28 ms | 11.16 ms | 97 |
+| webp:q80:effort4 (default) | 20.07 ms | 20.50 ms | 50 |
+| png:compression6 | 25.58 ms | 26.11 ms | 39 |
+| webp:q80:effort6 | 38.26 ms | 38.57 ms | 26 |
+| webp:lossless:effort4 | 172.58 ms | 175.47 ms | 6 |
+
+**`effort` impact on webp:q80** (0 = fastest encoder, 6 = smallest file):
+
+| effort | Mean | Ops/s | vs effort4 |
+| --- | ---: | ---: | ---: |
+| 0 | 6.13 ms | 163 | 3.3× faster |
+| 2 | 10.28 ms | 97 | 2.0× faster |
+| 4 | 20.07 ms | 50 | baseline |
+| 6 | 38.26 ms | 26 | 1.9× slower |
+
+**Concurrency** (`vips_concurrency_set`, webp:q80:effort4):
+
+| Concurrency | Mean |
+| --- | ---: |
+| 1 | 20.16 ms |
+| 4 | 20.20 ms |
+| 12 | 20.42 ms |
+
+The libvips concurrency setting does not affect single-image WebP encode time. libvips threads
+parallelise the image pipeline (e.g. resize, rotate); the libwebp encode call itself is
+sequential per image. `effort` is the primary knob for trading encode speed against file size.
+
+Run `hokusai benchmark webp --input <file> [--concurrency-sweep]` to reproduce on your hardware.
+
 ### Memory Management
 
 - libvips processes images in chunks (streaming)
