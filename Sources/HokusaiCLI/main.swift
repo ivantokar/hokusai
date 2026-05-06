@@ -377,7 +377,7 @@ struct BenchmarkCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "benchmark",
         abstract: "Measure operation performance.",
-        subcommands: [BenchmarkOperationCommand.self, BenchmarkSuiteCommand.self]
+        subcommands: [BenchmarkOperationCommand.self, BenchmarkSuiteCommand.self, BenchmarkWebPCommand.self]
     )
 }
 
@@ -511,6 +511,20 @@ struct BenchmarkSuiteCommand: AsyncParsableCommand {
         let prompt = PromptService()
         try Hokusai.initialize()
         defer { Hokusai.shutdown() }
+
+        let cpuCount = ProcessInfo.processInfo.processorCount
+        let concurrency = Hokusai.vipsConcurrency
+        let image = try Hokusai.loadFromFile(input)
+        let meta = try image.metadata()
+        let inputDesc = "\(meta.width)x\(meta.height) \(meta.hasAlpha ? "RGBA" : "RGB") (\(meta.format?.rawValue ?? "unknown"))"
+
+        prompt.panel("Environment", items: [
+            ("libvips", Hokusai.vipsVersion),
+            ("Concurrency", "\(concurrency)"),
+            ("CPU cores", "\(cpuCount)"),
+            ("Input", inputDesc),
+        ])
+
         let inputPath = input
 
         let suiteCases: [(String, () throws -> Void)] = [
@@ -580,6 +594,182 @@ struct BenchmarkSuiteCommand: AsyncParsableCommand {
             )
             try BenchmarkRunner.writeJSON(payload, to: jsonOutput)
             prompt.info("Saved JSON benchmark suite: \(prompt.path(jsonOutput))")
+        }
+    }
+}
+
+struct BenchmarkWebPCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "webp",
+        abstract: "Investigate WebP encoding performance vs JPEG/PNG with effort and concurrency variables."
+    )
+
+    @Option(name: .shortAndLong, help: "Input image path.")
+    var input: String
+
+    @Option(help: "Warmup runs per case.")
+    var warmup: Int = 3
+
+    @Option(help: "Measured iterations per case.")
+    var iterations: Int = 20
+
+    @Option(help: "Output JSON file path.")
+    var jsonOutput: String?
+
+    @Option(help: "Override libvips concurrency (0 = libvips default).")
+    var vipsConcurrency: Int = 0
+
+    @Flag(help: "Also sweep concurrency 1,2,4,8,cores on webp:q80:effort4.")
+    var concurrencySweep: Bool = false
+
+    mutating func run() async throws {
+        let prompt = PromptService()
+        try Hokusai.initialize()
+        defer { Hokusai.shutdown() }
+
+        let savedConcurrency = Hokusai.vipsConcurrency
+        if vipsConcurrency > 0 {
+            Hokusai.vipsConcurrency = vipsConcurrency
+        }
+        defer {
+            if vipsConcurrency > 0 {
+                Hokusai.vipsConcurrency = savedConcurrency
+            }
+        }
+
+        let cpuCount = ProcessInfo.processInfo.processorCount
+        let activeConcurrency = Hokusai.vipsConcurrency
+        let image = try Hokusai.loadFromFile(input)
+        let meta = try image.metadata()
+        let inputDesc = "\(meta.width)x\(meta.height) \(meta.hasAlpha ? "RGBA" : "RGB") (\(meta.format?.rawValue ?? "unknown"))"
+
+        prompt.header("WebP Encoding Investigation")
+        prompt.panel("Environment", items: [
+            ("libvips", Hokusai.vipsVersion),
+            ("Concurrency", "\(activeConcurrency) (default; libvips uses all available cores)"),
+            ("CPU cores", "\(cpuCount)"),
+            ("Input", inputDesc),
+            ("WebP effort range", "0 (fastest) – 6 (slowest), libvips default 4"),
+        ])
+
+        let inputPath = input
+
+        let formatCases: [(String, () throws -> Void)] = [
+            ("jpeg:q80", {
+                let img = try Hokusai.loadFromFile(inputPath)
+                _ = try img.toBuffer(options: SaveOptions(format: .jpeg, quality: 80))
+            }),
+            ("png:compression6", {
+                let img = try Hokusai.loadFromFile(inputPath)
+                _ = try img.toBuffer(options: SaveOptions(format: .png, compression: 6))
+            }),
+            ("webp:q80:effort0", {
+                let img = try Hokusai.loadFromFile(inputPath)
+                _ = try img.toBuffer(options: SaveOptions(format: .webp, quality: 80, effort: 0))
+            }),
+            ("webp:q80:effort2", {
+                let img = try Hokusai.loadFromFile(inputPath)
+                _ = try img.toBuffer(options: SaveOptions(format: .webp, quality: 80, effort: 2))
+            }),
+            ("webp:q80:effort4", {
+                let img = try Hokusai.loadFromFile(inputPath)
+                _ = try img.toBuffer(options: SaveOptions(format: .webp, quality: 80, effort: 4))
+            }),
+            ("webp:q80:effort6", {
+                let img = try Hokusai.loadFromFile(inputPath)
+                _ = try img.toBuffer(options: SaveOptions(format: .webp, quality: 80, effort: 6))
+            }),
+            ("webp:lossless:effort4", {
+                let img = try Hokusai.loadFromFile(inputPath)
+                _ = try img.toBuffer(options: SaveOptions(format: .webp, lossless: true, effort: 4))
+            }),
+        ]
+
+        var formatRows: [[String]] = []
+        var jsonCases: [BenchmarkSuiteCaseResult] = []
+
+        for (name, operation) in formatCases {
+            let (stats, samples) = try BenchmarkRunner.run(
+                prompt: prompt,
+                name: name,
+                warmup: warmup,
+                iterations: iterations,
+                showHeader: false
+            ) {
+                try operation()
+            }
+
+            formatRows.append([
+                name,
+                BenchmarkRunner.formatMs(stats.meanMs),
+                BenchmarkRunner.formatMs(stats.medianMs),
+                BenchmarkRunner.formatMs(stats.p95Ms),
+                BenchmarkRunner.formatMs(stats.minMs),
+                BenchmarkRunner.formatMs(stats.maxMs),
+                String(format: "%.2f", stats.opsPerSecond),
+            ])
+
+            jsonCases.append(BenchmarkSuiteCaseResult(name: name, stats: stats, samplesMs: samples))
+        }
+
+        prompt.header("Format Comparison")
+        prompt.table(
+            headers: ["Case", "Mean", "Median", "P95", "Min", "Max", "Ops/s"],
+            rows: formatRows,
+            style: .rounded
+        )
+
+        if concurrencySweep {
+            let sweepLevels = [1, 2, 4, 8, cpuCount].filter { $0 <= cpuCount }.reduce(into: [Int]()) { acc, n in
+                if !acc.contains(n) { acc.append(n) }
+            }.sorted()
+
+            var sweepRows: [[String]] = []
+
+            for level in sweepLevels {
+                Hokusai.vipsConcurrency = level
+                let label = "webp:q80:effort4 (conc=\(level))"
+                let (stats, samples) = try BenchmarkRunner.run(
+                    prompt: prompt,
+                    name: label,
+                    warmup: warmup,
+                    iterations: iterations,
+                    showHeader: false
+                ) {
+                    let img = try Hokusai.loadFromFile(inputPath)
+                    _ = try img.toBuffer(options: SaveOptions(format: .webp, quality: 80, effort: 4))
+                }
+
+                sweepRows.append([
+                    "\(level)",
+                    BenchmarkRunner.formatMs(stats.meanMs),
+                    BenchmarkRunner.formatMs(stats.medianMs),
+                    BenchmarkRunner.formatMs(stats.p95Ms),
+                    String(format: "%.2f", stats.opsPerSecond),
+                ])
+
+                jsonCases.append(BenchmarkSuiteCaseResult(name: label, stats: stats, samplesMs: samples))
+            }
+
+            Hokusai.vipsConcurrency = savedConcurrency
+
+            prompt.header("Concurrency Sweep (webp:q80:effort4)")
+            prompt.table(
+                headers: ["Concurrency", "Mean", "Median", "P95", "Ops/s"],
+                rows: sweepRows,
+                style: .rounded
+            )
+        }
+
+        if let jsonOutput {
+            let payload = BenchmarkSuitePayload(
+                generatedAt: ISO8601DateFormatter().string(from: Date()),
+                warmup: warmup,
+                iterations: iterations,
+                cases: jsonCases
+            )
+            try BenchmarkRunner.writeJSON(payload, to: jsonOutput)
+            prompt.info("Saved JSON benchmark: \(prompt.path(jsonOutput))")
         }
     }
 }

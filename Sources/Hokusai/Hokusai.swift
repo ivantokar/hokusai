@@ -85,4 +85,11 @@ public struct Hokusai {
     public static var version: String {
         return "Hokusai (libvips \(vipsVersion))"
     }
+
+    /// PURPOSE: Get or set the libvips global thread concurrency.
+    /// Setting to 0 restores the libvips default (number of CPU cores).
+    public static var vipsConcurrency: Int {
+        get { VipsBackend.concurrency }
+        set { VipsBackend.concurrency = newValue }
+    }
 }

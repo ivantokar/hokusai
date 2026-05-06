@@ -128,7 +128,7 @@ final class VipsBackend: ImageBackend {
         case "png":
             result = swift_vips_pngsave_buffer(pointer, &buffer, &length, Int32(quality ?? 6))
         case "webp":
-            result = swift_vips_webpsave_buffer(pointer, &buffer, &length, Int32(quality ?? 80), 0)
+            result = swift_vips_webpsave_buffer(pointer, &buffer, &length, Int32(quality ?? 80), 0, 4)
         case "avif", "heif", "heic":
             result = swift_vips_heifsave_buffer(pointer, &buffer, &length, Int32(quality ?? 80))
         case "tiff", "tif":
@@ -240,5 +240,10 @@ final class VipsBackend: ImageBackend {
             return "unknown"
         }
         return String(cString: versionStr)
+    }
+
+    static var concurrency: Int {
+        get { Int(swift_vips_concurrency_get()) }
+        set { swift_vips_concurrency_set(Int32(newValue)) }
     }
 }

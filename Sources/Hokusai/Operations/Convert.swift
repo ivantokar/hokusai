@@ -125,12 +125,14 @@ extension HokusaiImage {
         case .webp:
             let quality = Int32(options.quality ?? 80)
             let lossless = options.lossless ? 1 : 0
+            let effort = Int32(options.effort ?? 4)
             result = swift_vips_webpsave_buffer(
                 pointer,
                 &buffer,
                 &bufferSize,
                 quality,
-                Int32(lossless)
+                Int32(lossless),
+                effort
             )
 
         case .tiff:

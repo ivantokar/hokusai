@@ -320,8 +320,16 @@ static inline int swift_vips_pngsave_buffer(VipsImage *in, void **buf, size_t *l
     return vips_pngsave_buffer(in, buf, len, "compression", compression, NULL);
 }
 
-static inline int swift_vips_webpsave_buffer(VipsImage *in, void **buf, size_t *len, int quality, int lossless) {
-    return vips_webpsave_buffer(in, buf, len, "Q", quality, "lossless", lossless, NULL);
+static inline int swift_vips_webpsave_buffer(VipsImage *in, void **buf, size_t *len, int quality, int lossless, int effort) {
+    return vips_webpsave_buffer(in, buf, len, "Q", quality, "lossless", lossless, "effort", effort, NULL);
+}
+
+static inline int swift_vips_concurrency_get(void) {
+    return vips_concurrency_get();
+}
+
+static inline void swift_vips_concurrency_set(int concurrency) {
+    vips_concurrency_set(concurrency);
 }
 
 static inline int swift_vips_tiffsave_buffer(VipsImage *in, void **buf, size_t *len) {
