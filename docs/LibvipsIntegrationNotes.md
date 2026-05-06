@@ -2,14 +2,14 @@
 
 ## Background
 
-Reddit feedback on Hokusai raised several questions about the libvips integration:
+This document records an investigation into several open questions about the libvips integration:
 
 - Is the current binding approach appropriate for a Swift library?
 - Should Hokusai expose the `access="sequential"` load mode?
 - Should Hokusai expose a dedicated thumbnail API?
 - Are there shrink-on-load optimisations that the current resize path misses?
 
-This document records what was inspected, what changed, what the benchmarks showed, and what did not improve.
+It records what was inspected, what changed, what the benchmarks showed, and what did not improve.
 
 ## Links Checked
 
