@@ -27,45 +27,90 @@ public struct Hokusai {
 
     // MARK: - Image Loading
 
-    /// PURPOSE: Asynchronously load an image from a filesystem path.
-    /// INPUT: `path` must reference a readable image file.
-    /// OUTPUT: `HokusaiImage` backed by libvips.
+    /// Asynchronously load an image from a filesystem path.
     ///
-    /// Example:
-    /// ```swift
-    /// let image = try await Hokusai.image(from: "/path/to/photo.jpg")
-    /// ```
-    public static func image(from path: String) async throws -> HokusaiImage {
-        return try loadFromFile(path)
+    /// - Parameters:
+    ///   - path: Path to a readable image file.
+    ///   - options: Load options, including the libvips access mode.
+    ///     Defaults to random (full decode). Pass ``LoadOptions/sequential``
+    ///     for lower peak memory on large single-pass pipelines.
+    public static func image(from path: String, options: LoadOptions = LoadOptions()) async throws -> HokusaiImage {
+        return try loadFromFile(path, options: options)
     }
 
-    /// PURPOSE: Asynchronously load an image from in-memory bytes.
-    /// INPUT: `data` must contain a valid encoded image payload.
-    /// OUTPUT: `HokusaiImage` backed by libvips.
+    /// Asynchronously load an image from in-memory bytes.
     ///
-    /// Example:
-    /// ```swift
-    /// let imageData = try Data(contentsOf: url)
-    /// let image = try await Hokusai.image(from: imageData)
-    /// ```
-    public static func image(from data: Data) async throws -> HokusaiImage {
-        return try loadFromBuffer(data)
+    /// - Parameters:
+    ///   - data: Encoded image bytes (JPEG, PNG, WebP, etc.).
+    ///   - options: Load options, including the libvips access mode.
+    public static func image(from data: Data, options: LoadOptions = LoadOptions()) async throws -> HokusaiImage {
+        return try loadFromBuffer(data, options: options)
     }
 
-    /// PURPOSE: Synchronous load from file for non-async call sites.
-    /// CONSTRAINTS: Uses libvips-only backend.
-    public static func loadFromFile(_ path: String) throws -> HokusaiImage {
-        // PURPOSE: Load using VipsBackend (efficient for most operations)
-        let vipsBackend = try VipsBackend.loadFromFile(path)
+    /// Synchronous load from file for non-async call sites.
+    ///
+    /// - Parameters:
+    ///   - path: Path to a readable image file.
+    ///   - options: Load options. Defaults to random access.
+    public static func loadFromFile(_ path: String, options: LoadOptions = LoadOptions()) throws -> HokusaiImage {
+        let vipsBackend = try VipsBackend.loadFromFile(path, options: options)
         return HokusaiImage(backend: .vips(vipsBackend))
     }
 
-    /// PURPOSE: Synchronous load from encoded bytes for non-async call sites.
-    /// CONSTRAINTS: Uses libvips-only backend.
-    public static func loadFromBuffer(_ data: Data) throws -> HokusaiImage {
-        // PURPOSE: Load using VipsBackend (efficient for most operations)
-        let vipsBackend = try VipsBackend.loadFromBuffer(data)
+    /// Synchronous load from encoded bytes for non-async call sites.
+    ///
+    /// - Parameters:
+    ///   - data: Encoded image bytes.
+    ///   - options: Load options. Defaults to random access.
+    public static func loadFromBuffer(_ data: Data, options: LoadOptions = LoadOptions()) throws -> HokusaiImage {
+        let vipsBackend = try VipsBackend.loadFromBuffer(data, options: options)
         return HokusaiImage(backend: .vips(vipsBackend))
+    }
+
+    // MARK: - Thumbnail
+
+    /// Load and resize a file in a single optimised libvips pass.
+    ///
+    /// Calls `vips_thumbnail()` internally, which reads only enough of the
+    /// source file to produce the output size. For JPEG sources libvips shrinks
+    /// inside the JPEG decoder (by 2×, 4×, or 8×), so the convolution kernel
+    /// operates on a much smaller intermediate image. For TIFF and HEIF there
+    /// are similar optimisations. For PNG and most WebP there is no
+    /// shrink-on-load and performance is similar to ``loadFromFile(_:options:)``
+    /// followed by ``HokusaiImage/resize(width:height:options:)``.
+    ///
+    /// EXIF auto-rotation is applied by default. Pass
+    /// `options.noRotate = true` to disable it.
+    ///
+    /// Prefer ``HokusaiImage/resize(width:height:options:)`` when you need an
+    /// explicit interpolation kernel or fit modes like ``ResizeFit/contain``.
+    ///
+    /// - Parameters:
+    ///   - path: Path to a readable image file.
+    ///   - width: Target width. Output height is determined by the source
+    ///     aspect ratio unless `options.height` is also set.
+    ///   - options: Thumbnail options (height constraint, crop strategy,
+    ///     rotation behaviour).
+    /// - Returns: A new ``HokusaiImage`` at the requested dimensions.
+    public static func thumbnail(from path: String, width: Int, options: ThumbnailOptions = ThumbnailOptions()) throws -> HokusaiImage {
+        let backend = try VipsBackend.thumbnailFromFile(path, width: width, options: options)
+        return HokusaiImage(backend: .vips(backend))
+    }
+
+    /// Load and resize an in-memory buffer in a single optimised libvips pass.
+    ///
+    /// Calls `vips_thumbnail_buffer()` internally. Behaviour and trade-offs
+    /// are the same as ``thumbnail(from:width:options:)``; shrink-on-load
+    /// applies for formats that support it in buffer form.
+    ///
+    /// - Parameters:
+    ///   - data: Encoded image bytes.
+    ///   - width: Target width.
+    ///   - options: Thumbnail options.
+    /// - Returns: A new ``HokusaiImage`` at the requested dimensions.
+    public static func thumbnail(from data: Data, width: Int, options: ThumbnailOptions = ThumbnailOptions()) throws -> HokusaiImage {
+        let backend = try VipsBackend.thumbnailFromBuffer(data, width: width, options: options)
+        return HokusaiImage(backend: .vips(backend))
     }
 
     // MARK: - Version Information

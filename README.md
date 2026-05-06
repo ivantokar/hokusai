@@ -87,6 +87,15 @@ swift run hokusai --help
 swift run hokusai info
 swift run hokusai inspect --input ./input.jpg
 swift run hokusai resize --input ./input.jpg --output ./out.jpg --width 1200 --height 800 --fit cover
+
+# Thumbnail — optimised load+resize with EXIF auto-rotation
+swift run hokusai thumbnail --input ./photo.jpg --output ./thumb.jpg --width 400
+swift run hokusai thumbnail --input ./photo.jpg --output ./thumb.jpg --width 400 --height 300 --crop attention
+
+# Benchmarks
+swift run hokusai benchmark suite --input ./photo.jpg                      # full suite
+swift run hokusai benchmark thumbnail --input ./photo.jpg --width 400 --height 300  # resize vs thumbnail comparison
+swift run hokusai benchmark webp --input ./photo.jpg --concurrency-sweep   # WebP effort/concurrency sweep
 ```
 
 ### Install via Homebrew (recommended for users)
@@ -158,6 +167,10 @@ let image = try await Hokusai.image(from: "/path/to/image.jpg")
 // From Data buffer
 let data = try Data(contentsOf: url)
 let image = try await Hokusai.image(from: data)
+
+// Sequential access — lower peak memory for large single-pass pipelines
+// Not recommended for JPEG downscaling (disables shrink-on-load)
+let image = try await Hokusai.image(from: "/path/to/image.jpg", options: .sequential)
 ```
 
 ### Text Rendering
@@ -178,6 +191,34 @@ let withText = try image.drawText(
     y: 150,
     options: textOptions
 )
+```
+
+### Thumbnail
+
+`Hokusai.thumbnail(from:width:options:)` calls `vips_thumbnail()` internally. It applies EXIF auto-rotation by default and integrates smart cropping in a single pass. For cold-file-cache scenarios it reads less data from disk for JPEG, TIFF, and HEIF sources.
+
+Use `resize` when you need explicit kernel control or fit modes like `contain`. Use `thumbnail` when you want auto-rotation and optional smart crop out of the box.
+
+```swift
+// Thumbnail from file — EXIF auto-rotation applied automatically
+let thumb = try Hokusai.thumbnail(from: "photo.jpg", width: 400)
+
+// With height constraint (fit inside 400×300, aspect ratio preserved)
+let opts = ThumbnailOptions(height: 300)
+let thumb = try Hokusai.thumbnail(from: "photo.jpg", width: 400, options: opts)
+
+// Smart crop to exact dimensions
+let cropped = try Hokusai.thumbnail(
+    from: "photo.jpg",
+    width: 400,
+    options: ThumbnailOptions(height: 300, crop: .attention)
+)
+
+// From buffer
+let thumb = try Hokusai.thumbnail(from: imageData, width: 400)
+
+// On an already-loaded image (no shrink-on-load benefit, but same API)
+let thumb = try image.thumbnail(width: 400)
 ```
 
 ### Resize Operations
@@ -332,34 +373,39 @@ await withTaskGroup(of: Void.self) { group in
 
 ## Performance
 
-### Benchmarks (measured with `hokusai` CLI)
+### Benchmarks (measured with `hokusai benchmark suite`)
 
-Environment:
-- Apple M4 Pro
-- macOS 26.5 (build 25F5053d)
-- release binary build
+Environment: Apple M4 Pro · macOS · libvips 8.18.2 · 12 cores · release binary · 3 warmup + 25 measured iterations
 
-Method:
-- warmup: 5 runs
-- measured iterations: 20 runs
+**Small source (1000×800 JPEG, warm file cache)**
 
-Input: `certificate.png` (3206x2266, RGBA)
+| Case | Mean | Median | P95 | Min | Max | Ops/s |
+|------|-----:|-------:|----:|----:|----:|------:|
+| resize:default:1200x800 | 3.84 ms | 3.80 ms | 4.28 ms | 3.38 ms | 4.29 ms | 260 |
+| thumbnail:file:1200x800 | 4.26 ms | 4.28 ms | 4.47 ms | 3.84 ms | 4.51 ms | 235 |
+| thumbnail:file:1200 | 5.12 ms | 4.99 ms | 5.85 ms | 4.65 ms | 6.14 ms | 195 |
+| resize:sequential:1200x800 | 4.50 ms | 4.49 ms | 4.85 ms | 4.15 ms | 5.06 ms | 222 |
+| convert:webp:q80 | 37.65 ms | 37.67 ms | 38.18 ms | 36.84 ms | 38.34 ms | 27 |
+| rotate:33 | 3.14 ms | 3.16 ms | 3.34 ms | 2.93 ms | 3.47 ms | 319 |
+| text:stroke-shadow | 57.52 ms | 57.51 ms | 59.42 ms | 55.43 ms | 59.56 ms | 17 |
 
-| Case | Mean | P95 | Ops/s |
-| --- | ---: | ---: | ---: |
-| resize:1200x800 | 4.79 ms | 5.99 ms | 208.94 |
-| convert:webp:q80 | 203.20 ms | 208.16 ms | 4.92 |
-| rotate:33 | 35.56 ms | 38.90 ms | 28.12 |
-| text:stroke-shadow | 105.26 ms | 107.66 ms | 9.50 |
+**Large source (4000×3200 JPEG, warm file cache, 3 warmup + 20 iterations)**
 
-Text-only benchmark on the same input:
-- mean: 99.66 ms
-- median: 98.05 ms
-- p95: 103.16 ms
-- ops/s: 10.03
+| Case | Op path | Access | Mean | Median | P95 | Ops/s |
+|------|---------|--------|-----:|-------:|----:|------:|
+| resize:default | vips_resize | random | 2.73 ms | 2.69 ms | 3.06 ms | 366 |
+| thumbnail:file | vips_thumbnail | n/a | 10.01 ms | 9.98 ms | 10.24 ms | 100 |
+| thumbnail:image | vips_thumbnail_image | random | 2.84 ms | 2.80 ms | 3.20 ms | 352 |
+| resize:sequential | vips_resize | sequential | 21.74 ms | 21.67 ms | 22.78 ms | 46 |
 
-Note: these are measured reference values on one machine, not universal performance guarantees.
-Use `hokusai benchmark suite` / `hokusai benchmark op` to reproduce on your hardware.
+**Key observations**
+
+- On warm-cache benchmarks, `resize:default` (random access + vips_resize) was fastest across all test cases. libvips's internal pipeline handles JPEG shrink-on-load automatically for random-access loads.
+- `vips_thumbnail` from a file path adds overhead (header inspection, second open) that hurts throughput on cached files. Its advantage appears in cold-cache or storage-bound scenarios.
+- Sequential access was 8× slower for JPEG downscaling. It disables the JPEG decoder's shrink-on-load optimisation. Do not use it for JPEG sources being heavily downscaled.
+- `thumbnail:image` (on an already-decoded image) is comparable to `resize:default` since file I/O is not in the picture.
+
+These results are machine-specific and cache-state dependent. Reproduce them on your hardware with `hokusai benchmark suite` and `hokusai benchmark thumbnail`.
 
 ### WebP encoding
 

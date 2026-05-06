@@ -21,6 +21,7 @@ typedef VipsAngle VipsAngle;
 typedef VipsArrayDouble VipsArrayDouble;
 typedef VipsInteresting VipsInteresting;
 typedef VipsDirection VipsDirection;
+typedef VipsAccess VipsAccess;
 
 // MARK: - Image Loading
 
@@ -29,9 +30,19 @@ static inline VipsImage *swift_vips_image_new_from_file(const char *path) {
     return vips_image_new_from_file(path, NULL);
 }
 
+/** @brief Load image from path with sequential (streaming) access. Lower memory for forward-only pipelines. */
+static inline VipsImage *swift_vips_image_new_from_file_sequential(const char *path) {
+    return vips_image_new_from_file(path, "access", VIPS_ACCESS_SEQUENTIAL, NULL);
+}
+
 /** @brief Load image from encoded bytes and return owned VipsImage pointer. */
 static inline VipsImage *swift_vips_image_new_from_buffer(const void *buf, size_t size) {
     return vips_image_new_from_buffer(buf, size, "", NULL);
+}
+
+/** @brief Load image from buffer with sequential (streaming) access. Lower memory for forward-only pipelines. */
+static inline VipsImage *swift_vips_image_new_from_buffer_sequential(const void *buf, size_t size) {
+    return vips_image_new_from_buffer(buf, size, "", "access", VIPS_ACCESS_SEQUENTIAL, NULL);
 }
 
 static inline int swift_vips_copy(VipsImage *in, VipsImage **out) {
@@ -393,6 +404,86 @@ static inline int swift_vips_smartcrop(
     VipsInteresting interesting
 ) {
     return vips_smartcrop(in, out, width, height, "interesting", interesting, NULL);
+}
+
+// MARK: - Thumbnail Operations
+// PURPOSE: Expose vips_thumbnail family for shrink-on-load workflows.
+// CONSTRAINTS:
+//   - height <= 0 means no height bound (width-only constraint).
+//   - crop == VIPS_INTERESTING_NONE means fit-inside (no crop).
+//   - no_rotate non-zero disables EXIF auto-rotation.
+
+/** @brief Thumbnail from file path. Enables shrink-on-load for JPEG/TIFF/HEIF. */
+static inline int swift_vips_thumbnail(
+    const char *filename,
+    VipsImage **out,
+    int width,
+    int height,
+    VipsInteresting crop,
+    int no_rotate
+) {
+    if (height > 0 && crop != VIPS_INTERESTING_NONE) {
+        return vips_thumbnail(filename, out, width,
+            "height", height, "crop", crop, "no-rotate", no_rotate, NULL);
+    } else if (height > 0) {
+        return vips_thumbnail(filename, out, width,
+            "height", height, "no-rotate", no_rotate, NULL);
+    } else if (crop != VIPS_INTERESTING_NONE) {
+        return vips_thumbnail(filename, out, width,
+            "crop", crop, "no-rotate", no_rotate, NULL);
+    } else {
+        return vips_thumbnail(filename, out, width,
+            "no-rotate", no_rotate, NULL);
+    }
+}
+
+/** @brief Thumbnail from in-memory buffer. Enables shrink-on-load for formats that support it in buffer form. */
+static inline int swift_vips_thumbnail_buffer(
+    const void *buf,
+    size_t len,
+    VipsImage **out,
+    int width,
+    int height,
+    VipsInteresting crop,
+    int no_rotate
+) {
+    if (height > 0 && crop != VIPS_INTERESTING_NONE) {
+        return vips_thumbnail_buffer((void *)buf, len, out, width,
+            "height", height, "crop", crop, "no-rotate", no_rotate, NULL);
+    } else if (height > 0) {
+        return vips_thumbnail_buffer((void *)buf, len, out, width,
+            "height", height, "no-rotate", no_rotate, NULL);
+    } else if (crop != VIPS_INTERESTING_NONE) {
+        return vips_thumbnail_buffer((void *)buf, len, out, width,
+            "crop", crop, "no-rotate", no_rotate, NULL);
+    } else {
+        return vips_thumbnail_buffer((void *)buf, len, out, width,
+            "no-rotate", no_rotate, NULL);
+    }
+}
+
+/** @brief Thumbnail from an already-loaded VipsImage. No shrink-on-load benefit; use for images already in memory. */
+static inline int swift_vips_thumbnail_image(
+    VipsImage *in,
+    VipsImage **out,
+    int width,
+    int height,
+    VipsInteresting crop,
+    int no_rotate
+) {
+    if (height > 0 && crop != VIPS_INTERESTING_NONE) {
+        return vips_thumbnail_image(in, out, width,
+            "height", height, "crop", crop, "no-rotate", no_rotate, NULL);
+    } else if (height > 0) {
+        return vips_thumbnail_image(in, out, width,
+            "height", height, "no-rotate", no_rotate, NULL);
+    } else if (crop != VIPS_INTERESTING_NONE) {
+        return vips_thumbnail_image(in, out, width,
+            "crop", crop, "no-rotate", no_rotate, NULL);
+    } else {
+        return vips_thumbnail_image(in, out, width,
+            "no-rotate", no_rotate, NULL);
+    }
 }
 
 #endif /* CVIPS_SHIM_H */

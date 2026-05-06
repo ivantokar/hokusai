@@ -18,6 +18,7 @@ struct HokusaiCLI: AsyncParsableCommand {
             InfoCommand.self,
             InspectCommand.self,
             ResizeCommand.self,
+            ThumbnailCommand.self,
             ConvertCommand.self,
             RotateCommand.self,
             CropCommand.self,
@@ -129,6 +130,53 @@ struct ResizeCommand: AsyncParsableCommand {
             ("Input", prompt.path(input)),
             ("Output", prompt.path(output)),
             ("Size", "\(try resized.width)x\(try resized.height)"),
+        ])
+    }
+}
+
+struct ThumbnailCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "thumbnail",
+        abstract: "Create a thumbnail using the libvips optimised load+resize path."
+    )
+
+    @Option(name: .shortAndLong, help: "Input image path.")
+    var input: String
+
+    @Option(name: .shortAndLong, help: "Output image path.")
+    var output: String
+
+    @Option(help: "Target width (required).")
+    var width: Int
+
+    @Option(help: "Target height. Omit to preserve aspect ratio.")
+    var height: Int?
+
+    @Option(help: "Crop strategy: none|centre|attention|entropy")
+    var crop: String = "none"
+
+    @Flag(help: "Disable EXIF auto-rotation.")
+    var noRotate: Bool = false
+
+    mutating func run() async throws {
+        let prompt = PromptService()
+        try Hokusai.initialize()
+        defer { Hokusai.shutdown() }
+
+        var options = ThumbnailOptions()
+        options.height = height
+        options.crop = CLIParser.parseThumbnailCrop(crop)
+        options.noRotate = noRotate
+
+        let image = try Hokusai.thumbnail(from: input, width: width, options: options)
+        try image.toFile(output)
+
+        prompt.success("Saved thumbnail")
+        prompt.panel("Result", items: [
+            ("Input", prompt.path(input)),
+            ("Output", prompt.path(output)),
+            ("Size", "\(try image.width)x\(try image.height)"),
+            ("Crop", crop),
         ])
     }
 }
@@ -377,7 +425,7 @@ struct BenchmarkCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "benchmark",
         abstract: "Measure operation performance.",
-        subcommands: [BenchmarkOperationCommand.self, BenchmarkSuiteCommand.self, BenchmarkWebPCommand.self]
+        subcommands: [BenchmarkOperationCommand.self, BenchmarkSuiteCommand.self, BenchmarkWebPCommand.self, BenchmarkThumbnailCommand.self]
     )
 }
 
@@ -523,34 +571,52 @@ struct BenchmarkSuiteCommand: AsyncParsableCommand {
             ("Concurrency", "\(concurrency)"),
             ("CPU cores", "\(cpuCount)"),
             ("Input", inputDesc),
+            ("Bands", "\(meta.channels)"),
+            ("Alpha", meta.hasAlpha ? "yes" : "no"),
         ])
 
         let inputPath = input
 
         let suiteCases: [(String, () throws -> Void)] = [
-            ("resize:1200x800", {
-                let image = try Hokusai.loadFromFile(inputPath)
-                _ = try image.resize(width: 1200, height: 800).toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
+            // Original cases (unchanged)
+            ("resize:default:1200x800", {
+                let img = try Hokusai.loadFromFile(inputPath)
+                _ = try img.resize(width: 1200, height: 800).toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
             }),
             ("convert:webp:q80", {
-                let image = try Hokusai.loadFromFile(inputPath)
-                _ = try image.toBuffer(options: SaveOptions(format: .webp, quality: 80))
+                let img = try Hokusai.loadFromFile(inputPath)
+                _ = try img.toBuffer(options: SaveOptions(format: .webp, quality: 80))
             }),
             ("rotate:33", {
-                let image = try Hokusai.loadFromFile(inputPath)
-                _ = try image.rotate(angle: .custom(33)).toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
+                let img = try Hokusai.loadFromFile(inputPath)
+                _ = try img.rotate(angle: .custom(33)).toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
             }),
             ("text:stroke-shadow", {
-                let image = try Hokusai.loadFromFile(inputPath)
-                var options = TextOptions()
-                options.fontSize = 64
-                options.color = [255, 255, 255, 255]
-                options.strokeColor = [0, 0, 0, 255]
-                options.strokeWidth = 3.0
-                options.shadowOffset = (x: 4, y: 4)
-                options.shadowColor = [0, 0, 0, 180]
-                let rendered = try image.drawText("Hokusai", x: 80, y: 180, options: options)
+                let img = try Hokusai.loadFromFile(inputPath)
+                var textOpts = TextOptions()
+                textOpts.fontSize = 64
+                textOpts.color = [255, 255, 255, 255]
+                textOpts.strokeColor = [0, 0, 0, 255]
+                textOpts.strokeWidth = 3.0
+                textOpts.shadowOffset = (x: 4, y: 4)
+                textOpts.shadowColor = [0, 0, 0, 180]
+                let rendered = try img.drawText("Hokusai", x: 80, y: 180, options: textOpts)
                 _ = try rendered.toBuffer(options: SaveOptions(format: .png, compression: 6))
+            }),
+            // New: thumbnail path (vips_thumbnail, shrink-on-load for JPEG/TIFF/HEIF)
+            ("thumbnail:file:1200", {
+                _ = try Hokusai.thumbnail(from: inputPath, width: 1200)
+                    .toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
+            }),
+            ("thumbnail:file:1200x800", {
+                _ = try Hokusai.thumbnail(from: inputPath, width: 1200,
+                                           options: ThumbnailOptions(height: 800))
+                    .toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
+            }),
+            // New: sequential access + resize (lower memory peak, similar throughput)
+            ("resize:sequential:1200x800", {
+                let img = try Hokusai.loadFromFile(inputPath, options: .sequential)
+                _ = try img.resize(width: 1200, height: 800).toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
             }),
         ]
 
@@ -571,7 +637,10 @@ struct BenchmarkSuiteCommand: AsyncParsableCommand {
             suiteRows.append([
                 name,
                 BenchmarkRunner.formatMs(stats.meanMs),
+                BenchmarkRunner.formatMs(stats.medianMs),
                 BenchmarkRunner.formatMs(stats.p95Ms),
+                BenchmarkRunner.formatMs(stats.minMs),
+                BenchmarkRunner.formatMs(stats.maxMs),
                 String(format: "%.2f", stats.opsPerSecond),
             ])
 
@@ -580,7 +649,7 @@ struct BenchmarkSuiteCommand: AsyncParsableCommand {
 
         prompt.header("Benchmark Suite")
         prompt.table(
-            headers: ["Case", "Mean", "P95", "Ops/s"],
+            headers: ["Case", "Mean", "Median", "P95", "Min", "Max", "Ops/s"],
             rows: suiteRows,
             style: .rounded
         )
@@ -760,6 +829,133 @@ struct BenchmarkWebPCommand: AsyncParsableCommand {
                 style: .rounded
             )
         }
+
+        if let jsonOutput {
+            let payload = BenchmarkSuitePayload(
+                generatedAt: ISO8601DateFormatter().string(from: Date()),
+                warmup: warmup,
+                iterations: iterations,
+                cases: jsonCases
+            )
+            try BenchmarkRunner.writeJSON(payload, to: jsonOutput)
+            prompt.info("Saved JSON benchmark: \(prompt.path(jsonOutput))")
+        }
+    }
+}
+
+struct BenchmarkThumbnailCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "thumbnail",
+        abstract: "Compare resize vs thumbnail paths and access modes."
+    )
+
+    @Option(name: .shortAndLong, help: "Input image path.")
+    var input: String
+
+    @Option(help: "Warmup runs per case.")
+    var warmup: Int = 3
+
+    @Option(help: "Measured iterations per case.")
+    var iterations: Int = 20
+
+    @Option(help: "Target width.")
+    var width: Int = 1200
+
+    @Option(help: "Target height.")
+    var height: Int = 800
+
+    @Option(help: "Output JSON file path.")
+    var jsonOutput: String?
+
+    mutating func run() async throws {
+        let prompt = PromptService()
+        try Hokusai.initialize()
+        defer { Hokusai.shutdown() }
+
+        let cpuCount = ProcessInfo.processInfo.processorCount
+        let concurrency = Hokusai.vipsConcurrency
+        let image = try Hokusai.loadFromFile(input)
+        let meta = try image.metadata()
+        let inputDesc = "\(meta.width)x\(meta.height) \(meta.hasAlpha ? "RGBA" : "RGB") (\(meta.format?.rawValue ?? "unknown"))"
+
+        prompt.header("Thumbnail vs Resize Benchmark")
+        prompt.panel("Environment", items: [
+            ("libvips", Hokusai.vipsVersion),
+            ("Concurrency", "\(concurrency)"),
+            ("CPU cores", "\(cpuCount)"),
+            ("Input", inputDesc),
+            ("Bands", "\(meta.channels)"),
+            ("Alpha", meta.hasAlpha ? "yes" : "no"),
+            ("Target", "\(width)x\(height)"),
+        ])
+
+        let inputPath = input
+        let targetW = width
+        let targetH = height
+
+        let cases: [(String, String, String, () throws -> Void)] = [
+            ("resize:default", "vips_resize", "random", {
+                let img = try Hokusai.loadFromFile(inputPath)
+                _ = try img.resize(width: targetW, height: targetH)
+                    .toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
+            }),
+            ("resize:sequential", "vips_resize", "sequential", {
+                let img = try Hokusai.loadFromFile(inputPath, options: .sequential)
+                _ = try img.resize(width: targetW, height: targetH)
+                    .toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
+            }),
+            ("thumbnail:file", "vips_thumbnail", "n/a", {
+                _ = try Hokusai.thumbnail(from: inputPath, width: targetW,
+                                           options: ThumbnailOptions(height: targetH))
+                    .toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
+            }),
+            ("thumbnail:file:crop-centre", "vips_thumbnail", "n/a", {
+                _ = try Hokusai.thumbnail(from: inputPath, width: targetW,
+                                           options: ThumbnailOptions(height: targetH, crop: .centre))
+                    .toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
+            }),
+            ("thumbnail:image", "vips_thumbnail_image", "random", {
+                let img = try Hokusai.loadFromFile(inputPath)
+                _ = try img.thumbnail(width: targetW, options: ThumbnailOptions(height: targetH))
+                    .toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
+            }),
+        ]
+
+        var rows: [[String]] = []
+        var jsonCases: [BenchmarkSuiteCaseResult] = []
+
+        for (name, opPath, accessMode, operation) in cases {
+            let (stats, samples) = try BenchmarkRunner.run(
+                prompt: prompt,
+                name: name,
+                warmup: warmup,
+                iterations: iterations,
+                showHeader: false
+            ) {
+                try operation()
+            }
+
+            rows.append([
+                name,
+                opPath,
+                accessMode,
+                BenchmarkRunner.formatMs(stats.meanMs),
+                BenchmarkRunner.formatMs(stats.medianMs),
+                BenchmarkRunner.formatMs(stats.p95Ms),
+                BenchmarkRunner.formatMs(stats.minMs),
+                BenchmarkRunner.formatMs(stats.maxMs),
+                String(format: "%.2f", stats.opsPerSecond),
+            ])
+
+            jsonCases.append(BenchmarkSuiteCaseResult(name: name, stats: stats, samplesMs: samples))
+        }
+
+        prompt.header("Results")
+        prompt.table(
+            headers: ["Case", "Op path", "Access", "Mean", "Median", "P95", "Min", "Max", "Ops/s"],
+            rows: rows,
+            style: .rounded
+        )
 
         if let jsonOutput {
             let payload = BenchmarkSuitePayload(
@@ -963,6 +1159,15 @@ enum CLIParser {
         if normalized == "tif" { return .tiff }
         if normalized == "heic" { return .heif }
         return ImageFormat(rawValue: normalized)
+    }
+
+    static func parseThumbnailCrop(_ value: String) -> ThumbnailCrop {
+        switch value.lowercased() {
+        case "centre", "center": return .centre
+        case "attention": return .attention
+        case "entropy": return .entropy
+        default: return .none
+        }
     }
 
     static func parseRGBA(_ value: String) throws -> [Double] {

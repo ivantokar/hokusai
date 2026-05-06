@@ -58,12 +58,19 @@ final class VipsBackend: ImageBackend {
 
     // MARK: - ImageBackend Protocol Implementation
 
-    static func loadFromFile(_ path: String) throws -> VipsBackend {
+    static func loadFromFile(_ path: String, options: LoadOptions = LoadOptions()) throws -> VipsBackend {
         guard FileManager.default.fileExists(atPath: path) else {
             throw HokusaiError.fileNotFound(path)
         }
 
-        let output = swift_vips_image_new_from_file(path)
+        let output: UnsafeMutablePointer<CVips.VipsImage>?
+        switch options.access {
+        case .sequential:
+            output = swift_vips_image_new_from_file_sequential(path)
+        case .random:
+            output = swift_vips_image_new_from_file(path)
+        }
+
         guard let img = output else {
             throw HokusaiError.loadFailed(getLastError())
         }
@@ -71,13 +78,18 @@ final class VipsBackend: ImageBackend {
         return VipsBackend(takingOwnership: img)
     }
 
-    static func loadFromBuffer(_ data: Data) throws -> VipsBackend {
+    static func loadFromBuffer(_ data: Data, options: LoadOptions = LoadOptions()) throws -> VipsBackend {
         guard !data.isEmpty else {
             throw HokusaiError.invalidImageData
         }
 
-        let output = data.withUnsafeBytes { bytes in
-            swift_vips_image_new_from_buffer(bytes.baseAddress, data.count)
+        let output: UnsafeMutablePointer<CVips.VipsImage>? = data.withUnsafeBytes { bytes in
+            switch options.access {
+            case .sequential:
+                return swift_vips_image_new_from_buffer_sequential(bytes.baseAddress, data.count)
+            case .random:
+                return swift_vips_image_new_from_buffer(bytes.baseAddress, data.count)
+            }
         }
 
         guard let img = output else {
@@ -85,6 +97,55 @@ final class VipsBackend: ImageBackend {
         }
 
         return VipsBackend(takingOwnership: img)
+    }
+
+    static func thumbnailFromFile(_ path: String, width: Int, options: ThumbnailOptions) throws -> VipsBackend {
+        guard FileManager.default.fileExists(atPath: path) else {
+            throw HokusaiError.fileNotFound(path)
+        }
+
+        let height = Int32(options.height ?? 0)
+        let crop = mapThumbnailCrop(options.crop)
+        let noRotate = Int32(options.noRotate ? 1 : 0)
+
+        var output: UnsafeMutablePointer<CVips.VipsImage>?
+        let result = swift_vips_thumbnail(path, &output, Int32(width), height, crop, noRotate)
+
+        guard result == 0, let img = output else {
+            throw HokusaiError.loadFailed(getLastError())
+        }
+
+        return VipsBackend(takingOwnership: img)
+    }
+
+    static func thumbnailFromBuffer(_ data: Data, width: Int, options: ThumbnailOptions) throws -> VipsBackend {
+        guard !data.isEmpty else {
+            throw HokusaiError.invalidImageData
+        }
+
+        let height = Int32(options.height ?? 0)
+        let crop = mapThumbnailCrop(options.crop)
+        let noRotate = Int32(options.noRotate ? 1 : 0)
+
+        var output: UnsafeMutablePointer<CVips.VipsImage>?
+        let result = data.withUnsafeBytes { bytes -> Int32 in
+            swift_vips_thumbnail_buffer(bytes.baseAddress, data.count, &output, Int32(width), height, crop, noRotate)
+        }
+
+        guard result == 0, let img = output else {
+            throw HokusaiError.loadFailed(getLastError())
+        }
+
+        return VipsBackend(takingOwnership: img)
+    }
+
+    private static func mapThumbnailCrop(_ crop: ThumbnailCrop) -> VipsInteresting {
+        switch crop {
+        case .none:      return VIPS_INTERESTING_NONE
+        case .centre:    return VIPS_INTERESTING_CENTRE
+        case .attention: return VIPS_INTERESTING_ATTENTION
+        case .entropy:   return VIPS_INTERESTING_ENTROPY
+        }
     }
 
     func saveToFile(_ path: String, format: String?, quality: Int?) throws {
