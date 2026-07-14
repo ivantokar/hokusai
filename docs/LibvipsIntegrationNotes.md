@@ -111,21 +111,26 @@ Sequential access was 8× slower than random access for this case.
 
 **Why sequential is slower for JPEG downscaling**
 
-libvips's JPEG loader (`vips_jpegload`) has a shrink-on-load capability: when random access is requested and the pipeline eventually scales down by 2×, 4×, or 8×, the JPEG decoder itself produces a smaller image (fewer rows decoded). This is automatic and transparent.
-
-Sequential access disables this optimisation. The JPEG decoder must produce every row in order, so the full 4000×3200 grid is decoded even though only 400×320 pixels are needed.
+Neither access mode changes *what* is decoded — `vips_resize` after a plain
+load always decodes the full pixel grid. (Shrink-on-load only happens when the
+loader is given a shrink/scale argument, which only the `vips_thumbnail`
+family does; see Task 4.) The difference is in how the decode is buffered and
+parallelised: with random access the full decode result (memory buffer or disk
+temp file, per `vips-disc-threshold`) is available to all worker threads;
+sequential access forces the pipeline through an ordered, single-window
+streaming read, which serialises work the random-access path can parallelise.
+The 8× figure is a measurement on this machine, not a universal constant.
 
 ### When sequential access may help
 
-- Large PNG or TIFF sources where there is no shrink-on-load (PNG has none; TIFF has limited support).
 - Very large source files where you want to reduce peak RSS under load.
 - Pipelines that genuinely read the image once, top-to-bottom (e.g. encode to buffer immediately after load).
 
 ### When sequential access does not help (and may hurt)
 
-- JPEG sources being downscaled — use random access to preserve shrink-on-load.
-- Operations that need random pixel access: rotation by non-90° multiples, compositing with an offset, some crop strategies. libvips will error or fall back silently.
-- Small images: the cursor-tracking overhead is not worth the memory saving.
+- Heavily downscaled JPEG pipelines (measured significantly slower here).
+- Operations that need out-of-order pixel access: rotation by non-90° multiples, flips, smart crop, compositing with an offset. Requests *ahead* of the read point are handled by decoding forward, but requests *behind* the small line window fail with a libvips error — there is no silent fallback to random access (verified against `libvips/conversion/sequential.c`).
+- Small images: the streaming bookkeeping is not worth the memory saving.
 
 **The recommendation:** keep the default (`random`) unless you have measured that peak RSS is a problem and your pipeline is genuinely sequential.
 
@@ -170,9 +175,14 @@ HokusaiImage.thumbnail(width: Int, options: ThumbnailOptions = .init()) throws -
 |-|--------------|-----------------|
 | Kernel control | Explicit (nearest/lanczos3/etc.) | Automatic (chosen by libvips) |
 | Fit modes | inside/outside/fill/cover/contain | Width-bound or width+height-bound |
-| Shrink-on-load | Automatic (via format loader) | Explicit (part of the operation) |
+| Shrink-on-load | None (loader decodes the full grid) | Yes: header read first, then the source re-opened with a computed shrink/scale factor |
 | EXIF auto-rotate | Requires explicit `autoRotate()` | Applied by default |
 | Crop | Via separate smartcrop | Integrated (`crop=attention/entropy`) |
+
+Shrink-on-load support by format (verified against `libvips/resample/thumbnail.c`):
+JPEG (decoder shrink 1/2/4/8), WebP (decode-time scale via libwebp), TIFF
+(pyramid/subifd levels), HEIF (embedded thumbnail), PDF/SVG (render scale),
+OpenSlide (pyramid level), JP2K (page pyramids). **PNG has no shrink-on-load.**
 
 `vips_thumbnail` is designed as a "do the right thing" operation for thumbnail generation. It handles EXIF rotation, selects an appropriate downscale kernel, and integrates shrink-on-load. `vips_resize` is appropriate when you need explicit kernel control or the fit modes (contain, cover) that `vips_thumbnail` does not provide.
 
@@ -202,9 +212,22 @@ On warm file-cache benchmarks on this machine (12-core macOS, libvips 8.18.2), `
 
 **Why this happened**
 
-The `vips_image_new_from_file(path, NULL)` random-access path creates a lazy libvips pipeline. When the downstream `vips_resize` eventually pulls pixels at a reduced scale, the JPEG loader activates its shrink-on-load path automatically — it reads less JPEG scan data than would be needed for a full decode. This happens transparently within the pipeline.
+Two effects dominate in a tight warm-cache loop:
 
-`vips_thumbnail` does this explicitly and adds extra overhead: it reads the image header, computes the optimal shrink factor, and then opens the file a second time with that factor set. On a warm OS page cache this extra header read and second open add latency without reducing the actual pixel decode work (since the OS cache serves both reads quickly).
+1. The libvips *operation cache* caches loader operations keyed on the
+   filename. A benchmark loop that loads the same file repeatedly mostly reuses
+   the cached decode, so the full-decode cost of the plain-load path is
+   amortised away. Production workloads with many unique files do not get this
+   effect.
+2. `vips_thumbnail` reads the image header, computes the optimal shrink factor,
+   and then opens the file a second time with that factor set (verified in
+   `libvips/resample/thumbnail.c`). On a warm OS page cache the extra header
+   read and second open add latency that shrink-on-load cannot repay, because
+   the competing plain load is served from caches anyway.
+
+In other words: these numbers say "warm-cache repeat loads of one file favour
+`vips_resize`", not "`vips_thumbnail` is slow". Cold-cache and storage-bound
+workloads shift the balance toward `vips_thumbnail`.
 
 **When `vips_thumbnail` would win**
 
@@ -239,7 +262,7 @@ New dedicated benchmark: `hokusai benchmark thumbnail` — head-to-head comparis
 
 ### Sequential access and JPEG
 
-Sequential access disables JPEG shrink-on-load. Using it for JPEG downscaling will significantly hurt performance (8× on the benchmarks above). This is documented in `LoadOptions.swift` and in this file.
+Sequential access made heavily downscaled JPEG pipelines ~8× slower on the benchmarks above (serialised streaming decode vs. parallel access to a full decode; shrink-on-load is not a factor in either resize path). This is documented in `LoadOptions.swift` and in this file.
 
 ### `vips_thumbnail` throughput
 
@@ -256,6 +279,72 @@ The benchmarks measure wall-clock time only. Peak RSS under load (the main benef
 ### C shim coverage
 
 The shim exposes the `height`, `crop`, and `no-rotate` options for `vips_thumbnail`. Other options (`size`, `linear`, `import-profile`, `export-profile`, `intent`, `fail-on`) are not exposed. Add them to the shim when needed.
+
+---
+
+## Hardening Pass (July 2026)
+
+A follow-up pass tightened correctness, lifecycle, and documentation before
+merge. Summary of the changes and their rationale:
+
+### Minimum libvips version: 8.9
+
+The shim now uses `vips_source_new_from_blob`, `vips_image_new_from_source`,
+`vips_thumbnail_source`, and `vips_error_buffer_copy`, all introduced in
+libvips 8.9 (January 2020). Ubuntu 20.04's `libvips-dev` (8.9) and anything
+newer qualifies.
+
+### Buffer ownership
+
+`vips_image_new_from_buffer()` does **not** copy the bytes it is given; the
+caller must keep them alive until the image and its whole pipeline close.
+The previous code passed a pointer that was only valid inside
+`Data.withUnsafeBytes`, which is a use-after-free once pixels are pulled
+lazily. All buffer loads (plain, sequential, and `thumbnail_buffer`) now copy
+the bytes into a `VipsBlob` (`vips_blob_copy`) and load through a
+`VipsSource`; libvips frees the copy when the last pipeline reference drops.
+Cost: one memcpy per buffer load. Public consequence: `Data` passed to
+Hokusai never needs to outlive the returned image, and this is covered by a
+regression test that clobbers the source `Data` before pulling pixels.
+
+### Error buffer
+
+`getLastError()` previously called `vips_error_clear()` *before* copying the
+message, losing the text and racing with other threads. It now uses
+`vips_error_buffer_copy()`, which copies and clears atomically.
+
+### Width-only thumbnails
+
+`vips_thumbnail` defaults an unset `height` to `width` (a square bound), so
+"width-only" thumbnails of portrait sources came out narrower than requested.
+The shim now passes `VIPS_MAX_COORD` as the height when no height is given,
+making width-only behave as documented: output width = requested width,
+height follows the aspect ratio.
+
+### Lifecycle
+
+`initialize()` is idempotent and thread-safe (lock-guarded state machine),
+and all load entry points call it automatically. `shutdown()` is documented
+as a final, advanced process-teardown operation: it cannot be undone,
+repeated calls are no-ops, and re-initialization afterwards throws.
+
+### Validation and error semantics
+
+All thumbnail entry points (file, buffer, existing image, CLI) validate
+dimensions centrally: width/height must be positive and fit `Int32`;
+crop strategies require an explicit height. Violations throw
+`HokusaiError.invalidDimensions`. Native failures preserve the libvips
+diagnostic text behind stable, categorised errors (`fileNotFound`,
+`invalidImageData`, `loadFailed` for decode/load, `vipsError` for
+transformations on already-loaded images).
+
+### Synchronous loading API
+
+`Hokusai.image(from:)` was declared `async` while performing synchronous
+libvips work on the caller's executor — a fake-async signature. It is now
+synchronous. The Sharp-inspired DX milestone will define the library's
+terminal execution and concurrency policy (e.g. where decode work is
+offloaded); until then callers own that decision.
 
 ---
 
