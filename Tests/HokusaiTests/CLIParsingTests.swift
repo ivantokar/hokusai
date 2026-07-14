@@ -1,5 +1,5 @@
 import Foundation
-import XCTest
+import Testing
 import ArgumentParser
 @testable import HokusaiCLI
 @testable import Hokusai
@@ -7,10 +7,10 @@ import ArgumentParser
 /// CLI argument parsing and validation, tested without process invocation.
 /// `ParsableCommand.parse` runs the same parsing + `validate()` path the real
 /// binary uses; thrown `ValidationError`s exit non-zero in a real process.
-final class CLIParsingTests: XCTestCase {
+@Suite struct CLIParsingTests {
     // MARK: - thumbnail command
 
-    func testThumbnailCommandParsesValidArguments() throws {
+    @Test func thumbnailCommandParsesValidArguments() throws {
         let command = try ThumbnailCommand.parse([
             "--input", "in.jpg",
             "--output", "out.jpg",
@@ -20,117 +20,129 @@ final class CLIParsingTests: XCTestCase {
             "--no-rotate",
         ])
 
-        XCTAssertEqual(command.input, "in.jpg")
-        XCTAssertEqual(command.output, "out.jpg")
-        XCTAssertEqual(command.width, 400)
-        XCTAssertEqual(command.height, 300)
-        XCTAssertEqual(command.crop, "attention")
-        XCTAssertTrue(command.noRotate)
+        #expect(command.input == "in.jpg")
+        #expect(command.output == "out.jpg")
+        #expect(command.width == 400)
+        #expect(command.height == 300)
+        #expect(command.crop == "attention")
+        #expect(command.noRotate)
     }
 
-    func testThumbnailCommandDefaults() throws {
+    @Test func thumbnailCommandDefaults() throws {
         let command = try ThumbnailCommand.parse([
             "--input", "in.jpg", "--output", "out.jpg", "--width", "400",
         ])
 
-        XCTAssertNil(command.height)
-        XCTAssertEqual(command.crop, "none")
-        XCTAssertFalse(command.noRotate)
+        #expect(command.height == nil)
+        #expect(command.crop == "none")
+        #expect(!command.noRotate)
     }
 
-    func testThumbnailCommandRequiresWidth() {
-        XCTAssertThrowsError(try ThumbnailCommand.parse([
-            "--input", "in.jpg", "--output", "out.jpg",
-        ]))
+    @Test func thumbnailCommandRequiresWidth() {
+        #expect(throws: (any Error).self) {
+            try ThumbnailCommand.parse(["--input", "in.jpg", "--output", "out.jpg"])
+        }
     }
 
-    func testThumbnailCommandRejectsZeroAndNegativeWidth() {
-        XCTAssertThrowsError(try ThumbnailCommand.parse([
-            "--input", "in.jpg", "--output", "out.jpg", "--width", "0",
-        ]))
-        XCTAssertThrowsError(try ThumbnailCommand.parse([
-            "--input", "in.jpg", "--output", "out.jpg", "--width", "-10",
-        ]))
+    @Test func thumbnailCommandRejectsZeroAndNegativeWidth() {
+        #expect(throws: (any Error).self) {
+            try ThumbnailCommand.parse(["--input", "in.jpg", "--output", "out.jpg", "--width", "0"])
+        }
+        #expect(throws: (any Error).self) {
+            try ThumbnailCommand.parse(["--input", "in.jpg", "--output", "out.jpg", "--width", "-10"])
+        }
     }
 
-    func testThumbnailCommandRejectsInvalidHeight() {
-        XCTAssertThrowsError(try ThumbnailCommand.parse([
-            "--input", "in.jpg", "--output", "out.jpg", "--width", "400", "--height", "0",
-        ]))
-        XCTAssertThrowsError(try ThumbnailCommand.parse([
-            "--input", "in.jpg", "--output", "out.jpg", "--width", "400", "--height", "-1",
-        ]))
+    @Test func thumbnailCommandRejectsInvalidHeight() {
+        #expect(throws: (any Error).self) {
+            try ThumbnailCommand.parse([
+                "--input", "in.jpg", "--output", "out.jpg", "--width", "400", "--height", "0",
+            ])
+        }
+        #expect(throws: (any Error).self) {
+            try ThumbnailCommand.parse([
+                "--input", "in.jpg", "--output", "out.jpg", "--width", "400", "--height", "-1",
+            ])
+        }
     }
 
-    func testThumbnailCommandRejectsWidthAboveInt32Max() {
-        XCTAssertThrowsError(try ThumbnailCommand.parse([
-            "--input", "in.jpg", "--output", "out.jpg", "--width", "\(Int(Int32.max) + 1)",
-        ]))
+    @Test func thumbnailCommandRejectsWidthAboveInt32Max() {
+        #expect(throws: (any Error).self) {
+            try ThumbnailCommand.parse([
+                "--input", "in.jpg", "--output", "out.jpg", "--width", "\(Int(Int32.max) + 1)",
+            ])
+        }
     }
 
-    func testThumbnailCommandRejectsInvalidCropStrategy() {
-        XCTAssertThrowsError(try ThumbnailCommand.parse([
-            "--input", "in.jpg", "--output", "out.jpg", "--width", "400",
-            "--height", "300", "--crop", "smart",
-        ]))
+    @Test func thumbnailCommandRejectsInvalidCropStrategy() {
+        #expect(throws: (any Error).self) {
+            try ThumbnailCommand.parse([
+                "--input", "in.jpg", "--output", "out.jpg", "--width", "400",
+                "--height", "300", "--crop", "smart",
+            ])
+        }
     }
 
-    func testThumbnailCommandRejectsCropWithoutHeight() {
-        XCTAssertThrowsError(try ThumbnailCommand.parse([
-            "--input", "in.jpg", "--output", "out.jpg", "--width", "400", "--crop", "attention",
-        ]))
+    @Test func thumbnailCommandRejectsCropWithoutHeight() {
+        #expect(throws: (any Error).self) {
+            try ThumbnailCommand.parse([
+                "--input", "in.jpg", "--output", "out.jpg", "--width", "400", "--crop", "attention",
+            ])
+        }
     }
 
     // MARK: - resize command validation
 
-    func testResizeCommandRejectsNonPositiveDimensions() {
-        XCTAssertThrowsError(try ResizeCommand.parse([
-            "--input", "in.jpg", "--output", "out.jpg", "--width", "0",
-        ]))
-        XCTAssertThrowsError(try ResizeCommand.parse([
-            "--input", "in.jpg", "--output", "out.jpg", "--height", "-5",
-        ]))
+    @Test func resizeCommandRejectsNonPositiveDimensions() {
+        #expect(throws: (any Error).self) {
+            try ResizeCommand.parse(["--input", "in.jpg", "--output", "out.jpg", "--width", "0"])
+        }
+        #expect(throws: (any Error).self) {
+            try ResizeCommand.parse(["--input", "in.jpg", "--output", "out.jpg", "--height", "-5"])
+        }
     }
 
     // MARK: - benchmark thumbnail validation
 
-    func testBenchmarkThumbnailCommandRejectsInvalidDimensions() {
-        XCTAssertThrowsError(try BenchmarkThumbnailCommand.parse([
-            "--input", "in.jpg", "--width", "0",
-        ]))
-        XCTAssertThrowsError(try BenchmarkThumbnailCommand.parse([
-            "--input", "in.jpg", "--height", "-1",
-        ]))
+    @Test func benchmarkThumbnailCommandRejectsInvalidDimensions() {
+        #expect(throws: (any Error).self) {
+            try BenchmarkThumbnailCommand.parse(["--input", "in.jpg", "--width", "0"])
+        }
+        #expect(throws: (any Error).self) {
+            try BenchmarkThumbnailCommand.parse(["--input", "in.jpg", "--height", "-1"])
+        }
     }
 
     // MARK: - CLIParser helpers
 
-    func testParseThumbnailCropAcceptsAllDocumentedValues() throws {
-        XCTAssertEqual(try CLIParser.parseThumbnailCrop("none"), ThumbnailCrop.none)
-        XCTAssertEqual(try CLIParser.parseThumbnailCrop("centre"), .centre)
-        XCTAssertEqual(try CLIParser.parseThumbnailCrop("center"), .centre)
-        XCTAssertEqual(try CLIParser.parseThumbnailCrop("CENTRE"), .centre)
-        XCTAssertEqual(try CLIParser.parseThumbnailCrop("attention"), .attention)
-        XCTAssertEqual(try CLIParser.parseThumbnailCrop("entropy"), .entropy)
+    @Test func parseThumbnailCropAcceptsAllDocumentedValues() throws {
+        #expect(try CLIParser.parseThumbnailCrop("none") == ThumbnailCrop.none)
+        #expect(try CLIParser.parseThumbnailCrop("centre") == .centre)
+        #expect(try CLIParser.parseThumbnailCrop("center") == .centre)
+        #expect(try CLIParser.parseThumbnailCrop("CENTRE") == .centre)
+        #expect(try CLIParser.parseThumbnailCrop("attention") == .attention)
+        #expect(try CLIParser.parseThumbnailCrop("entropy") == .entropy)
     }
 
-    func testParseThumbnailCropRejectsUnknownValue() {
-        XCTAssertThrowsError(try CLIParser.parseThumbnailCrop("smart"))
-        XCTAssertThrowsError(try CLIParser.parseThumbnailCrop(""))
+    @Test func parseThumbnailCropRejectsUnknownValue() {
+        #expect(throws: (any Error).self) { try CLIParser.parseThumbnailCrop("smart") }
+        #expect(throws: (any Error).self) { try CLIParser.parseThumbnailCrop("") }
     }
 
-    func testValidateDimensionBounds() throws {
-        XCTAssertNoThrow(try CLIParser.validateDimension(1, name: "width"))
-        XCTAssertNoThrow(try CLIParser.validateDimension(Int(Int32.max), name: "width"))
-        XCTAssertThrowsError(try CLIParser.validateDimension(0, name: "width"))
-        XCTAssertThrowsError(try CLIParser.validateDimension(-1, name: "width"))
-        XCTAssertThrowsError(try CLIParser.validateDimension(Int(Int32.max) + 1, name: "width"))
+    @Test func validateDimensionBounds() throws {
+        try CLIParser.validateDimension(1, name: "width")
+        try CLIParser.validateDimension(Int(Int32.max), name: "width")
+        #expect(throws: (any Error).self) { try CLIParser.validateDimension(0, name: "width") }
+        #expect(throws: (any Error).self) { try CLIParser.validateDimension(-1, name: "width") }
+        #expect(throws: (any Error).self) {
+            try CLIParser.validateDimension(Int(Int32.max) + 1, name: "width")
+        }
     }
 
-    func testParseFormatInfersFromOutputExtension() throws {
-        XCTAssertEqual(try CLIParser.parseFormat(nil, fallbackPath: "out.webp"), .webp)
-        XCTAssertEqual(try CLIParser.parseFormat("jpg", fallbackPath: nil), .jpeg)
-        XCTAssertThrowsError(try CLIParser.parseFormat("bmp2", fallbackPath: nil))
-        XCTAssertThrowsError(try CLIParser.parseFormat(nil, fallbackPath: "noextension"))
+    @Test func parseFormatInfersFromOutputExtension() throws {
+        #expect(try CLIParser.parseFormat(nil, fallbackPath: "out.webp") == .webp)
+        #expect(try CLIParser.parseFormat("jpg", fallbackPath: nil) == .jpeg)
+        #expect(throws: (any Error).self) { try CLIParser.parseFormat("bmp2", fallbackPath: nil) }
+        #expect(throws: (any Error).self) { try CLIParser.parseFormat(nil, fallbackPath: "noextension") }
     }
 }

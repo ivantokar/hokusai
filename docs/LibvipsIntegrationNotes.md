@@ -338,6 +338,16 @@ diagnostic text behind stable, categorised errors (`fileNotFound`,
 `invalidImageData`, `loadFailed` for decode/load, `vipsError` for
 transformations on already-loaded images).
 
+### Test framework: swift-testing
+
+The suite uses swift-testing rather than XCTest. swift-corelibs-xctest has a
+known unresolved deadlock on Linux when a target contains many test methods
+(swiftlang/swift-corelibs-xctest#504): the generated runner wraps every test
+in an async expectation wait, and the RunLoop-based waiter loses the wakeup
+nondeterministically. Reproduced here on Swift 6.0, 6.1, and 6.2 containers —
+`swift test` hung at a random test each run. The same 62 tests pass reliably
+under swift-testing on both macOS and Linux.
+
 ### Synchronous loading API
 
 `Hokusai.image(from:)` was declared `async` while performing synchronous

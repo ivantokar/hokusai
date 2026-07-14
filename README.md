@@ -617,10 +617,14 @@ swift build
 swift test
 ```
 
-Tests are implemented with `XCTest` and run with standard SwiftPM tooling.
-The suite covers thumbnail geometry/crop/orientation behavior, error semantics,
+Tests are implemented with **swift-testing** (`import Testing`, bundled with
+Swift 6 toolchains) and run with standard SwiftPM tooling. The suite covers
+thumbnail geometry/crop/orientation behavior, error semantics,
 lifecycle/concurrency, and CLI argument parsing (the test target imports the
-`HokusaiCLI` module directly).
+`HokusaiCLI` module directly). XCTest is deliberately not used: on Linux,
+swift-corelibs-xctest has a known unresolved RunLoop deadlock with large test
+targets ([swift-corelibs-xctest#504](https://github.com/swiftlang/swift-corelibs-xctest/issues/504))
+that hangs `swift test` nondeterministically.
 
 ## Releases
 

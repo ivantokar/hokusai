@@ -1,5 +1,5 @@
 import Foundation
-import XCTest
+import Testing
 @testable import Hokusai
 
 /// Thumbnail geometry, crop, and orientation behavior.
@@ -7,50 +7,50 @@ import XCTest
 /// Sources: `landscape-asym.jpg` (320×200, detail near the left edge),
 /// `portrait-asym.jpg` (200×320, detail near the top),
 /// `orientation-6.jpg` (physical 120×80, EXIF Orientation=6 → displays 80×120).
-final class ThumbnailTests: XCTestCase {
-    override func setUpWithError() throws {
+@Suite struct ThumbnailTests {
+    init() throws {
         try Hokusai.initialize()
     }
 
     // MARK: - File, buffer, and image entry points
 
-    func testThumbnailFromFilePath() throws {
+    @Test func thumbnailFromFilePath() throws {
         let path = try fixturePath(named: "landscape-asym", ext: "jpg")
         let thumb = try Hokusai.thumbnail(from: path, width: 160)
 
-        XCTAssertEqual(try thumb.width, 160)
-        XCTAssertEqual(try thumb.height, 100)
+        #expect(try thumb.width == 160)
+        #expect(try thumb.height == 100)
     }
 
-    func testThumbnailFromBuffer() throws {
+    @Test func thumbnailFromBuffer() throws {
         let data = try loadFixtureData(named: "landscape-asym", ext: "jpg")
         let thumb = try Hokusai.thumbnail(from: data, width: 160)
 
-        XCTAssertEqual(try thumb.width, 160)
-        XCTAssertEqual(try thumb.height, 100)
+        #expect(try thumb.width == 160)
+        #expect(try thumb.height == 100)
     }
 
-    func testThumbnailFromLoadedImage() throws {
+    @Test func thumbnailFromLoadedImage() throws {
         let path = try fixturePath(named: "landscape-asym", ext: "jpg")
         let image = try Hokusai.image(from: path)
         let thumb = try image.thumbnail(width: 160)
 
-        XCTAssertEqual(try thumb.width, 160)
-        XCTAssertEqual(try thumb.height, 100)
+        #expect(try thumb.width == 160)
+        #expect(try thumb.height == 100)
     }
 
     // MARK: - Geometry
 
-    func testWidthOnlyPreservesAspectRatioLandscape() throws {
+    @Test func widthOnlyPreservesAspectRatioLandscape() throws {
         let path = try fixturePath(named: "landscape-asym", ext: "jpg")
         let thumb = try Hokusai.thumbnail(from: path, width: 80)
 
         // 320×200 at width 80 → height 50.
-        XCTAssertEqual(try thumb.width, 80)
-        XCTAssertEqual(try thumb.height, 50)
+        #expect(try thumb.width == 80)
+        #expect(try thumb.height == 50)
     }
 
-    func testWidthOnlyPreservesAspectRatioPortrait() throws {
+    @Test func widthOnlyPreservesAspectRatioPortrait() throws {
         // Regression test: vips_thumbnail defaults an unset height to `width`
         // (a square bound), which would give a portrait source a width smaller
         // than requested. The shim passes VIPS_MAX_COORD to keep the promise
@@ -59,67 +59,67 @@ final class ThumbnailTests: XCTestCase {
         let thumb = try Hokusai.thumbnail(from: path, width: 100)
 
         // 200×320 at width 100 → height 160.
-        XCTAssertEqual(try thumb.width, 100)
-        XCTAssertEqual(try thumb.height, 160)
+        #expect(try thumb.width == 100)
+        #expect(try thumb.height == 160)
     }
 
-    func testWidthAndHeightWithoutCropFitsInside() throws {
+    @Test func widthAndHeightWithoutCropFitsInside() throws {
         let path = try fixturePath(named: "landscape-asym", ext: "jpg")
         let thumb = try Hokusai.thumbnail(from: path, width: 160, options: ThumbnailOptions(height: 80))
 
         // Fit 320×200 inside 160×80 → scale 0.4 → 128×80.
-        XCTAssertEqual(try thumb.width, 128)
-        XCTAssertEqual(try thumb.height, 80)
+        #expect(try thumb.width == 128)
+        #expect(try thumb.height == 80)
     }
 
-    func testSourceSmallerThanTargetIsUpscaled() throws {
+    @Test func sourceSmallerThanTargetIsUpscaled() throws {
         // libvips default (VIPS_SIZE_BOTH): thumbnail upscales small sources.
         let path = try fixturePath(named: "landscape-asym", ext: "jpg")
         let thumb = try Hokusai.thumbnail(from: path, width: 640)
 
-        XCTAssertEqual(try thumb.width, 640)
-        XCTAssertEqual(try thumb.height, 400)
+        #expect(try thumb.width == 640)
+        #expect(try thumb.height == 400)
     }
 
-    func testSourceLargerThanTargetIsDownscaled() throws {
+    @Test func sourceLargerThanTargetIsDownscaled() throws {
         let path = try fixturePath(named: "portrait-asym", ext: "jpg")
         let thumb = try Hokusai.thumbnail(from: path, width: 50, options: ThumbnailOptions(height: 80))
 
         // Fit 200×320 inside 50×80 → both bounds active → 50×80.
-        XCTAssertEqual(try thumb.width, 50)
-        XCTAssertEqual(try thumb.height, 80)
+        #expect(try thumb.width == 50)
+        #expect(try thumb.height == 80)
     }
 
     // MARK: - Crop strategies
 
-    func testCentreCropProducesExactDimensions() throws {
+    @Test func centreCropProducesExactDimensions() throws {
         let path = try fixturePath(named: "landscape-asym", ext: "jpg")
         let thumb = try Hokusai.thumbnail(
             from: path, width: 100, options: ThumbnailOptions(height: 100, crop: .centre))
 
-        XCTAssertEqual(try thumb.width, 100)
-        XCTAssertEqual(try thumb.height, 100)
+        #expect(try thumb.width == 100)
+        #expect(try thumb.height == 100)
     }
 
-    func testAttentionCropProducesExactDimensions() throws {
+    @Test func attentionCropProducesExactDimensions() throws {
         let path = try fixturePath(named: "landscape-asym", ext: "jpg")
         let thumb = try Hokusai.thumbnail(
             from: path, width: 100, options: ThumbnailOptions(height: 100, crop: .attention))
 
-        XCTAssertEqual(try thumb.width, 100)
-        XCTAssertEqual(try thumb.height, 100)
+        #expect(try thumb.width == 100)
+        #expect(try thumb.height == 100)
     }
 
-    func testEntropyCropProducesExactDimensions() throws {
+    @Test func entropyCropProducesExactDimensions() throws {
         let path = try fixturePath(named: "landscape-asym", ext: "jpg")
         let thumb = try Hokusai.thumbnail(
             from: path, width: 100, options: ThumbnailOptions(height: 100, crop: .entropy))
 
-        XCTAssertEqual(try thumb.width, 100)
-        XCTAssertEqual(try thumb.height, 100)
+        #expect(try thumb.width == 100)
+        #expect(try thumb.height == 100)
     }
 
-    func testAttentionCropSelectsDifferentRegionThanCentre() throws {
+    @Test func attentionCropSelectsDifferentRegionThanCentre() throws {
         // The fixture's only detailed content sits near the left edge, so a
         // content-aware crop must select different pixels than a centre crop.
         let path = try fixturePath(named: "landscape-asym", ext: "jpg")
@@ -131,29 +131,29 @@ final class ThumbnailTests: XCTestCase {
 
         let centrePNG = try centre.toBuffer(options: SaveOptions(format: .png))
         let attentionPNG = try attention.toBuffer(options: SaveOptions(format: .png))
-        XCTAssertNotEqual(centrePNG, attentionPNG, "attention crop should select a different region than centre")
+        #expect(centrePNG != attentionPNG, "attention crop should select a different region than centre")
     }
 
     // MARK: - EXIF orientation
 
-    func testExifAutoRotationAppliedByDefault() throws {
+    @Test func exifAutoRotationAppliedByDefault() throws {
         let path = try fixturePath(named: "orientation-6", ext: "jpg")
         let thumb = try Hokusai.thumbnail(from: path, width: 40)
 
         // Physical 120×80 + Orientation=6 displays as 80×120 → width 40 → 40×60.
-        XCTAssertEqual(try thumb.width, 40)
-        XCTAssertEqual(try thumb.height, 60)
+        #expect(try thumb.width == 40)
+        #expect(try thumb.height == 60)
     }
 
-    func testExifAutoRotationAppliedForBufferSource() throws {
+    @Test func exifAutoRotationAppliedForBufferSource() throws {
         let data = try loadFixtureData(named: "orientation-6", ext: "jpg")
         let thumb = try Hokusai.thumbnail(from: data, width: 40)
 
-        XCTAssertEqual(try thumb.width, 40)
-        XCTAssertEqual(try thumb.height, 60)
+        #expect(try thumb.width == 40)
+        #expect(try thumb.height == 60)
     }
 
-    func testNoRotateSkipsExifAutoRotation() throws {
+    @Test func noRotateSkipsExifAutoRotation() throws {
         let path = try fixturePath(named: "orientation-6", ext: "jpg")
         let thumb = try Hokusai.thumbnail(from: path, width: 40, options: ThumbnailOptions(noRotate: true))
 
@@ -161,8 +161,8 @@ final class ThumbnailTests: XCTestCase {
         // height ≈ 27 (rounding is libvips'), and the result stays landscape.
         let width = try thumb.width
         let height = try thumb.height
-        XCTAssertEqual(width, 40)
-        XCTAssertTrue((26...28).contains(height), "expected ~27, got \(height)")
-        XCTAssertLessThan(height, width)
+        #expect(width == 40)
+        #expect((26...28).contains(height), "expected ~27, got \(height)")
+        #expect(height < width)
     }
 }

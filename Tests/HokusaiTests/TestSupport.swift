@@ -1,11 +1,19 @@
 import Foundation
-import XCTest
+import Testing
 @testable import Hokusai
 
 /// Shared fixture helpers for the Hokusai test suite.
 ///
+/// The suite uses swift-testing (not XCTest): swift-corelibs-xctest has a
+/// known unresolved RunLoop deadlock on Linux when a target contains many
+/// test methods (swiftlang/swift-corelibs-xctest#504), which hangs `swift
+/// test` at a nondeterministic position. swift-testing does not use the
+/// RunLoop-based waiter and runs reliably on both platforms.
+///
 /// `Hokusai.initialize()` is idempotent and thread-safe, so tests call it
-/// directly — no test-side actor or serialization is needed.
+/// directly — no test-side actor or serialization is needed. Tests run in
+/// parallel by default, which doubles as a standing concurrency check on the
+/// library's thread-safety policy.
 ///
 /// Fixture inventory:
 /// - `pixel.png` — 1×1 RGBA pixel.
@@ -31,19 +39,19 @@ func loadFixtureData(named name: String, ext: String) throws -> Data {
     try Data(contentsOf: fixtureURL(named: name, ext: ext))
 }
 
-/// Asserts that `expression` throws a `HokusaiError` matched by `matcher`.
-func XCTAssertThrowsHokusaiError<T>(
-    _ expression: @autoclosure () throws -> T,
-    file: StaticString = #filePath,
-    line: UInt = #line,
+/// Expects that `body` throws a `HokusaiError` matched by `matcher`.
+func expectHokusaiError<T>(
+    _ body: () throws -> T,
+    sourceLocation: SourceLocation = #_sourceLocation,
     _ matcher: (HokusaiError) -> Bool
 ) {
-    XCTAssertThrowsError(try expression(), file: file, line: line) { error in
-        guard let hokusaiError = error as? HokusaiError else {
-            XCTFail("Expected HokusaiError, got \(error)", file: file, line: line)
-            return
-        }
-        XCTAssertTrue(matcher(hokusaiError), "Unexpected error: \(hokusaiError)", file: file, line: line)
+    do {
+        _ = try body()
+        Issue.record("expected a HokusaiError, but no error was thrown", sourceLocation: sourceLocation)
+    } catch let error as HokusaiError {
+        #expect(matcher(error), "unexpected error: \(error)", sourceLocation: sourceLocation)
+    } catch {
+        Issue.record("expected HokusaiError, got \(error)", sourceLocation: sourceLocation)
     }
 }
 
