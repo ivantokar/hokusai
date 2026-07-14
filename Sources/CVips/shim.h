@@ -6,6 +6,8 @@
 /**
  * @brief PURPOSE: Thin C bridge that exposes libvips APIs to Swift.
  * CONSTRAINTS:
+ * - Requires libvips >= 8.9 (vips_source_new_from_blob, vips_image_new_from_source,
+ *   vips_thumbnail_source, vips_error_buffer_copy).
  * - Keep wrappers minimal and side-effect equivalent to libvips calls.
  * - Avoid policy/business logic in this layer.
  * AI HINTS:
@@ -23,6 +25,13 @@ typedef VipsInteresting VipsInteresting;
 typedef VipsDirection VipsDirection;
 typedef VipsAccess VipsAccess;
 
+// MARK: - Error Handling
+
+/** @brief Copy and atomically clear the libvips error buffer. Caller frees with g_free(). */
+static inline char *swift_vips_error_copy(void) {
+    return vips_error_buffer_copy();
+}
+
 // MARK: - Image Loading
 
 /** @brief Load image from path and return owned VipsImage pointer. */
@@ -30,19 +39,40 @@ static inline VipsImage *swift_vips_image_new_from_file(const char *path) {
     return vips_image_new_from_file(path, NULL);
 }
 
-/** @brief Load image from path with sequential (streaming) access. Lower memory for forward-only pipelines. */
+/** @brief Load image from path with sequential (streaming) access. */
 static inline VipsImage *swift_vips_image_new_from_file_sequential(const char *path) {
     return vips_image_new_from_file(path, "access", VIPS_ACCESS_SEQUENTIAL, NULL);
 }
 
-/** @brief Load image from encoded bytes and return owned VipsImage pointer. */
-static inline VipsImage *swift_vips_image_new_from_buffer(const void *buf, size_t size) {
-    return vips_image_new_from_buffer(buf, size, "", NULL);
+/* vips_image_new_from_buffer() does not copy the bytes it is given; the caller
+ * would have to keep them alive until the image and its whole pipeline are
+ * closed. Swift callers pass pointers that are only valid inside
+ * Data.withUnsafeBytes, so the buffer wrappers below copy the bytes into a
+ * VipsBlob (freed by libvips when the last pipeline reference drops) and load
+ * through a VipsSource. */
+static inline VipsImage *swift_vips_image_new_from_buffer_with_access(const void *buf, size_t size, VipsAccess access) {
+    VipsBlob *blob = vips_blob_copy(buf, size);
+    if (blob == NULL) {
+        return NULL;
+    }
+    VipsSource *source = vips_source_new_from_blob(blob);
+    vips_area_unref(VIPS_AREA(blob)); /* the source holds its own reference */
+    if (source == NULL) {
+        return NULL;
+    }
+    VipsImage *image = vips_image_new_from_source(source, "", "access", access, NULL);
+    g_object_unref(source); /* the image holds its own reference */
+    return image;
 }
 
-/** @brief Load image from buffer with sequential (streaming) access. Lower memory for forward-only pipelines. */
+/** @brief Load image from encoded bytes (copied) and return owned VipsImage pointer. */
+static inline VipsImage *swift_vips_image_new_from_buffer(const void *buf, size_t size) {
+    return swift_vips_image_new_from_buffer_with_access(buf, size, VIPS_ACCESS_RANDOM);
+}
+
+/** @brief Load image from encoded bytes (copied) with sequential (streaming) access. */
 static inline VipsImage *swift_vips_image_new_from_buffer_sequential(const void *buf, size_t size) {
-    return vips_image_new_from_buffer(buf, size, "", "access", VIPS_ACCESS_SEQUENTIAL, NULL);
+    return swift_vips_image_new_from_buffer_with_access(buf, size, VIPS_ACCESS_SEQUENTIAL);
 }
 
 static inline int swift_vips_copy(VipsImage *in, VipsImage **out) {
@@ -409,11 +439,12 @@ static inline int swift_vips_smartcrop(
 // MARK: - Thumbnail Operations
 // PURPOSE: Expose vips_thumbnail family for shrink-on-load workflows.
 // CONSTRAINTS:
-//   - height <= 0 means no height bound (width-only constraint).
-//   - crop == VIPS_INTERESTING_NONE means fit-inside (no crop).
-//   - no_rotate non-zero disables EXIF auto-rotation.
+//   - height <= 0 means no height bound. VIPS_MAX_COORD is passed explicitly
+//     because vips_thumbnail defaults an unset height to `width`, which would
+//     bound the output to a square instead of preserving the aspect ratio.
+//   - crop == VIPS_INTERESTING_NONE and no_rotate == 0 match the libvips defaults.
 
-/** @brief Thumbnail from file path. Enables shrink-on-load for JPEG/TIFF/HEIF. */
+/** @brief Thumbnail from file path. Enables shrink-on-load for formats that support it. */
 static inline int swift_vips_thumbnail(
     const char *filename,
     VipsImage **out,
@@ -422,22 +453,14 @@ static inline int swift_vips_thumbnail(
     VipsInteresting crop,
     int no_rotate
 ) {
-    if (height > 0 && crop != VIPS_INTERESTING_NONE) {
-        return vips_thumbnail(filename, out, width,
-            "height", height, "crop", crop, "no-rotate", no_rotate, NULL);
-    } else if (height > 0) {
-        return vips_thumbnail(filename, out, width,
-            "height", height, "no-rotate", no_rotate, NULL);
-    } else if (crop != VIPS_INTERESTING_NONE) {
-        return vips_thumbnail(filename, out, width,
-            "crop", crop, "no-rotate", no_rotate, NULL);
-    } else {
-        return vips_thumbnail(filename, out, width,
-            "no-rotate", no_rotate, NULL);
-    }
+    return vips_thumbnail(filename, out, width,
+        "height", height > 0 ? height : VIPS_MAX_COORD,
+        "crop", crop,
+        "no-rotate", no_rotate,
+        NULL);
 }
 
-/** @brief Thumbnail from in-memory buffer. Enables shrink-on-load for formats that support it in buffer form. */
+/** @brief Thumbnail from in-memory buffer (copied; see buffer-loading note above). */
 static inline int swift_vips_thumbnail_buffer(
     const void *buf,
     size_t len,
@@ -447,19 +470,22 @@ static inline int swift_vips_thumbnail_buffer(
     VipsInteresting crop,
     int no_rotate
 ) {
-    if (height > 0 && crop != VIPS_INTERESTING_NONE) {
-        return vips_thumbnail_buffer((void *)buf, len, out, width,
-            "height", height, "crop", crop, "no-rotate", no_rotate, NULL);
-    } else if (height > 0) {
-        return vips_thumbnail_buffer((void *)buf, len, out, width,
-            "height", height, "no-rotate", no_rotate, NULL);
-    } else if (crop != VIPS_INTERESTING_NONE) {
-        return vips_thumbnail_buffer((void *)buf, len, out, width,
-            "crop", crop, "no-rotate", no_rotate, NULL);
-    } else {
-        return vips_thumbnail_buffer((void *)buf, len, out, width,
-            "no-rotate", no_rotate, NULL);
+    VipsBlob *blob = vips_blob_copy(buf, len);
+    if (blob == NULL) {
+        return -1;
     }
+    VipsSource *source = vips_source_new_from_blob(blob);
+    vips_area_unref(VIPS_AREA(blob)); /* the source holds its own reference */
+    if (source == NULL) {
+        return -1;
+    }
+    int result = vips_thumbnail_source(source, out, width,
+        "height", height > 0 ? height : VIPS_MAX_COORD,
+        "crop", crop,
+        "no-rotate", no_rotate,
+        NULL);
+    g_object_unref(source); /* the output image holds its own reference */
+    return result;
 }
 
 /** @brief Thumbnail from an already-loaded VipsImage. No shrink-on-load benefit; use for images already in memory. */
@@ -471,19 +497,11 @@ static inline int swift_vips_thumbnail_image(
     VipsInteresting crop,
     int no_rotate
 ) {
-    if (height > 0 && crop != VIPS_INTERESTING_NONE) {
-        return vips_thumbnail_image(in, out, width,
-            "height", height, "crop", crop, "no-rotate", no_rotate, NULL);
-    } else if (height > 0) {
-        return vips_thumbnail_image(in, out, width,
-            "height", height, "no-rotate", no_rotate, NULL);
-    } else if (crop != VIPS_INTERESTING_NONE) {
-        return vips_thumbnail_image(in, out, width,
-            "crop", crop, "no-rotate", no_rotate, NULL);
-    } else {
-        return vips_thumbnail_image(in, out, width,
-            "no-rotate", no_rotate, NULL);
-    }
+    return vips_thumbnail_image(in, out, width,
+        "height", height > 0 ? height : VIPS_MAX_COORD,
+        "crop", crop,
+        "no-rotate", no_rotate,
+        NULL);
 }
 
 #endif /* CVIPS_SHIM_H */

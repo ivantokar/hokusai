@@ -3,9 +3,9 @@ import Foundation
 /// Cropping strategy for thumbnail operations.
 ///
 /// When both `width` and `height` are constrained and the source aspect ratio
-/// does not match the target, libvips must either pad, letterbox, or crop.
-/// This enum selects the cropping strategy.
-public enum ThumbnailCrop: Sendable {
+/// does not match the target, libvips must either fit inside the bounds or
+/// crop. This enum selects the cropping strategy.
+public enum ThumbnailCrop: Sendable, CaseIterable {
     /// No crop: preserve aspect ratio and fit the image inside the target bounds.
     /// One dimension may be smaller than requested.
     case none
@@ -26,15 +26,16 @@ public enum ThumbnailCrop: Sendable {
 ///
 /// Use ``Hokusai/thumbnail(from:width:options:)`` (the static entry point) when:
 /// - You are starting from a file path or raw buffer.
-/// - The source is a large JPEG, TIFF, or HEIF and you want a much smaller output.
+/// - The source format has shrink-on-load support (JPEG, WebP, TIFF pyramids,
+///   HEIF, PDF/SVG) and you want a much smaller output.
 /// - You want libvips to apply EXIF auto-rotation automatically.
 ///
-/// The file-path variant calls `vips_thumbnail()` internally, which reads only
-/// enough of the source to produce the requested output size. For JPEG this
-/// means the JPEG decoder shrinks the image by 2×, 4×, or 8× during decode,
-/// so the convolution kernel operates on a much smaller intermediate. For PNG
-/// and most WebP there is no shrink-on-load; speed is similar to
-/// `resize`.
+/// The file-path variant calls `vips_thumbnail()` internally. It reads the
+/// image header, computes the shrink factor, and re-opens the source with
+/// that factor passed to the loader. For JPEG the decoder shrinks by 2×, 4×,
+/// or 8× during decode; for WebP libwebp scales during decode; TIFF pyramids
+/// select a level; HEIF may use the embedded thumbnail. PNG has no
+/// shrink-on-load, so PNG speed is similar to `resize`.
 ///
 /// Use ``HokusaiImage/resize(width:height:options:)`` when:
 /// - You need explicit control over the interpolation kernel.
@@ -43,11 +44,14 @@ public enum ThumbnailCrop: Sendable {
 public struct ThumbnailOptions: Sendable {
     /// Optional height constraint. `nil` means only the width bound applies
     /// and height is calculated to preserve the source aspect ratio.
+    ///
+    /// Must be set when ``crop`` is not ``ThumbnailCrop/none`` — a crop
+    /// strategy needs a fully specified target rectangle.
     public var height: Int?
 
     /// Cropping strategy when both width and height are specified and the
     /// source aspect ratio does not match. Default is ``ThumbnailCrop/none``
-    /// (fit inside, no crop).
+    /// (fit inside, no crop). Any other value requires ``height``.
     public var crop: ThumbnailCrop
 
     /// When `true`, skip EXIF-based auto-rotation.

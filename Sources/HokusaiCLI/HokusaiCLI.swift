@@ -108,6 +108,15 @@ struct ResizeCommand: AsyncParsableCommand {
     @Flag(help: "Prevent downscaling.")
     var withoutReduction = false
 
+    func validate() throws {
+        if let width {
+            try CLIParser.validateDimension(width, name: "width")
+        }
+        if let height {
+            try CLIParser.validateDimension(height, name: "height")
+        }
+    }
+
     /// PURPOSE: Resize an input image and save to destination path.
     mutating func run() async throws {
         let prompt = PromptService()
@@ -137,26 +146,42 @@ struct ResizeCommand: AsyncParsableCommand {
 struct ThumbnailCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "thumbnail",
-        abstract: "Create a thumbnail using the libvips optimised load+resize path."
+        abstract: "Create a thumbnail via the libvips optimised load+resize path (vips_thumbnail).",
+        discussion: """
+            EXIF auto-rotation is applied by default. Sources smaller than the \
+            target are upscaled (libvips default). The output format is inferred \
+            from the output file extension; an existing output file is overwritten.
+            """
     )
 
-    @Option(name: .shortAndLong, help: "Input image path.")
+    @Option(name: .shortAndLong, help: "Input image path (must exist).")
     var input: String
 
-    @Option(name: .shortAndLong, help: "Output image path.")
+    @Option(name: .shortAndLong, help: "Output image path. Format inferred from extension; existing file is overwritten.")
     var output: String
 
-    @Option(help: "Target width (required).")
+    @Option(help: "Target width in pixels (must be > 0).")
     var width: Int
 
-    @Option(help: "Target height. Omit to preserve aspect ratio.")
+    @Option(help: "Target height in pixels. Omit to preserve the source aspect ratio. Required for --crop values other than 'none'.")
     var height: Int?
 
-    @Option(help: "Crop strategy: none|centre|attention|entropy")
+    @Option(help: "Crop strategy: none|centre|attention|entropy (default: none = fit inside, no crop).")
     var crop: String = "none"
 
-    @Flag(help: "Disable EXIF auto-rotation.")
+    @Flag(help: "Disable EXIF auto-rotation (default: rotate upright per EXIF orientation).")
     var noRotate: Bool = false
+
+    func validate() throws {
+        try CLIParser.validateDimension(width, name: "width")
+        if let height {
+            try CLIParser.validateDimension(height, name: "height")
+        }
+        let parsedCrop = try CLIParser.parseThumbnailCrop(crop)
+        if parsedCrop != .none && height == nil {
+            throw ValidationError("--crop \(crop) requires --height: a crop needs a fully specified target rectangle.")
+        }
+    }
 
     mutating func run() async throws {
         let prompt = PromptService()
@@ -165,7 +190,7 @@ struct ThumbnailCommand: AsyncParsableCommand {
 
         var options = ThumbnailOptions()
         options.height = height
-        options.crop = CLIParser.parseThumbnailCrop(crop)
+        options.crop = try CLIParser.parseThumbnailCrop(crop)
         options.noRotate = noRotate
 
         let image = try Hokusai.thumbnail(from: input, width: width, options: options)
@@ -613,7 +638,8 @@ struct BenchmarkSuiteCommand: AsyncParsableCommand {
                                            options: ThumbnailOptions(height: 800))
                     .toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
             }),
-            // New: sequential access + resize (lower memory peak, similar throughput)
+            // New: sequential access + resize (streaming decode; lower peak memory,
+            // but measurably slower for heavily downscaled JPEG sources)
             ("resize:sequential:1200x800", {
                 let img = try Hokusai.loadFromFile(inputPath, options: .sequential)
                 _ = try img.resize(width: 1200, height: 800).toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
@@ -858,14 +884,19 @@ struct BenchmarkThumbnailCommand: AsyncParsableCommand {
     @Option(help: "Measured iterations per case.")
     var iterations: Int = 20
 
-    @Option(help: "Target width.")
+    @Option(help: "Target width in pixels (default: 1200).")
     var width: Int = 1200
 
-    @Option(help: "Target height.")
+    @Option(help: "Target height in pixels (default: 800).")
     var height: Int = 800
 
     @Option(help: "Output JSON file path.")
     var jsonOutput: String?
+
+    func validate() throws {
+        try CLIParser.validateDimension(width, name: "width")
+        try CLIParser.validateDimension(height, name: "height")
+    }
 
     mutating func run() async throws {
         let prompt = PromptService()
@@ -1161,12 +1192,23 @@ enum CLIParser {
         return ImageFormat(rawValue: normalized)
     }
 
-    static func parseThumbnailCrop(_ value: String) -> ThumbnailCrop {
+    static func parseThumbnailCrop(_ value: String) throws -> ThumbnailCrop {
         switch value.lowercased() {
+        case "none": return ThumbnailCrop.none
         case "centre", "center": return .centre
         case "attention": return .attention
         case "entropy": return .entropy
-        default: return .none
+        default:
+            throw ValidationError("Invalid crop strategy '\(value)'. Valid values: none, centre (or center), attention, entropy.")
+        }
+    }
+
+    static func validateDimension(_ value: Int, name: String) throws {
+        guard value > 0 else {
+            throw ValidationError("--\(name) must be greater than zero.")
+        }
+        guard Int32(exactly: value) != nil else {
+            throw ValidationError("--\(name) must be at most \(Int32.max).")
         }
     }
 

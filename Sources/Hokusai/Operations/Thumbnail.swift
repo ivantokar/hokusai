@@ -15,36 +15,27 @@ extension HokusaiImage {
     /// file path or raw buffer and you want the full shrink-on-load speedup.
     ///
     /// - Parameters:
-    ///   - width: Target width. Height is constrained by `options.height`; if
-    ///     `nil` the aspect ratio is preserved.
-    ///   - options: Cropping strategy and rotation behaviour.
+    ///   - width: Target width (1...Int32.max). Height is constrained by
+    ///     `options.height`; if `nil` the aspect ratio is preserved.
+    ///   - options: Cropping strategy and rotation behaviour. Crop strategies
+    ///     other than ``ThumbnailCrop/none`` require `options.height`.
     /// - Returns: A new ``HokusaiImage`` at the requested dimensions.
+    /// - Throws: ``HokusaiError/invalidDimensions(_:)`` for invalid
+    ///   dimensions, or ``HokusaiError/vipsError(_:)`` when the libvips
+    ///   thumbnail transformation fails.
     public func thumbnail(width: Int, options: ThumbnailOptions = ThumbnailOptions()) throws -> HokusaiImage {
+        let arguments = try ThumbnailArguments.validate(width: width, options: options)
         let backend = try ensureVipsBackend()
         let pointer = try backend.getPointer()
 
-        let height = Int32(options.height ?? 0)
-        let crop = mapThumbnailCrop(options.crop)
-        let noRotate = Int32(options.noRotate ? 1 : 0)
-
         var output: UnsafeMutablePointer<CVips.VipsImage>?
-        let result = swift_vips_thumbnail_image(pointer, &output, Int32(width), height, crop, noRotate)
+        let result = swift_vips_thumbnail_image(
+            pointer, &output, arguments.width, arguments.height, arguments.crop, arguments.noRotate)
 
         guard result == 0, let out = output else {
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
+            throw HokusaiError.vipsError("thumbnail transformation failed: \(VipsBackend.getLastError())")
         }
 
         return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
-    }
-
-    // MARK: - Private
-
-    private func mapThumbnailCrop(_ crop: ThumbnailCrop) -> VipsInteresting {
-        switch crop {
-        case .none:      return VIPS_INTERESTING_NONE
-        case .centre:    return VIPS_INTERESTING_CENTRE
-        case .attention: return VIPS_INTERESTING_ATTENTION
-        case .entropy:   return VIPS_INTERESTING_ENTROPY
-        }
     }
 }

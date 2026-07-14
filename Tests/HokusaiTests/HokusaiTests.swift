@@ -2,30 +2,14 @@ import Foundation
 import XCTest
 @testable import Hokusai
 
-private actor HokusaiTestRuntime {
-    static let shared = HokusaiTestRuntime()
-    private var isInitialized = false
-
-    func ensureInitialized() throws {
-        if !isInitialized {
-            try Hokusai.initialize()
-            isInitialized = true
-        }
-    }
-}
-
-private func loadFixtureData(named name: String, ext: String) throws -> Data {
-    guard let url = Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Fixtures") else {
-        throw HokusaiError.fileNotFound("Fixture \(name).\(ext) not found")
-    }
-    return try Data(contentsOf: url)
-}
-
 final class HokusaiTests: XCTestCase {
-    func testLoadImageMetadata() async throws {
-        try await HokusaiTestRuntime.shared.ensureInitialized()
+    override func setUpWithError() throws {
+        try Hokusai.initialize()
+    }
+
+    func testLoadImageMetadata() throws {
         let data = try loadFixtureData(named: "pixel", ext: "png")
-        let image = try await Hokusai.image(from: data)
+        let image = try Hokusai.image(from: data)
         let metadata = try image.metadata()
 
         XCTAssertEqual(metadata.width, 1)
@@ -34,21 +18,27 @@ final class HokusaiTests: XCTestCase {
         XCTAssertTrue(metadata.hasAlpha)
     }
 
-    func testResizeImage() async throws {
-        try await HokusaiTestRuntime.shared.ensureInitialized()
+    func testLoadImageFromFilePath() throws {
+        let path = try fixturePath(named: "landscape-asym", ext: "jpg")
+        let image = try Hokusai.image(from: path)
+
+        XCTAssertEqual(try image.width, 320)
+        XCTAssertEqual(try image.height, 200)
+    }
+
+    func testResizeImage() throws {
         let data = try loadFixtureData(named: "pixel", ext: "png")
-        let image = try await Hokusai.image(from: data)
+        let image = try Hokusai.image(from: data)
         let resized = try image.resize(width: 8, height: 8)
 
         XCTAssertEqual(try resized.width, 8)
         XCTAssertEqual(try resized.height, 8)
     }
 
-    func testCompositeImage() async throws {
-        try await HokusaiTestRuntime.shared.ensureInitialized()
+    func testCompositeImage() throws {
         let data = try loadFixtureData(named: "pixel", ext: "png")
-        let base = try await Hokusai.image(from: data)
-        let overlay = try await Hokusai.image(from: data)
+        let base = try Hokusai.image(from: data)
+        let overlay = try Hokusai.image(from: data)
         let output = try base.composite(
             overlay: overlay,
             x: 0,
@@ -60,10 +50,9 @@ final class HokusaiTests: XCTestCase {
         XCTAssertEqual(try output.height, 1)
     }
 
-    func testDrawTextWithVipsBackend() async throws {
-        try await HokusaiTestRuntime.shared.ensureInitialized()
+    func testDrawTextWithVipsBackend() throws {
         let data = try loadFixtureData(named: "pixel", ext: "png")
-        let image = try await Hokusai.image(from: data)
+        let image = try Hokusai.image(from: data)
         let canvas = try image.resize(width: 256, height: 128)
 
         var options = TextOptions()
@@ -85,12 +74,11 @@ final class HokusaiTests: XCTestCase {
 
     // MARK: - Sequential Access
 
-    func testLoadWithSequentialAccess() async throws {
-        try await HokusaiTestRuntime.shared.ensureInitialized()
+    func testLoadWithSequentialAccess() throws {
         let data = try loadFixtureData(named: "pixel", ext: "png")
 
         // Sequential load must produce the same image as random load.
-        let sequential = try await Hokusai.image(from: data, options: LoadOptions(access: .sequential))
+        let sequential = try Hokusai.image(from: data, options: LoadOptions(access: .sequential))
         let metadata = try sequential.metadata()
 
         XCTAssertEqual(metadata.width, 1)
@@ -98,62 +86,28 @@ final class HokusaiTests: XCTestCase {
         XCTAssertTrue(metadata.hasAlpha)
     }
 
-    func testSequentialLoadPresetConvenience() async throws {
-        try await HokusaiTestRuntime.shared.ensureInitialized()
-        let data = try loadFixtureData(named: "pixel", ext: "png")
+    func testSequentialLoadPresetConvenience() throws {
+        let data = try loadFixtureData(named: "landscape-asym", ext: "jpg")
 
-        let image = try await Hokusai.image(from: data, options: .sequential)
-        XCTAssertEqual(try image.width, 1)
-        XCTAssertEqual(try image.height, 1)
+        let image = try Hokusai.image(from: data, options: .sequential)
+        XCTAssertEqual(try image.width, 320)
+        XCTAssertEqual(try image.height, 200)
     }
 
-    // MARK: - Thumbnail from buffer
+    func testSequentialSinglePassPipelineProducesOutput() throws {
+        // The documented use case: load -> resize -> encode, one forward pass.
+        let path = try fixturePath(named: "landscape-asym", ext: "jpg")
+        let image = try Hokusai.image(from: path, options: .sequential)
+        let output = try image.resize(width: 64, height: 40).toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
 
-    func testThumbnailFromBufferWidth() async throws {
-        try await HokusaiTestRuntime.shared.ensureInitialized()
-        let data = try loadFixtureData(named: "pixel", ext: "png")
-
-        // Upscale the pixel to make a usable source first, then thumbnail it.
-        let source = try await Hokusai.image(from: data)
-        let sourceData = try source.resize(width: 64, height: 64).toBuffer(options: SaveOptions(format: .png))
-
-        let thumb = try Hokusai.thumbnail(from: sourceData, width: 32)
-        XCTAssertLessThanOrEqual(try thumb.width, 32)
-        XCTAssertGreaterThan(try thumb.width, 0)
-        XCTAssertGreaterThan(try thumb.height, 0)
-    }
-
-    func testThumbnailFromBufferWithHeightConstraint() async throws {
-        try await HokusaiTestRuntime.shared.ensureInitialized()
-        let data = try loadFixtureData(named: "pixel", ext: "png")
-
-        let source = try await Hokusai.image(from: data)
-        let sourceData = try source.resize(width: 64, height: 64).toBuffer(options: SaveOptions(format: .png))
-
-        let opts = ThumbnailOptions(height: 16)
-        let thumb = try Hokusai.thumbnail(from: sourceData, width: 32, options: opts)
-        XCTAssertLessThanOrEqual(try thumb.width, 32)
-        XCTAssertLessThanOrEqual(try thumb.height, 16)
-    }
-
-    func testThumbnailImageMethod() async throws {
-        try await HokusaiTestRuntime.shared.ensureInitialized()
-        let data = try loadFixtureData(named: "pixel", ext: "png")
-
-        let source = try await Hokusai.image(from: data)
-        let large = try source.resize(width: 64, height: 64)
-
-        let thumb = try large.thumbnail(width: 32)
-        XCTAssertLessThanOrEqual(try thumb.width, 32)
-        XCTAssertGreaterThan(try thumb.width, 0)
+        XCTAssertFalse(output.isEmpty)
     }
 
     // MARK: - Existing behavior unchanged
 
-    func testNormalResizeOutputIsValid() async throws {
-        try await HokusaiTestRuntime.shared.ensureInitialized()
+    func testNormalResizeOutputIsValid() throws {
         let data = try loadFixtureData(named: "pixel", ext: "png")
-        let image = try await Hokusai.image(from: data)
+        let image = try Hokusai.image(from: data)
         let resized = try image.resize(width: 16, height: 16)
 
         XCTAssertEqual(try resized.width, 16)
@@ -162,15 +116,45 @@ final class HokusaiTests: XCTestCase {
         XCTAssertFalse(jpeg.isEmpty)
     }
 
-    func testDefaultLoadOptionsMatchPriorBehavior() async throws {
-        try await HokusaiTestRuntime.shared.ensureInitialized()
+    func testDefaultLoadOptionsMatchPriorBehavior() throws {
         let data = try loadFixtureData(named: "pixel", ext: "png")
 
         // Default LoadOptions() must load identically to the pre-options API.
-        let explicit = try await Hokusai.image(from: data, options: LoadOptions())
+        let explicit = try Hokusai.image(from: data, options: LoadOptions())
         let meta = try explicit.metadata()
 
         XCTAssertEqual(meta.width, 1)
         XCTAssertEqual(meta.height, 1)
+    }
+
+    // MARK: - README example mirror
+
+    /// Mirrors the README "Thumbnail" examples so the documented snippets are
+    /// exercised by the suite.
+    func testReadmeThumbnailExamplesCompileAndRun() throws {
+        let photoPath = try fixturePath(named: "landscape-asym", ext: "jpg")
+        let imageData = try loadFixtureData(named: "landscape-asym", ext: "jpg")
+
+        let thumb = try Hokusai.thumbnail(from: photoPath, width: 40)
+        XCTAssertEqual(try thumb.width, 40)
+
+        let opts = ThumbnailOptions(height: 30)
+        let bounded = try Hokusai.thumbnail(from: photoPath, width: 40, options: opts)
+        XCTAssertLessThanOrEqual(try bounded.height, 30)
+
+        let cropped = try Hokusai.thumbnail(
+            from: photoPath,
+            width: 40,
+            options: ThumbnailOptions(height: 30, crop: .attention)
+        )
+        XCTAssertEqual(try cropped.width, 40)
+        XCTAssertEqual(try cropped.height, 30)
+
+        let fromBuffer = try Hokusai.thumbnail(from: imageData, width: 40)
+        XCTAssertEqual(try fromBuffer.width, 40)
+
+        let image = try Hokusai.image(from: photoPath)
+        let fromImage = try image.thumbnail(width: 40)
+        XCTAssertEqual(try fromImage.width, 40)
     }
 }

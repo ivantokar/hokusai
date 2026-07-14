@@ -12,19 +12,52 @@ final class VipsBackend: ImageBackend {
     private var imagePointer: UnsafeMutablePointer<CVips.VipsImage>?
     private let lock = NSLock()
 
-    /// PURPOSE: Initialize process-wide libvips runtime.
-    /// SIDE EFFECTS: Global libvips initialization.
+    // MARK: - Runtime Lifecycle
+
+    private enum RuntimeState {
+        case uninitialized
+        case initialized
+        case shutdownCompleted
+    }
+
+    /// Process-global libvips state. Only read or written while holding
+    /// `runtimeLock`, which makes the `nonisolated(unsafe)` sound.
+    nonisolated(unsafe) private static var runtimeState: RuntimeState = .uninitialized
+    private static let runtimeLock = NSLock()
+
+    /// PURPOSE: Initialize the process-wide libvips runtime.
+    /// Idempotent and thread-safe: concurrent and repeated calls are safe and
+    /// only the first successful call performs work. Load entry points call
+    /// this automatically.
+    /// CONSTRAINTS: Throws after `shutdown()`; libvips cannot be restarted.
     static func initialize() throws {
-        let result = vips_init("Hokusai")
-        guard result == 0 else {
-            throw HokusaiError.initializationFailed("vips_init returned \(result)")
+        runtimeLock.lock()
+        defer { runtimeLock.unlock() }
+
+        switch runtimeState {
+        case .initialized:
+            return
+        case .shutdownCompleted:
+            throw HokusaiError.initializationFailed(
+                "libvips cannot be re-initialized after shutdown(); shutdown() is a final process-teardown operation")
+        case .uninitialized:
+            guard vips_init("Hokusai") == 0 else {
+                throw HokusaiError.initializationFailed(getLastError())
+            }
+            runtimeState = .initialized
         }
     }
 
-    /// PURPOSE: Shutdown process-wide libvips runtime.
-    /// SIDE EFFECTS: Global libvips teardown.
+    /// PURPOSE: Permanently shut down the process-wide libvips runtime.
+    /// CONSTRAINTS: Final and irreversible; must not run while any image is
+    /// still alive. Idempotent — repeated calls are no-ops.
     static func shutdown() {
+        runtimeLock.lock()
+        defer { runtimeLock.unlock() }
+
+        guard runtimeState == .initialized else { return }
         vips_shutdown()
+        runtimeState = .shutdownCompleted
     }
 
     /// PURPOSE: Adopt ownership of an existing libvips image pointer.
@@ -59,6 +92,8 @@ final class VipsBackend: ImageBackend {
     // MARK: - ImageBackend Protocol Implementation
 
     static func loadFromFile(_ path: String, options: LoadOptions = LoadOptions()) throws -> VipsBackend {
+        try initialize()
+
         guard FileManager.default.fileExists(atPath: path) else {
             throw HokusaiError.fileNotFound(path)
         }
@@ -72,17 +107,20 @@ final class VipsBackend: ImageBackend {
         }
 
         guard let img = output else {
-            throw HokusaiError.loadFailed(getLastError())
+            throw HokusaiError.loadFailed("\(path): \(getLastError())")
         }
 
         return VipsBackend(takingOwnership: img)
     }
 
     static func loadFromBuffer(_ data: Data, options: LoadOptions = LoadOptions()) throws -> VipsBackend {
+        try initialize()
+
         guard !data.isEmpty else {
             throw HokusaiError.invalidImageData
         }
 
+        // The shim copies the bytes, so the pointer does not outlive the closure.
         let output: UnsafeMutablePointer<CVips.VipsImage>? = data.withUnsafeBytes { bytes in
             switch options.access {
             case .sequential:
@@ -100,52 +138,45 @@ final class VipsBackend: ImageBackend {
     }
 
     static func thumbnailFromFile(_ path: String, width: Int, options: ThumbnailOptions) throws -> VipsBackend {
+        try initialize()
+        let arguments = try ThumbnailArguments.validate(width: width, options: options)
+
         guard FileManager.default.fileExists(atPath: path) else {
             throw HokusaiError.fileNotFound(path)
         }
 
-        let height = Int32(options.height ?? 0)
-        let crop = mapThumbnailCrop(options.crop)
-        let noRotate = Int32(options.noRotate ? 1 : 0)
-
         var output: UnsafeMutablePointer<CVips.VipsImage>?
-        let result = swift_vips_thumbnail(path, &output, Int32(width), height, crop, noRotate)
+        let result = swift_vips_thumbnail(
+            path, &output, arguments.width, arguments.height, arguments.crop, arguments.noRotate)
 
         guard result == 0, let img = output else {
-            throw HokusaiError.loadFailed(getLastError())
+            throw HokusaiError.loadFailed("thumbnail of \(path): \(getLastError())")
         }
 
         return VipsBackend(takingOwnership: img)
     }
 
     static func thumbnailFromBuffer(_ data: Data, width: Int, options: ThumbnailOptions) throws -> VipsBackend {
+        try initialize()
+        let arguments = try ThumbnailArguments.validate(width: width, options: options)
+
         guard !data.isEmpty else {
             throw HokusaiError.invalidImageData
         }
 
-        let height = Int32(options.height ?? 0)
-        let crop = mapThumbnailCrop(options.crop)
-        let noRotate = Int32(options.noRotate ? 1 : 0)
-
+        // The shim copies the bytes, so the pointer does not outlive the closure.
         var output: UnsafeMutablePointer<CVips.VipsImage>?
         let result = data.withUnsafeBytes { bytes -> Int32 in
-            swift_vips_thumbnail_buffer(bytes.baseAddress, data.count, &output, Int32(width), height, crop, noRotate)
+            swift_vips_thumbnail_buffer(
+                bytes.baseAddress, data.count, &output,
+                arguments.width, arguments.height, arguments.crop, arguments.noRotate)
         }
 
         guard result == 0, let img = output else {
-            throw HokusaiError.loadFailed(getLastError())
+            throw HokusaiError.loadFailed("thumbnail from buffer: \(getLastError())")
         }
 
         return VipsBackend(takingOwnership: img)
-    }
-
-    private static func mapThumbnailCrop(_ crop: ThumbnailCrop) -> VipsInteresting {
-        switch crop {
-        case .none:      return VIPS_INTERESTING_NONE
-        case .centre:    return VIPS_INTERESTING_CENTRE
-        case .attention: return VIPS_INTERESTING_ATTENTION
-        case .entropy:   return VIPS_INTERESTING_ENTROPY
-        }
     }
 
     func saveToFile(_ path: String, format: String?, quality: Int?) throws {
@@ -287,12 +318,17 @@ final class VipsBackend: ImageBackend {
         return ext.isEmpty ? "jpeg" : ext
     }
 
+    /// PURPOSE: Copy and clear the global libvips error buffer.
+    /// CONSTRAINTS: Uses vips_error_buffer_copy so the text is copied before
+    /// the buffer is cleared (copying after clearing loses the message and
+    /// races with writers on other threads).
     static func getLastError() -> String {
-        guard let buffer = vips_error_buffer() else {
+        guard let buffer = swift_vips_error_copy() else {
             return "Unknown vips error"
         }
-        vips_error_clear()
-        return String(cString: buffer)
+        defer { g_free(buffer) }
+        let message = String(cString: buffer).trimmingCharacters(in: .whitespacesAndNewlines)
+        return message.isEmpty ? "Unknown vips error" : message
     }
 
     /// PURPOSE: Get libvips version

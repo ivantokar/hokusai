@@ -9,13 +9,17 @@ enum ImageData {
 /// PURPOSE: Unified image wrapper used by all public image operations.
 /// CONSTRAINTS:
 /// - Backed by libvips only.
-/// - All backend access must remain thread-safe.
-/// AI HINTS:
-/// - Preserve lock boundaries around mutable backend state.
 /// - Keep this as a thin façade over backend operations.
+///
+/// Concurrency policy (`@unchecked Sendable`): a `HokusaiImage` is a handle to
+/// an immutable libvips image pipeline. The wrapper never mutates its backend
+/// reference after initialization (`imageData` is `let`), operations always
+/// produce new images, and libvips images are safe to read from multiple
+/// threads concurrently — libvips operations never mutate their inputs. The
+/// only mutable native state (the owned pointer) lives in `VipsBackend`
+/// behind a lock. This policy is exercised by `LifecycleConcurrencyTests`.
 public final class HokusaiImage: @unchecked Sendable {
-    private var imageData: ImageData
-    private let lock = NSLock()
+    private let imageData: ImageData
 
     /// PURPOSE: Internal initializer with backend data
     init(backend: ImageData) {
@@ -26,11 +30,7 @@ public final class HokusaiImage: @unchecked Sendable {
 
     /// PURPOSE: Resolve and return the active libvips backend instance.
     /// OUTPUT: Live `VipsBackend` for this image.
-    /// CONSTRAINTS: Must hold lock while reading backend storage.
     func ensureVipsBackend() throws -> VipsBackend {
-        lock.lock()
-        defer { lock.unlock() }
-
         switch imageData {
         case .vips(let backend):
             return backend

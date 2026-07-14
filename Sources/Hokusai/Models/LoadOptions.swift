@@ -1,50 +1,55 @@
 import Foundation
 
-/// Access mode for libvips image loading.
+/// Access-pattern hint for libvips image loading.
 ///
-/// libvips supports two access patterns that trade memory for capability:
+/// libvips loads images lazily in both modes: opening an image reads only the
+/// header (dimensions, bands, metadata), and pixels are decoded on first
+/// access. The access mode is a *hint* telling libvips in which order the
+/// pipeline will request pixels, which changes how the decode is managed:
 ///
-/// - ``random``: The default. The full image is available in memory and any
-///   pixel can be read at any time. Required for operations like rotation,
-///   smartcrop, and compositing.
+/// - ``random``: The default. Pixels may be requested in any order. For
+///   formats whose decoders cannot seek (JPEG, PNG, WebP, ...), libvips
+///   decodes the whole image on first pixel access — into a memory buffer for
+///   smaller images or a temporary disk file for larger ones (controlled by
+///   libvips' `vips-disc-threshold`, 100 MB by default). Formats with native
+///   random-access layouts (tiled TIFF, FITS, OpenSlide, VIPS `.v`) are read
+///   directly without a full decode.
 ///
-/// - ``sequential``: The image is decoded as a forward-only stream. libvips
-///   holds only a small window of rows in memory at once. Useful when you
-///   are doing a single-pass pipeline (e.g., load -> resize -> save to buffer)
-///   on a large source file and want to reduce peak memory. Not safe for
-///   operations that need random access.
+/// - ``sequential``: Pixels are requested strictly top-to-bottom. libvips
+///   streams the decode and keeps only a small window of recent scanlines in
+///   memory, which lowers peak memory for large sources in single-pass
+///   pipelines (e.g. load → resize → save). Requests *ahead* of the current
+///   read position are satisfied by decoding forward; requests *behind* the
+///   cached window cannot be satisfied and fail with a libvips error — there
+///   is no silent fallback to random access. Operations that need out-of-order
+///   pixel access (rotation by non-90° angles, flips, smart crop, some
+///   compositing) are therefore unsafe in this mode.
 ///
-/// ## When sequential access can help
+/// ## Practical guidance
 ///
-/// Sequential access lowers peak RSS for large source files processed in a
-/// linear pipeline. The time savings come mainly from reduced page faults and
-/// memory pressure under load, not from reduced decode work.
-///
-/// For JPEG, TIFF, and HEIF sources where shrink-on-load is the goal,
-/// prefer ``Hokusai/thumbnail(from:width:options:)`` instead — it combines
-/// optimised load and resize in a single libvips call without requiring you
-/// to choose an access mode.
-///
-/// ## When sequential access may not help
-///
-/// - Small images: the overhead of tracking the sequential cursor can exceed
-///   any memory savings.
-/// - Operations that require random access (rotation by non-90° multiples,
-///   compositing with an offset, some crop strategies). libvips will error
-///   or silently fall back to random access in those cases.
-/// - Pipelines that read the image more than once (e.g., computing metadata
-///   after resize). Each read reopens the source.
+/// - Neither mode changes *what* is decoded, only how the decode is buffered.
+///   In particular, downscaling a JPEG via `resize` fully decodes the source
+///   in both modes; only the `thumbnail` entry points engage the decoders'
+///   shrink-on-load support.
+/// - Prefer ``Hokusai/thumbnail(from:width:options:)`` when the goal is a
+///   smaller output from a large JPEG/WebP/TIFF/HEIF source.
+/// - Use sequential access only when you have measured that peak memory is a
+///   problem and the pipeline is genuinely single-pass and top-to-bottom.
+///   In our benchmarks, sequential access made heavily downscaled JPEG
+///   pipelines significantly slower than the default.
 public enum AccessMode: Sendable {
-    /// Full decode; any pixel readable at any time. Safe for all operations.
+    /// Pixels may be read in any order. Safe for all operations. Non-seekable
+    /// formats are fully decoded (to memory or disk temp) on first access.
     case random
-    /// Forward-only streaming decode. Lower peak memory for linear pipelines.
-    /// Not safe for operations that require random pixel access.
+    /// Forward-only streaming decode with a small line window. Lower peak
+    /// memory for linear pipelines; operations that need out-of-order pixel
+    /// access fail with a libvips error.
     case sequential
 }
 
 /// Options controlling how Hokusai loads an image from disk or memory.
 public struct LoadOptions: Sendable {
-    /// The libvips access mode to use when decoding the source image.
+    /// The libvips access-pattern hint to use when decoding the source image.
     public var access: AccessMode
 
     public init(access: AccessMode = .random) {
