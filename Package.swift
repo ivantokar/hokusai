@@ -20,7 +20,8 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
-        .package(url: "https://github.com/ivantokar/prompt.git", from: "1.0.0"),
+        // 1.1.2+ required: earlier versions fail to compile on Linux (termios tcflag_t fix).
+        .package(url: "https://github.com/ivantokar/prompt.git", from: "1.1.2"),
     ],
     targets: [
         // PURPOSE: System library wrapper for libvips
