@@ -19,9 +19,9 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-testing.git", from: "0.7.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
-        .package(url: "https://github.com/ivantokar/prompt.git", from: "1.0.0"),
+        // 1.1.2+ required: earlier versions fail to compile on Linux (termios tcflag_t fix).
+        .package(url: "https://github.com/ivantokar/prompt.git", from: "1.1.2"),
     ],
     targets: [
         // PURPOSE: System library wrapper for libvips
@@ -49,12 +49,14 @@ let package = Package(
                 .product(name: "Prompt", package: "prompt"),
             ]
         ),
-        // PURPOSE: Test target
+        // PURPOSE: Test target (library, CVips mapping, and CLI argument parsing)
         .testTarget(
             name: "HokusaiTests",
             dependencies: [
                 "Hokusai",
-                .product(name: "Testing", package: "swift-testing"),
+                "HokusaiCLI",
+                "CVips",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             resources: [
                 .copy("Fixtures")

@@ -3,10 +3,10 @@ import Foundation
 /// PURPOSE: Protocol defining the common interface for image processing backends
 protocol ImageBackend {
     /// PURPOSE: Load image from file path
-    static func loadFromFile(_ path: String) throws -> Self
+    static func loadFromFile(_ path: String, options: LoadOptions) throws -> Self
 
     /// PURPOSE: Load image from data buffer
-    static func loadFromBuffer(_ data: Data) throws -> Self
+    static func loadFromBuffer(_ data: Data, options: LoadOptions) throws -> Self
 
     /// PURPOSE: Save image to file
     func saveToFile(_ path: String, format: String?, quality: Int?) throws

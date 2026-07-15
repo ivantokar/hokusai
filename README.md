@@ -7,7 +7,7 @@
 **Fast, libvips-powered image processing for Swift server-side applications**
 
 Hokusai is a high-performance image processing library built on **libvips** for blazing-fast operations (resize, crop, rotate, convert, composite) and text rendering via **Pango/Cairo through libvips**.
-Built for modern Swift server applications with async/await support, comprehensive error handling, and a clean, chainable API.
+Built for modern Swift server applications with comprehensive error handling and a clean, chainable API. (The current API is synchronous; the execution/concurrency policy for offloading work will be defined in the upcoming pipeline-API milestone.)
 
 [![Swift](https://img.shields.io/badge/Swift-6.0+-orange.svg)](https://swift.org)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20|%20Linux-lightgrey.svg)](https://swift.org)
@@ -46,6 +46,7 @@ Hokusai provides a unified Swift API backed by libvips for all operations, inclu
 
 - Swift 6.0+
 - macOS 13+ or Linux (Ubuntu/Debian tested)
+- libvips **8.9 or newer** (the C shim uses `VipsSource`-based loading and `vips_error_buffer_copy`)
 - `pkg-config` plus the native libraries below
 
 **macOS:**
@@ -87,6 +88,15 @@ swift run hokusai --help
 swift run hokusai info
 swift run hokusai inspect --input ./input.jpg
 swift run hokusai resize --input ./input.jpg --output ./out.jpg --width 1200 --height 800 --fit cover
+
+# Thumbnail — optimised load+resize with EXIF auto-rotation
+swift run hokusai thumbnail --input ./photo.jpg --output ./thumb.jpg --width 400
+swift run hokusai thumbnail --input ./photo.jpg --output ./thumb.jpg --width 400 --height 300 --crop attention
+
+# Benchmarks
+swift run hokusai benchmark suite --input ./photo.jpg                      # full suite
+swift run hokusai benchmark thumbnail --input ./photo.jpg --width 400 --height 300  # resize vs thumbnail comparison
+swift run hokusai benchmark webp --input ./photo.jpg --concurrency-sweep   # WebP effort/concurrency sweep
 ```
 
 ### Install via Homebrew (recommended for users)
@@ -106,17 +116,17 @@ If you have not published the formula yet, use `swift run hokusai ...` until the
 ```swift
 import Hokusai
 
-// Initialize Hokusai (call once at app startup)
+// Optional: initialize explicitly to surface libvips failures at startup.
+// Loading entry points initialize the runtime automatically otherwise.
 try Hokusai.initialize()
-defer { Hokusai.shutdown() }
 
 // Load an image
-let image = try await Hokusai.image(from: "photo.jpg")
+let image = try Hokusai.image(from: "photo.jpg")
 
 // Chain operations
 let processed = try image
     .resize(width: 800)
-    .rotate(angle: .degrees(90))
+    .rotate(angle: .degree90)
     .drawText(
         "Hello World",
         x: 100,
@@ -138,26 +148,42 @@ try processed.toFile("output.jpg", quality: 85)
 
 ### Initialization
 
+`Hokusai.initialize()` is idempotent and thread-safe, and every loading entry
+point calls it automatically. Call it explicitly at startup if you want
+initialization failures surfaced early.
+
+`Hokusai.shutdown()` is an **advanced, final process-teardown operation**, not
+a normal lifecycle method. Long-running applications (servers) should never
+call it — the OS reclaims libvips resources at process exit. If you do call it
+(e.g. for clean leak-checker reports in a short-lived tool), do so at most once,
+immediately before exit, after all images have been released. After `shutdown()`
+the runtime cannot be re-initialized.
+
 ```swift
-// Initialize libvips backend
+// Optional: initialize libvips backend explicitly
 try Hokusai.initialize()
 
-// Shutdown when done (call at app teardown)
-Hokusai.shutdown()
-
 // Get version info
-print(Hokusai.vipsVersion)    // "8.15.1"
+print(Hokusai.vipsVersion)    // e.g. "8.18.2"
 ```
 
 ### Loading Images
 
+Loading is synchronous: it performs libvips work on the calling thread.
+
 ```swift
 // From file path
-let image = try await Hokusai.image(from: "/path/to/image.jpg")
+let image = try Hokusai.image(from: "/path/to/image.jpg")
 
-// From Data buffer
+// From Data buffer (the bytes are copied; `data` need not outlive the image)
 let data = try Data(contentsOf: url)
-let image = try await Hokusai.image(from: data)
+let image = try Hokusai.image(from: data)
+
+// Sequential access — a streaming-decode hint that lowers peak memory for
+// large sources in single-pass, top-to-bottom pipelines (load → resize → save).
+// Operations needing out-of-order pixel access fail in this mode, and in our
+// benchmarks it was significantly slower for heavily downscaled JPEGs.
+let image = try Hokusai.image(from: "/path/to/image.jpg", options: .sequential)
 ```
 
 ### Text Rendering
@@ -178,6 +204,42 @@ let withText = try image.drawText(
     y: 150,
     options: textOptions
 )
+```
+
+### Thumbnail
+
+`Hokusai.thumbnail(from:width:options:)` calls `vips_thumbnail()` internally. It applies EXIF auto-rotation by default and integrates smart cropping in a single pass. Where the format loader supports shrink-on-load, decoding itself is reduced: JPEG (decoder shrink 2×/4×/8×), WebP (decode-time scaling), TIFF (pyramid levels), HEIF (embedded thumbnail), PDF/SVG (render scale). PNG has no shrink-on-load.
+
+Notes:
+- Sources smaller than the target are **upscaled** by default (libvips `VIPS_SIZE_BOTH`).
+- Crop strategies other than `.none` require an explicit `height`.
+- Dimensions must be `1...Int32.max`; invalid values throw `HokusaiError.invalidDimensions`.
+
+Use `resize` when you need explicit kernel control or fit modes like `contain`. Use `thumbnail` when you want auto-rotation and optional smart crop out of the box.
+
+```swift
+// Thumbnail from file — EXIF auto-rotation applied automatically.
+// Width-only: height follows the source aspect ratio.
+let thumb = try Hokusai.thumbnail(from: "photo.jpg", width: 400)
+
+// With height constraint (fit inside 400×300, aspect ratio preserved)
+let opts = ThumbnailOptions(height: 300)
+let bounded = try Hokusai.thumbnail(from: "photo.jpg", width: 400, options: opts)
+
+// Smart crop to exact 400×300 dimensions
+let cropped = try Hokusai.thumbnail(
+    from: "photo.jpg",
+    width: 400,
+    options: ThumbnailOptions(height: 300, crop: .attention)
+)
+
+// From an in-memory buffer (optimized load path, bytes are copied)
+let fromBuffer = try Hokusai.thumbnail(from: imageData, width: 400)
+
+// On an already-loaded image: same API and options, but the source is already
+// decoded, so there is no shrink-on-load benefit
+let image = try Hokusai.image(from: "photo.jpg")
+let fromImage = try image.thumbnail(width: 400)
 ```
 
 ### Resize Operations
@@ -206,13 +268,19 @@ let resized = try image.resize(width: 800, height: 600, options: options)
 
 ```swift
 // Manual crop
-let cropped = try image.crop(x: 100, y: 100, width: 500, height: 400)
+let cropped = try image.crop(left: 100, top: 100, width: 500, height: 400)
 
-// Smart crop (attention detection)
-let smartCropped = try image.smartCrop(
+// Resize to cover and crop to exact dimensions
+let covered = try image.resizeToCover(
     width: 400,
     height: 400,
     position: .center  // or .top, .bottom, .left, .right, etc.
+)
+
+// Content-aware crop to exact dimensions (attention/entropy)
+let smart = try image.thumbnail(
+    width: 400,
+    options: ThumbnailOptions(height: 400, crop: .attention)
 )
 ```
 
@@ -226,7 +294,7 @@ let rotated270 = try image.rotate(angle: .degree270)
 
 // Arbitrary angle
 let rotated = try image.rotate(
-    angle: .degrees(45),
+    angle: .custom(45),
     background: [255, 255, 255, 255]  // White background
 )
 
@@ -253,8 +321,8 @@ AVIF/HEIF output requires libvips built with libheif support.
 ### Composite / Watermark
 
 ```swift
-let base = try await Hokusai.image(from: "photo.jpg")
-let overlay = try await Hokusai.image(from: "watermark.png")
+let base = try Hokusai.image(from: "photo.jpg")
+let overlay = try Hokusai.image(from: "watermark.png")
 
 let options = CompositeOptions(mode: .over, opacity: 0.6)
 let composited = try base.composite(
@@ -314,52 +382,62 @@ All operations are executed by libvips, with text rendering powered by Pango/Cai
 
 ### Thread Safety
 
-All operations are thread-safe using NSLock:
+`HokusaiImage` is a handle to an immutable libvips pipeline: operations never
+mutate their inputs and always return new images, so images can be shared
+across tasks and threads. Initialization is idempotent and thread-safe. Note
+that loading and processing are synchronous — inside a task they still block
+the executor thread they run on:
+
 ```swift
-let operations = (0..<10).map { i in
-    Task {
-        let image = try await Hokusai.image(from: "input.jpg")
-        let processed = try image
-            .resize(width: 800)
-            .drawText("Frame \(i)", x: 10, y: 10)
-        try processed.toFile("output_\(i).jpg")
+try await withThrowingTaskGroup(of: Void.self) { group in
+    for i in 0..<10 {
+        group.addTask {
+            let image = try Hokusai.image(from: "input.jpg")
+            let processed = try image
+                .resize(width: 800)
+                .drawText("Frame \(i)", x: 10, y: 10)
+            try processed.toFile("output_\(i).jpg")
+        }
     }
-}
-await withTaskGroup(of: Void.self) { group in
-    operations.forEach { group.addTask { try? await $0.value } }
+    try await group.waitForAll()
 }
 ```
 
 ## Performance
 
-### Benchmarks (measured with `hokusai` CLI)
+### Benchmarks (measured with `hokusai benchmark suite`)
 
-Environment:
-- Apple M4 Pro
-- macOS 26.5 (build 25F5053d)
-- release binary build
+Environment: Apple M4 Pro · macOS · libvips 8.18.2 · 12 cores · release binary · 3 warmup + 25 measured iterations
 
-Method:
-- warmup: 5 runs
-- measured iterations: 20 runs
+**Small source (1000×800 JPEG, warm file cache)**
 
-Input: `certificate.png` (3206x2266, RGBA)
+| Case | Mean | Median | P95 | Min | Max | Ops/s |
+|------|-----:|-------:|----:|----:|----:|------:|
+| resize:default:1200x800 | 3.84 ms | 3.80 ms | 4.28 ms | 3.38 ms | 4.29 ms | 260 |
+| thumbnail:file:1200x800 | 4.26 ms | 4.28 ms | 4.47 ms | 3.84 ms | 4.51 ms | 235 |
+| thumbnail:file:1200 | 5.12 ms | 4.99 ms | 5.85 ms | 4.65 ms | 6.14 ms | 195 |
+| resize:sequential:1200x800 | 4.50 ms | 4.49 ms | 4.85 ms | 4.15 ms | 5.06 ms | 222 |
+| convert:webp:q80 | 37.65 ms | 37.67 ms | 38.18 ms | 36.84 ms | 38.34 ms | 27 |
+| rotate:33 | 3.14 ms | 3.16 ms | 3.34 ms | 2.93 ms | 3.47 ms | 319 |
+| text:stroke-shadow | 57.52 ms | 57.51 ms | 59.42 ms | 55.43 ms | 59.56 ms | 17 |
 
-| Case | Mean | P95 | Ops/s |
-| --- | ---: | ---: | ---: |
-| resize:1200x800 | 4.79 ms | 5.99 ms | 208.94 |
-| convert:webp:q80 | 203.20 ms | 208.16 ms | 4.92 |
-| rotate:33 | 35.56 ms | 38.90 ms | 28.12 |
-| text:stroke-shadow | 105.26 ms | 107.66 ms | 9.50 |
+**Large source (4000×3200 JPEG, warm file cache, 3 warmup + 20 iterations)**
 
-Text-only benchmark on the same input:
-- mean: 99.66 ms
-- median: 98.05 ms
-- p95: 103.16 ms
-- ops/s: 10.03
+| Case | Op path | Access | Mean | Median | P95 | Ops/s |
+|------|---------|--------|-----:|-------:|----:|------:|
+| resize:default | vips_resize | random | 2.73 ms | 2.69 ms | 3.06 ms | 366 |
+| thumbnail:file | vips_thumbnail | n/a | 10.01 ms | 9.98 ms | 10.24 ms | 100 |
+| thumbnail:image | vips_thumbnail_image | random | 2.84 ms | 2.80 ms | 3.20 ms | 352 |
+| resize:sequential | vips_resize | sequential | 21.74 ms | 21.67 ms | 22.78 ms | 46 |
 
-Note: these are measured reference values on one machine, not universal performance guarantees.
-Use `hokusai benchmark suite` / `hokusai benchmark op` to reproduce on your hardware.
+**Key observations**
+
+- On these warm-cache benchmarks, `resize:default` (random access + `vips_resize`) was fastest. Note that repeated loads of the same file also hit the libvips operation cache, so a tight benchmark loop understates first-load cost for every case.
+- `vips_thumbnail` from a file path reads the header, computes a shrink factor, and re-opens the source — overhead that is not repaid when the decoded file is already cached. Its shrink-on-load advantage applies to cold-cache or storage-bound workloads (and only for formats with shrink-on-load support: JPEG, WebP, pyramidal TIFF, HEIF, PDF/SVG — not PNG).
+- Sequential access was ~8× slower for this heavily downscaled JPEG case. Measured, machine-specific; use sequential mode for peak-memory reduction in single-pass pipelines, not for speed.
+- `thumbnail:image` (on an already-decoded image) is comparable to `resize:default` since file I/O is not in the picture.
+
+These results are machine-specific and cache-state dependent. Reproduce them on your hardware with `hokusai benchmark suite` and `hokusai benchmark thumbnail`.
 
 ### WebP encoding
 
@@ -470,13 +548,15 @@ func convertToWebP(_ image: UIImage, baseURL: URL) async throws -> UIImage {
 
 ```swift
 do {
-    let image = try await Hokusai.image(from: "input.jpg")
-    let processed = try image.resize(width: 800)
+    let image = try Hokusai.image(from: "input.jpg")
+    let processed = try image.thumbnail(width: 800)
     try processed.toFile("output.jpg")
 } catch HokusaiError.fileNotFound(let path) {
     print("Image not found: \(path)")
 } catch HokusaiError.loadFailed(let message) {
     print("Failed to load image: \(message)")
+} catch HokusaiError.invalidDimensions(let message) {
+    print("Invalid dimensions: \(message)")
 } catch HokusaiError.vipsError(let message) {
     print("libvips error: \(message)")
 } catch {
@@ -537,15 +617,21 @@ swift build
 swift test
 ```
 
-Tests are implemented with `XCTest` and run with standard SwiftPM tooling.
-The package keeps a minimal `swift-testing` dependency to support toolchains where SwiftPM still expects the `Testing` module at test runtime.
+Tests are implemented with **swift-testing** (`import Testing`, bundled with
+Swift 6 toolchains) and run with standard SwiftPM tooling. The suite covers
+thumbnail geometry/crop/orientation behavior, error semantics,
+lifecycle/concurrency, and CLI argument parsing (the test target imports the
+`HokusaiCLI` module directly). XCTest is deliberately not used: on Linux,
+swift-corelibs-xctest has a known unresolved RunLoop deadlock with large test
+targets ([swift-corelibs-xctest#504](https://github.com/swiftlang/swift-corelibs-xctest/issues/504))
+that hangs `swift test` nondeterministically.
 
 ## Releases
 
 Hokusai follows semantic version tags in the format `vX.Y.Z`.
 
 - Releases are managed manually via semantic version tags (`vX.Y.Z`).
-- This repository intentionally does not run GitHub Actions workflows to reduce OSS costs.
+- CI (GitHub Actions) builds and tests on macOS and Linux for pushes and pull requests; see `.github/workflows/ci.yml`.
 - Human-curated release notes are tracked in [CHANGELOG.md](CHANGELOG.md).
 
 ## Swift Package Index

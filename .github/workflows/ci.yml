@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - libvips-improvements
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: macOS (Swift toolchain from Xcode)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install libvips
+        run: brew install vips
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build (library + CLI + tests)
+        run: swift build --build-tests
+
+      - name: Test
+        run: swift test
+
+      - name: Build CLI (release)
+        run: swift build -c release --product hokusai
+
+      - name: CLI smoke test
+        run: |
+          BIN=.build/release/hokusai
+          $BIN info
+          $BIN thumbnail \
+            --input Tests/HokusaiTests/Fixtures/landscape-asym.jpg \
+            --output /tmp/ci-thumb.jpg --width 100 --height 100 --crop centre
+          if $BIN thumbnail --input Tests/HokusaiTests/Fixtures/landscape-asym.jpg \
+            --output /tmp/ci-bad.jpg --width 0; then
+            echo "expected non-zero exit for invalid width" && exit 1
+          fi
+
+  linux:
+    name: Linux (Swift ${{ matrix.swift }})
+    runs-on: ubuntu-latest
+    container: swift:${{ matrix.swift }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Minimum supported toolchain and a recent one.
+        swift: ["6.0", "6.1"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install libvips (>= 8.9 required)
+        run: |
+          apt-get update
+          apt-get install -y libvips-dev pkg-config fonts-dejavu-core
+          pkg-config --modversion vips
+
+      - name: Build (library + CLI + tests)
+        run: swift build --build-tests
+
+      - name: Test
+        run: swift test
+
+      - name: Build CLI (release)
+        run: swift build -c release --product hokusai
+
+      - name: CLI smoke test
+        run: |
+          BIN=.build/release/hokusai
+          $BIN info
+          $BIN thumbnail \
+            --input Tests/HokusaiTests/Fixtures/landscape-asym.jpg \
+            --output /tmp/ci-thumb.jpg --width 100 --height 100 --crop centre
+          if $BIN thumbnail --input Tests/HokusaiTests/Fixtures/landscape-asym.jpg \
+            --output /tmp/ci-bad.jpg --width 0; then
+            echo "expected non-zero exit for invalid width" && exit 1
+          fi

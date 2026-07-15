@@ -6,6 +6,7 @@ public enum HokusaiError: Error {
     case loadFailed(String)
     case saveFailed(String)
     case invalidOperation(String)
+    case invalidDimensions(String)
     case unsupportedFormat(String)
     case conversionFailed(String)  // Backend conversion errors
     case textRenderingFailed(String)
@@ -29,6 +30,8 @@ extension HokusaiError: LocalizedError {
             return "Failed to save image: \(message)"
         case .invalidOperation(let message):
             return "Invalid operation: \(message)"
+        case .invalidDimensions(let message):
+            return "Invalid dimensions: \(message)"
         case .unsupportedFormat(let format):
             return "Unsupported image format: \(format)"
         case .conversionFailed(let message):
