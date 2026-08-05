@@ -4,7 +4,11 @@
 
 # Hokusai
 
-Hokusai is a Swift-native image-processing pipeline for server-side applications. Version 1.0 uses immutable `Hokusai` values: build a recipe synchronously, then evaluate it with an asynchronous output terminal.
+## High-performance Swift image processing
+
+Hokusai is a Swift image-processing library powered by [libvips](https://www.libvips.org/) for server-side applications. It provides a clear, immutable pipeline API: build a recipe synchronously, then evaluate it with an asynchronous output terminal.
+
+libvips processes images on demand, using small regions of pixel data at a time and available CPU cores efficiently. Hokusai exposes that capability through Swift without spawning child processes.
 
 ## Requirements
 
@@ -86,7 +90,7 @@ let pdf = try await Hokusai(url: URL(fileURLWithPath: "photo.jpg"))
     .write(to: URL(fileURLWithPath: "report.pdf"))
 ```
 
-PDF output is Cairo-backed and contains the evaluated raster pipeline on one page. It is suitable for generated image reports and layered compositions, but does not currently preserve selectable vector text. The planned Swift-native vector PDF scene API is tracked in [#13](https://github.com/ivantokar/hokusai/issues/13).
+PDF output is Cairo-backed and contains the evaluated raster pipeline on one page. It is suitable for generated image reports and layered compositions, but does not currently preserve selectable vector text. The planned Swift API for vector PDF scenes is tracked in [#13](https://github.com/ivantokar/hokusai/issues/13).
 
 ## Runtime lifecycle
 
@@ -97,10 +101,11 @@ Do not call `Hokusai.shutdown()` in a normal server or application lifecycle. It
 ## CLI
 
 ```bash
-swift run hokusai inspect --input photo.jpg
-swift run hokusai resize --input photo.jpg --output social.webp --width 1200 --height 630 --fit cover
-swift run hokusai convert --input photo.jpg --output photo.pdf
-swift run hokusai thumbnail --input photo.jpg --output thumb.jpg --width 400
+hokusai inspect --input photo.jpg
+hokusai resize --input photo.jpg --output social.webp --width 1200 --height 630 --fit cover
+hokusai convert --input photo.jpg --output photo.pdf
+hokusai thumbnail --input photo.jpg --output thumb.jpg --width 400
+hokusai benchmark pipeline --input photo.jpg --sigma 50
 ```
 
 The optimized `thumbnail` CLI command currently uses the intentionally retained legacy thumbnail loader while its public 1.0 pipeline counterpart is designed.

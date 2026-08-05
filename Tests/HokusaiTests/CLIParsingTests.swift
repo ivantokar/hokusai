@@ -102,31 +102,47 @@ import ArgumentParser
         }
     }
 
-    // MARK: - benchmark thumbnail validation
+    // MARK: - pipeline benchmark validation
 
-    @Test func benchmarkThumbnailCommandRejectsInvalidDimensions() {
+    @Test func pipelineBenchmarkParsesConfiguredArguments() throws {
+        let command = try BenchmarkPipelineCommand.parse([
+            "--input", "in.jpg", "--sigma", "50", "--quality", "82", "--effort", "6",
+            "--vips-concurrency", "4", "--concurrency-sweep",
+        ])
+
+        #expect(command.sigma == 50)
+        #expect(command.quality == 82)
+        #expect(command.effort == 6)
+        #expect(command.vipsConcurrency == 4)
+        #expect(command.concurrencySweep)
+    }
+
+    @Test func pipelineBenchmarkRejectsInvalidOptions() {
         #expect(throws: (any Error).self) {
-            try BenchmarkThumbnailCommand.parse(["--input", "in.jpg", "--width", "0"])
+            try BenchmarkPipelineCommand.parse(["--input", "in.jpg", "--sigma", "0"])
         }
         #expect(throws: (any Error).self) {
-            try BenchmarkThumbnailCommand.parse(["--input", "in.jpg", "--height", "-1"])
+            try BenchmarkPipelineCommand.parse(["--input", "in.jpg", "--quality", "101"])
+        }
+        #expect(throws: (any Error).self) {
+            try BenchmarkPipelineCommand.parse(["--input", "in.jpg", "--effort", "10"])
         }
     }
 
     // MARK: - CLIParser helpers
 
-    @Test func parseThumbnailCropAcceptsAllDocumentedValues() throws {
-        #expect(try CLIParser.parseThumbnailCrop("none") == ThumbnailCrop.none)
-        #expect(try CLIParser.parseThumbnailCrop("centre") == .centre)
-        #expect(try CLIParser.parseThumbnailCrop("center") == .centre)
-        #expect(try CLIParser.parseThumbnailCrop("CENTRE") == .centre)
-        #expect(try CLIParser.parseThumbnailCrop("attention") == .attention)
-        #expect(try CLIParser.parseThumbnailCrop("entropy") == .entropy)
+    @Test func parseThumbnailPositionAcceptsAllDocumentedValues() throws {
+        #expect(try CLIParser.parseThumbnailPosition("none") == nil)
+        #expect(try CLIParser.parseThumbnailPosition("centre") == .center)
+        #expect(try CLIParser.parseThumbnailPosition("center") == .center)
+        #expect(try CLIParser.parseThumbnailPosition("CENTRE") == .center)
+        #expect(try CLIParser.parseThumbnailPosition("attention") == .attention)
+        #expect(try CLIParser.parseThumbnailPosition("entropy") == .entropy)
     }
 
-    @Test func parseThumbnailCropRejectsUnknownValue() {
-        #expect(throws: (any Error).self) { try CLIParser.parseThumbnailCrop("smart") }
-        #expect(throws: (any Error).self) { try CLIParser.parseThumbnailCrop("") }
+    @Test func parseThumbnailPositionRejectsUnknownValue() {
+        #expect(throws: (any Error).self) { try CLIParser.parseThumbnailPosition("smart") }
+        #expect(throws: (any Error).self) { try CLIParser.parseThumbnailPosition("") }
     }
 
     @Test func validateDimensionBounds() throws {
