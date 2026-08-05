@@ -8,7 +8,7 @@ enum ImageData {
 
 /// PURPOSE: Unified image wrapper used by all public image operations.
 /// CONSTRAINTS:
-/// - Backed by libvips only.
+/// - Uses Hokusai's native image runtime.
 /// - Keep this as a thin façade over backend operations.
 ///
 /// Concurrency policy (`@unchecked Sendable`): a `HokusaiImage` is a handle to

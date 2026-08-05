@@ -1,17 +1,18 @@
-# Sharp-inspired Swift-native DX — implementation plan
+# Swift-native ergonomic API plan
 
 ## 1. Executive summary
 
-Hokusai should become the idiomatic Swift façade for libvips: a small, fluent,
-immutable image pipeline with familiar Sharp concepts (input → transforms →
-configured encoder → terminal output), not a Swift spelling of C/libvips.
+Hokusai should become the idiomatic Swift façade for its native image runtime: a
+small, fluent, immutable image pipeline with an ergonomic input → transforms →
+configured encoder → terminal-output model. Sharp is API-ergonomics inspiration,
+not a compatibility target or a C API to reproduce in Swift.
 
 The recommended main type remains `Hokusai`. It changes from a static namespace
 to a `public struct Hokusai: Sendable` representing an immutable processing
 recipe. A call such as `Hokusai(data:)` builds the source node synchronously;
 transform methods synchronously return a derived value; `data()` and `write(to:)`
 are async terminal operations that evaluate the recipe on a dedicated bounded
-executor. Copying or assigning the value is safe reuse, so no Sharp-style
+executor. Copying or assigning the value is safe reuse, so no mutable-builder
 `clone()` is necessary.
 
 This is a **1.0 major-version redesign**. The current public surface is useful
@@ -19,7 +20,7 @@ proof that the libvips adapter works, but it is inconsistent: `Hokusai` is a
 namespace, `HokusaiImage` is the actual handle, `toFormat` is a no-op, loading
 and evaluation are mixed, and public options leak adapter-era concerns.
 
-Copy from Sharp: the mental model, operation names where they are established,
+Use Sharp only as inspiration for the mental model and established operation names;
 resize defaults, output configuration separated from output, and recipe-led
 documentation. Do not copy: a mutable builder, JavaScript option bags, callback
 APIs, implicit stream semantics, or unchecked runtime configuration on every
@@ -37,7 +38,7 @@ input. The implementation must serialize startup/error capture at the adapter
 boundary and never expose mutable native objects in the standard API. See the
 [libvips threading guide](https://www.libvips.org/API/current/using-threads.html),
 [evaluation model](https://www.libvips.org/API/8.17/how-it-works.html),
-[Sharp output API](https://sharp.pixelplumbing.com/api-output/), and the
+[image-output API ergonomics reference](https://sharp.pixelplumbing.com/api-output/), and the
 [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/).
 
 ## 2. Current-state audit
@@ -50,7 +51,7 @@ boundary and never expose mutable native objects in the standard API. See the
 | Pipeline | `HokusaiImage` final class in `Sources/Hokusai/HokusaiImage.swift` | Each operation returns a new image; this is the right semantic foundation, but reference identity and `@unchecked Sendable` are public implementation details. |
 | Adapter | `VipsBackend` plus `CVips/shim.h` | Correct place for ownership and C calls, but public errors and options are shaped around it. |
 | Loading | `image(from: String/Data, options: LoadOptions)` | The loading methods are now honestly synchronous. `String` paths and public `AccessMode` should not be the primary DX. |
-| Geometry | `Resize`, `Crop`, `Rotate`, `Thumbnail` extensions | Good initial coverage, but inconsistent labels (`crop` vs Sharp’s `extract`), duplicate resize entry points, and unchecked `Int32` conversions outside thumbnails. `trim` is a no-op. |
+| Geometry | `Resize`, `Crop`, `Rotate`, `Thumbnail` extensions | Good initial coverage, but inconsistent labels (`crop` vs `extract`), duplicate resize entry points, and unchecked `Int32` conversions outside thumbnails. `trim` is a no-op. |
 | Output | `SaveOptions`, `toFile`, `toBuffer`, `toFormat` | `toFormat` returns `self` without storing configuration; file and buffer encoders differ; options mix formats; evaluation is synchronous. |
 | Composition/text | `Composite.swift`, `Text.swift` | Simple image overlay works. Text is useful but not a first-milestone public focus; its array colours and very broad option set need redesign. |
 | Metadata | `ImageMetadata` | Typed shape is promising, but `metadata()` currently returns many fields as `nil` despite `extendedMetadata()` finding native values. |
@@ -59,12 +60,12 @@ boundary and never expose mutable native objects in the standard API. See the
 
 ### Strengths to preserve
 
-- A libvips-only backend, lazy graph construction, copied buffer inputs, and the
+- A native backend, lazy graph construction, copied buffer inputs, and the
   8.9+ version floor.
 - `ThumbnailArguments` as one validation/mapping boundary and realistic image
   fixtures in `Tests/HokusaiTests/Fixtures`.
 - The existing immutable-operation behavior: do not turn this into a mutable
-  Sharp clone.
+  external API clone.
 - `ResizeFit`, `Position`, kernels, compositing, EXIF-aware thumbnail behavior,
   and the CLI as behavioural test coverage.
 
@@ -86,11 +87,11 @@ boundary and never expose mutable native objects in the standard API. See the
   old loaders will need a migration. The 0.3.0 changelog already contains one
   breaking API correction, so the redesign should not pretend to be additive.
 
-## 3. Sharp-to-Hokusai API map
+## 3. Ergonomic API map
 
-| Sharp concept/API | Proposed Hokusai API | Same semantics? | Swift-specific difference | Milestone |
+| Image-pipeline concept | Proposed Hokusai API | Same semantics? | Swift-specific difference | Milestone |
 | --- | --- | ---: | --- | --- |
-| `sharp(input)` | `Hokusai(data:)`, `Hokusai(url:)` | Mostly | Typed initializers; no string-path primary API | Core |
+| Input | `Hokusai(data:)`, `Hokusai(url:)` | Mostly | Typed initializers; no string-path primary API | Core |
 | `clone()` | Value copy; no method | Yes for independent branching | Immutable values share immutable storage safely | Core |
 | `resize(w,h,options)` | `.resize(width:height:fit:position:...)` | Yes | Labels and typed enums; `ResizeOptions` overload for reuse | Core |
 | `rotate()` / `rotate(deg)` | `.autoOrient()` / `.rotate(by:)` | Yes | Distinguishes EXIF intent from angle explicitly | Core |
@@ -108,7 +109,7 @@ boundary and never expose mutable native objects in the standard API. See the
 | `metadata()` | `.metadata()` | Mostly | Typed `ImageMetadata`, documented as header/pipeline metadata | Core |
 | Node streams | `AsyncSequence` input/output | No | Deferred until cancellation/backpressure policy exists | Later |
 | raw pixel input/output | `RawPixels` | Partial | Explicit format/stride required | Later |
-| broad Sharp encoder matrix | curated formats | No | Runtime capability reporting; only supported tested encoders | Later |
+| broad encoder matrix | curated formats | No | Runtime capability reporting; only supported tested encoders | Later |
 
 ## 4. Proposed public API specification
 
@@ -272,7 +273,7 @@ supports only encoders compiled into the installed libvips and exposes
 `metadata()` reads source/current pipeline header metadata and is synchronous;
 its documentation must state that it can cause header decode but not a full
 pixel render. Metadata preservation is explicit: output defaults are selected
-and documented consistently (recommend removal by default, matching Sharp),
+and documented consistently (recommend removal by default),
 with `preserveMetadata` and future targeted edit APIs.
 
 ### Errors, execution, and advanced API
@@ -356,11 +357,11 @@ async let card = base.resize(width: 1200, height: 630, fit: .cover).jpeg().data(
 | Decision | Chosen approach | Alternative rejected | Reason and impact |
 | --- | --- | --- | --- |
 | Main name | `Hokusai` pipeline struct | `Image`, `ImagePipeline`, namespace plus image class | Keeps package identity and desired `Hokusai(data:)` usage without a generic name collision. Breaking from static namespace. |
-| Mutability | Immutable value recipe | Sharp-style mutable builder | Safe reuse, predictable Swift assignment, simpler concurrency. |
+| Mutability | Immutable value recipe | Mutable builder | Safe reuse, predictable Swift assignment, simpler concurrency. |
 | Terminal async | Only `data`/`write` async | async every method; sync terminals | Graph building is synchronous; evaluation/I/O blocks and needs isolation. |
 | Input | `Data` + file `URL` core | many overloaded primitive initializers | Gives clear ownership and avoids ambiguous raw bytes/path APIs. |
 | NIO | Separate optional product | base dependency | Preserves a lightweight library and clean server integration. |
-| Resize | labelled happy path plus options value | nested builder DSL | Matches Sharp familiarity and Swift autocomplete. |
+| Resize | labelled happy path plus options value | nested builder DSL | Matches established image-pipeline familiarity and Swift autocomplete. |
 | Colour | `Color` value | `[Double]`, platform `CGColor` | Portable, validated, and Foundation-only. |
 | Metadata | typed, documented header metadata | untyped string map only | Stable API; keep arbitrary raw fields advanced/deferred. |
 | Sendability | immutable storage with evidence-backed `Sendable` | actor pipeline; casual `@unchecked` | Libvips permits shared immutable images; an actor would serialize useful work. Must be revoked if tests reveal exceptions. |
@@ -369,13 +370,13 @@ async let card = base.resize(width: 1200, height: 630, fit: .cover).jpeg().data(
 
 ## 6. Milestone definition
 
-**Title:** Sharp-inspired Swift-native DX (Hokusai 1.0)
+**Title:** Swift-native ergonomic API (Hokusai 1.0)
 
 **Goal:** deliver a polished, immutable Swift image pipeline for the common
 encoded-image path: input, geometry and selected visual transforms, composition,
 typed output, metadata, safe async evaluation, and a migration path.
 
-**Non-goals:** complete Sharp parity; raw pixels; animated processing; streaming;
+**Non-goals:** third-party API parity; raw pixels; animated processing; streaming;
 URL fetching; caching/storage; server middleware; result builders; presets;
 generic libvips operations; service/proxy features.
 
@@ -1207,7 +1208,7 @@ Document every deprecated legacy replacement.
 
 Docs can accidentally promise unavailable codec behavior.
 
-## Issue 17: Create cross-platform public API and Sharp-equivalence contract tests
+## Issue 17: Create cross-platform public API contract tests
 
 **Type:** Tests
 **Priority:** High
@@ -1233,7 +1234,7 @@ Add fixture-based API contracts for resize, orientation, output, composition, me
 
 ### Out of scope
 
-* Claiming byte-identical output to Sharp for every encoder.
+* Claiming byte-identical output to another image library for every encoder.
 
 ### Acceptance criteria
 
@@ -1356,7 +1357,7 @@ graph TD
 
 | Deferred item | Why it must not block 1.0 |
 | --- | --- |
-| Full Sharp parity | Broad API surface would dilute the validated core and require codec-specific behaviour promises. |
+| Full third-party API parity | Broad API surface would dilute the validated core and require codec-specific behaviour promises. |
 | Animation and multipage transforms | Need page/timeline model and substantial fixture matrix. |
 | Streaming `AsyncSequence` input/output | Requires a correct backpressure, ownership, and cancellation design. |
 | Raw pixels | Needs explicit byte layout/stride/colour semantics. |

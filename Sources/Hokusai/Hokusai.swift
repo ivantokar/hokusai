@@ -76,7 +76,7 @@ public struct Hokusai: Sendable {
         try transforming("auto orient") { try $0.autoRotate() }
     }
 
-    /// Resizes the pipeline using Sharp-compatible fit and position semantics.
+    /// Resizes the pipeline using familiar fit and position semantics.
     public func resize(
         width: Int? = nil,
         height: Int? = nil,
@@ -111,10 +111,10 @@ public struct Hokusai: Sendable {
         return try transforming("rotate") { try $0.rotate(angle: .custom(degrees), background: try background.rgba8()) }
     }
 
-    /// Mirrors the image vertically, matching Sharp's `flip()` terminology.
+    /// Mirrors the image vertically using familiar image-processing terminology.
     public func flip() throws -> Self { try transforming("flip") { try $0.flipVertical() } }
 
-    /// Mirrors the image horizontally, matching Sharp's `flop()` terminology.
+    /// Mirrors the image horizontally using familiar image-processing terminology.
     public func flop() throws -> Self { try transforming("flop") { try $0.flipHorizontal() } }
 
     /// Extracts a rectangle from the image.
@@ -630,7 +630,7 @@ public struct Hokusai: Sendable {
     /// PURPOSE: Legacy ImageMagick version shim kept for API compatibility.
     @available(*, deprecated, message: "ImageMagick backend was removed. Use vipsVersion instead.")
     public static var magickVersion: String {
-        return "removed (libvips-only)"
+        return "removed (native runtime)"
     }
 
     /// PURPOSE: Get combined version string
