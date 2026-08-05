@@ -1,4 +1,4 @@
-# Swift-native ergonomic API plan
+# Swift-first ergonomic API plan
 
 ## 1. Executive summary
 
@@ -370,7 +370,7 @@ async let card = base.resize(width: 1200, height: 630, fit: .cover).jpeg().data(
 
 ## 6. Milestone definition
 
-**Title:** Swift-native ergonomic API (Hokusai 1.0)
+**Title:** Swift-first ergonomic API (Hokusai 1.0)
 
 **Goal:** deliver a polished, immutable Swift image pipeline for the common
 encoded-image path: input, geometry and selected visual transforms, composition,

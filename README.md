@@ -4,7 +4,7 @@
 
 # Hokusai
 
-Hokusai is a Swift-native image-processing pipeline for server-side applications. Version 1.0 uses immutable `Hokusai` values: build a recipe synchronously, then evaluate it with an asynchronous output terminal.
+Hokusai is a Swift-first image-processing API for server-side applications. Version 1.0 uses immutable `Hokusai` values: build a recipe synchronously, then evaluate it with an asynchronous output terminal.
 
 ## Requirements
 
@@ -86,7 +86,7 @@ let pdf = try await Hokusai(url: URL(fileURLWithPath: "photo.jpg"))
     .write(to: URL(fileURLWithPath: "report.pdf"))
 ```
 
-PDF output is Cairo-backed and contains the evaluated raster pipeline on one page. It is suitable for generated image reports and layered compositions, but does not currently preserve selectable vector text. The planned Swift-native vector PDF scene API is tracked in [#13](https://github.com/ivantokar/hokusai/issues/13).
+PDF output is Cairo-backed and contains the evaluated raster pipeline on one page. It is suitable for generated image reports and layered compositions, but does not currently preserve selectable vector text. The planned Swift API for vector PDF scenes is tracked in [#13](https://github.com/ivantokar/hokusai/issues/13).
 
 ## Runtime lifecycle
 
