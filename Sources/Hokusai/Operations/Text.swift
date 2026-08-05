@@ -177,6 +177,7 @@ extension HokusaiImage {
         }
 
         guard result == 0, let renderedText else {
+            VipsBackend.discardPartialImage(renderedText)
             throw HokusaiError.textRenderingFailed(VipsBackend.getLastError())
         }
 
@@ -200,6 +201,7 @@ extension HokusaiImage {
 
         let result = swift_vips_gaussblur(pointer, &output, sigma)
         guard result == 0, let out = output else {
+            VipsBackend.discardPartialImage(output)
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }
 

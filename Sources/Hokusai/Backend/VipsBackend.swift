@@ -23,6 +23,7 @@ final class VipsBackend: ImageBackend {
     /// Process-global libvips state. Only read or written while holding
     /// `runtimeLock`, which makes the `nonisolated(unsafe)` sound.
     nonisolated(unsafe) private static var runtimeState: RuntimeState = .uninitialized
+    nonisolated(unsafe) private static var liveImageCount = 0
     private static let runtimeLock = NSLock()
 
     /// PURPOSE: Initialize the process-wide libvips runtime.
@@ -51,11 +52,15 @@ final class VipsBackend: ImageBackend {
     /// PURPOSE: Permanently shut down the process-wide libvips runtime.
     /// CONSTRAINTS: Final and irreversible; must not run while any image is
     /// still alive. Idempotent — repeated calls are no-ops.
-    static func shutdown() {
+    static func shutdown() throws {
         runtimeLock.lock()
         defer { runtimeLock.unlock() }
 
         guard runtimeState == .initialized else { return }
+        guard liveImageCount == 0 else {
+            throw HokusaiError.invalidOperation(
+                "Cannot shut down libvips while \(liveImageCount) Hokusai image handle(s) are still alive")
+        }
         vips_shutdown()
         runtimeState = .shutdownCompleted
     }
@@ -64,6 +69,9 @@ final class VipsBackend: ImageBackend {
     /// INPUT: `pointer` must be a valid owned `VipsImage*`.
     init(takingOwnership pointer: UnsafeMutablePointer<CVips.VipsImage>) {
         self.imagePointer = pointer
+        Self.runtimeLock.lock()
+        Self.liveImageCount += 1
+        Self.runtimeLock.unlock()
     }
 
     deinit {
@@ -73,6 +81,9 @@ final class VipsBackend: ImageBackend {
         if let pointer = imagePointer {
             g_object_unref(pointer)
             imagePointer = nil
+            Self.runtimeLock.lock()
+            Self.liveImageCount -= 1
+            Self.runtimeLock.unlock()
         }
     }
 
@@ -150,6 +161,7 @@ final class VipsBackend: ImageBackend {
             path, &output, arguments.width, arguments.height, arguments.crop, arguments.noRotate)
 
         guard result == 0, let img = output else {
+            discardPartialImage(output)
             throw HokusaiError.loadFailed("thumbnail of \(path): \(getLastError())")
         }
 
@@ -173,6 +185,7 @@ final class VipsBackend: ImageBackend {
         }
 
         guard result == 0, let img = output else {
+            discardPartialImage(output)
             throw HokusaiError.loadFailed("thumbnail from buffer: \(getLastError())")
         }
 
@@ -188,11 +201,11 @@ final class VipsBackend: ImageBackend {
         case "jpeg", "jpg":
             result = swift_vips_jpegsave(pointer, path, Int32(quality ?? 85), 0, 1)
         case "png":
-            result = swift_vips_pngsave(pointer, path, Int32(quality ?? 6), 0)
+            result = swift_vips_pngsave(pointer, path, Int32(quality ?? 6), 0, 1)
         case "webp":
-            result = swift_vips_webpsave(pointer, path, Int32(quality ?? 80), 0, 4)
+            result = swift_vips_webpsave(pointer, path, Int32(quality ?? 80), 0, 4, 1)
         case "avif", "heif", "heic":
-            result = swift_vips_heifsave(pointer, path, Int32(quality ?? 80), 0, 4)
+            result = swift_vips_heifsave(pointer, path, Int32(quality ?? 80), 0, 4, 1)
         case "tiff", "tif":
             result = swift_vips_tiffsave(pointer, path, 0)
         case "gif":
@@ -216,13 +229,13 @@ final class VipsBackend: ImageBackend {
         let result: Int32
         switch targetFormat.lowercased() {
         case "jpeg", "jpg":
-            result = swift_vips_jpegsave_buffer(pointer, &buffer, &length, Int32(quality ?? 85))
+            result = swift_vips_jpegsave_buffer(pointer, &buffer, &length, Int32(quality ?? 85), 1)
         case "png":
-            result = swift_vips_pngsave_buffer(pointer, &buffer, &length, Int32(quality ?? 6))
+            result = swift_vips_pngsave_buffer(pointer, &buffer, &length, Int32(quality ?? 6), 1)
         case "webp":
-            result = swift_vips_webpsave_buffer(pointer, &buffer, &length, Int32(quality ?? 80), 0, 4)
+            result = swift_vips_webpsave_buffer(pointer, &buffer, &length, Int32(quality ?? 80), 0, 4, 1)
         case "avif", "heif", "heic":
-            result = swift_vips_heifsave_buffer(pointer, &buffer, &length, Int32(quality ?? 80))
+            result = swift_vips_heifsave_buffer(pointer, &buffer, &length, Int32(quality ?? 80), 1)
         case "tiff", "tif":
             result = swift_vips_tiffsave_buffer(pointer, &buffer, &length)
         case "gif":
@@ -232,6 +245,7 @@ final class VipsBackend: ImageBackend {
         }
 
         guard result == 0, let buf = buffer else {
+            if let buffer { g_free(buffer) }
             throw HokusaiError.saveFailed(Self.getLastError())
         }
 
@@ -311,11 +325,27 @@ final class VipsBackend: ImageBackend {
         return metadata
     }
 
+    func metadataBlob(named name: String) throws -> Data? {
+        let pointer = try getPointer()
+        var length = 0
+        guard let copied = swift_vips_image_get_blob_copy(pointer, name, &length) else {
+            return nil
+        }
+        defer { g_free(copied) }
+        return Data(bytes: copied, count: length)
+    }
+
     // MARK: - Helper Methods
 
     private func detectFormat(from path: String) -> String {
         let ext = (path as NSString).pathExtension
         return ext.isEmpty ? "jpeg" : ext
+    }
+
+    /// Releases a native image returned alongside a failed operation. libvips
+    /// normally leaves output null on failure, but adapters must not assume it.
+    static func discardPartialImage(_ image: UnsafeMutablePointer<CVips.VipsImage>?) {
+        if let image { g_object_unref(image) }
     }
 
     /// PURPOSE: Copy and clear the global libvips error buffer.

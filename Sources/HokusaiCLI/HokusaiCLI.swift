@@ -5,7 +5,8 @@ import Prompt
 
 /// PURPOSE: CLI entrypoint exposing operational and benchmark commands.
 /// CONSTRAINTS:
-/// - Commands must initialize/shutdown Hokusai runtime per invocation.
+/// - Commands use public Hokusai APIs; ordinary CLI operation never shuts down
+///   the process-global libvips runtime explicitly.
 /// - Keep output human-readable for local operator workflows.
 /// AI HINTS:
 /// - Prefer additive subcommands over behavior changes in existing commands.
@@ -38,7 +39,6 @@ struct InfoCommand: AsyncParsableCommand {
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
-        defer { Hokusai.shutdown() }
 
         prompt.header("Hokusai CLI")
         prompt.panel("Runtime", items: [
@@ -62,9 +62,8 @@ struct InspectCommand: AsyncParsableCommand {
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
-        defer { Hokusai.shutdown() }
 
-        let image = try Hokusai.loadFromFile(input)
+        let image = try Hokusai(url: URL(fileURLWithPath: input))
         let metadata = try image.metadata()
 
         prompt.header("Image Metadata")
@@ -121,24 +120,22 @@ struct ResizeCommand: AsyncParsableCommand {
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
-        defer { Hokusai.shutdown() }
 
-        let image = try Hokusai.loadFromFile(input)
-
-        var options = ResizeOptions()
-        options.fit = CLIParser.parseFit(fit)
-        options.kernel = CLIParser.parseKernel(kernel)
-        options.withoutEnlargement = withoutEnlargement
-        options.withoutReduction = withoutReduction
-
-        let resized = try image.resize(width: width, height: height, options: options)
-        try resized.toFile(output)
+        let resized = try Hokusai(url: URL(fileURLWithPath: input)).resize(
+            width: width,
+            height: height,
+            fit: CLIParser.parseFit(fit),
+            kernel: CLIParser.parsePipelineKernel(kernel),
+            withoutEnlargement: withoutEnlargement,
+            withoutReduction: withoutReduction
+        )
+        let info = try await resized.write(to: URL(fileURLWithPath: output))
 
         prompt.success("Saved resized image")
         prompt.panel("Result", items: [
             ("Input", prompt.path(input)),
             ("Output", prompt.path(output)),
-            ("Size", "\(try resized.width)x\(try resized.height)"),
+            ("Size", "\(info.width)x\(info.height)"),
         ])
     }
 }
@@ -186,7 +183,6 @@ struct ThumbnailCommand: AsyncParsableCommand {
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
-        defer { Hokusai.shutdown() }
 
         var options = ThumbnailOptions()
         options.height = height
@@ -218,7 +214,7 @@ struct ConvertCommand: AsyncParsableCommand {
     @Option(name: .shortAndLong, help: "Output image path.")
     var output: String
 
-    @Option(help: "Output format (jpeg|png|webp|gif|tiff|avif|heif). Optional if output extension is set.")
+    @Option(help: "Output format (jpeg|png|webp|avif). Optional if output extension is set.")
     var format: String?
 
     @Option(help: "Quality for lossy formats.")
@@ -243,26 +239,26 @@ struct ConvertCommand: AsyncParsableCommand {
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
-        defer { Hokusai.shutdown() }
 
-        let image = try Hokusai.loadFromFile(input)
-
-        var options = SaveOptions()
-        options.format = try CLIParser.parseFormat(format, fallbackPath: output)
-        options.quality = quality
-        options.compression = compression
-        options.progressive = progressive
-        options.stripMetadata = stripMetadata
-        options.lossless = lossless
-        options.effort = effort
-
-        try image.toFile(output, options: options)
+        let selectedFormat = try CLIParser.parseFormat(format, fallbackPath: output)
+        let image = try Hokusai(url: URL(fileURLWithPath: input))
+        let configured = try CLIParser.configurePipelineOutput(
+            image,
+            format: selectedFormat,
+            quality: quality,
+            compression: compression,
+            progressive: progressive,
+            stripMetadata: stripMetadata,
+            lossless: lossless,
+            effort: effort
+        )
+        _ = try await configured.write(to: URL(fileURLWithPath: output))
 
         prompt.success("Saved converted image")
         prompt.panel("Result", items: [
             ("Input", prompt.path(input)),
             ("Output", prompt.path(output)),
-            ("Format", options.format?.rawValue ?? "auto"),
+            ("Format", selectedFormat.rawValue),
         ])
     }
 }
@@ -289,12 +285,12 @@ struct RotateCommand: AsyncParsableCommand {
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
-        defer { Hokusai.shutdown() }
 
-        let image = try Hokusai.loadFromFile(input)
-        let bg = try background.map(CLIParser.parseRGBA)
-        let rotated = try image.rotate(angle: .custom(angle), background: bg)
-        try rotated.toFile(output)
+        let image = try Hokusai(url: URL(fileURLWithPath: input))
+        let rgba = try background.map(CLIParser.parseRGBA)
+        let bg = rgba.map { Hokusai.rgba(red: $0[0], green: $0[1], blue: $0[2], opacity: $0[3]) } ?? .transparent
+        let rotated = try image.rotate(by: angle, background: bg)
+        _ = try await rotated.write(to: URL(fileURLWithPath: output))
 
         prompt.success("Saved rotated image")
         prompt.panel("Result", items: [
@@ -332,11 +328,10 @@ struct CropCommand: AsyncParsableCommand {
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
-        defer { Hokusai.shutdown() }
 
-        let image = try Hokusai.loadFromFile(input)
-        let cropped = try image.crop(left: left, top: top, width: width, height: height)
-        try cropped.toFile(output)
+        let cropped = try Hokusai(url: URL(fileURLWithPath: input))
+            .extract(x: left, y: top, width: width, height: height)
+        _ = try await cropped.write(to: URL(fileURLWithPath: output))
 
         prompt.success("Saved cropped image")
         prompt.panel("Result", items: [
@@ -410,9 +405,8 @@ struct TextCommand: AsyncParsableCommand {
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
-        defer { Hokusai.shutdown() }
 
-        let image = try Hokusai.loadFromFile(input)
+        let image = try Hokusai(url: URL(fileURLWithPath: input))
 
         var options = TextOptions()
         options.font = font
@@ -435,7 +429,7 @@ struct TextCommand: AsyncParsableCommand {
         options.rotation = rotation
 
         let withText = try image.drawText(text, x: x, y: y, options: options)
-        try withText.toFile(output)
+        _ = try await withText.write(to: URL(fileURLWithPath: output))
 
         prompt.success("Saved text image")
         prompt.panel("Result", items: [
@@ -499,7 +493,6 @@ struct BenchmarkOperationCommand: AsyncParsableCommand {
         let normalizedOp = operation.lowercased()
 
         try Hokusai.initialize()
-        defer { Hokusai.shutdown() }
 
         let benchmarkName = "op:\(normalizedOp)"
         let (stats, samplesMs) = try BenchmarkRunner.run(
@@ -583,7 +576,6 @@ struct BenchmarkSuiteCommand: AsyncParsableCommand {
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
-        defer { Hokusai.shutdown() }
 
         let cpuCount = ProcessInfo.processInfo.processorCount
         let concurrency = Hokusai.vipsConcurrency
@@ -720,7 +712,6 @@ struct BenchmarkWebPCommand: AsyncParsableCommand {
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
-        defer { Hokusai.shutdown() }
 
         let savedConcurrency = Hokusai.vipsConcurrency
         if vipsConcurrency > 0 {
@@ -901,7 +892,6 @@ struct BenchmarkThumbnailCommand: AsyncParsableCommand {
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
-        defer { Hokusai.shutdown() }
 
         let cpuCount = ProcessInfo.processInfo.processorCount
         let concurrency = Hokusai.vipsConcurrency
@@ -1159,6 +1149,45 @@ enum CLIParser {
         }
     }
 
+    static func parsePipelineKernel(_ value: String) -> ResizeKernel {
+        switch parseKernel(value) {
+        case .nearest: .nearest
+        case .linear: .linear
+        case .cubic: .cubic
+        case .mitchell: .mitchell
+        case .lanczos2: .lanczos2
+        case .lanczos3: .lanczos3
+        }
+    }
+
+    static func configurePipelineOutput(
+        _ pipeline: Hokusai,
+        format: ImageFormat,
+        quality: Int?,
+        compression: Int?,
+        progressive: Bool,
+        stripMetadata: Bool,
+        lossless: Bool,
+        effort: Int?
+    ) throws -> Hokusai {
+        let configured: Hokusai
+        switch format {
+        case .jpeg:
+            configured = try pipeline.jpeg(quality: quality ?? 80, progressive: progressive)
+        case .png:
+            configured = try pipeline.png(compressionLevel: compression ?? 6, progressive: progressive)
+        case .webp:
+            configured = try pipeline.webp(quality: quality ?? 80, effort: effort ?? 4, lossless: lossless)
+        case .avif:
+            configured = try pipeline.avif(quality: quality ?? 50, effort: effort ?? 4, lossless: lossless)
+        case .pdf:
+            configured = try pipeline.pdf()
+        case .gif, .tiff, .heif, .svg:
+            throw ValidationError("The 1.0 pipeline CLI does not support output format: \(format.rawValue)")
+        }
+        return try stripMetadata ? configured.removeMetadata() : configured.preserveMetadata()
+    }
+
     static func parseTextAlign(_ value: String) -> TextAlignment {
         switch value.lowercased() {
         case "center": return .center
@@ -1232,4 +1261,5 @@ enum CLIParser {
 
         return numbers
     }
+
 }

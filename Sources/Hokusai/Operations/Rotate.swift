@@ -28,6 +28,7 @@ extension HokusaiImage {
             let result = swift_vips_rot(pointer, &output, vipsAngle)
 
             guard result == 0, let out = output else {
+                VipsBackend.discardPartialImage(output)
                 throw HokusaiError.vipsError(VipsBackend.getLastError())
             }
 
@@ -48,6 +49,7 @@ extension HokusaiImage {
                 vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgPtr).assumingMemoryBound(to: VipsArea.self)))
 
                 guard result == 0, let out = output else {
+                    VipsBackend.discardPartialImage(output)
                     throw HokusaiError.vipsError(VipsBackend.getLastError())
                 }
 
@@ -56,6 +58,7 @@ extension HokusaiImage {
                 let result = swift_vips_similarity(pointer, &output, degrees)
 
                 guard result == 0, let out = output else {
+                    VipsBackend.discardPartialImage(output)
                     throw HokusaiError.vipsError(VipsBackend.getLastError())
                 }
 
@@ -90,6 +93,7 @@ extension HokusaiImage {
             let result = swift_vips_flip(pointer, &output, VIPS_DIRECTION_HORIZONTAL)
 
             guard result == 0, let out = output else {
+                VipsBackend.discardPartialImage(output)
                 throw HokusaiError.vipsError(VipsBackend.getLastError())
             }
 
@@ -99,6 +103,7 @@ extension HokusaiImage {
             let result = swift_vips_flip(pointer, &output, VIPS_DIRECTION_VERTICAL)
 
             guard result == 0, let out = output else {
+                VipsBackend.discardPartialImage(output)
                 throw HokusaiError.vipsError(VipsBackend.getLastError())
             }
 
@@ -130,6 +135,7 @@ extension HokusaiImage {
         let result = swift_vips_autorot(pointer, &output)
 
         guard result == 0, let out = output else {
+            VipsBackend.discardPartialImage(output)
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }
 

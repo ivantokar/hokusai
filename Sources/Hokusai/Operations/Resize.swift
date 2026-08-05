@@ -49,6 +49,7 @@ extension HokusaiImage {
         let result = swift_vips_resize(pointer, &output, hscale, vscale, vipsKernel)
 
         guard result == 0, let out = output else {
+            VipsBackend.discardPartialImage(output)
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }
 
@@ -232,6 +233,7 @@ extension HokusaiImage {
         let result = swift_vips_embed(pointer, &output, Int32(x), Int32(y), Int32(width), Int32(height), bgArray)
 
         guard result == 0, let out = output else {
+            VipsBackend.discardPartialImage(output)
             vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }

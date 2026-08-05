@@ -36,7 +36,7 @@ extension HokusaiImage {
             let compression = Int32(options.compression ?? 6)
             let interlace = options.progressive ? 1 : 0
 
-            let result = swift_vips_pngsave(pointer, path, compression, Int32(interlace))
+            let result = swift_vips_pngsave(pointer, path, compression, Int32(interlace), options.stripMetadata ? 1 : 0)
             guard result == 0 else {
                 throw HokusaiError.saveFailed(VipsBackend.getLastError())
             }
@@ -46,7 +46,7 @@ extension HokusaiImage {
             let lossless = options.lossless ? 1 : 0
             let effort = Int32(options.effort ?? 4)
 
-            let result = swift_vips_webpsave(pointer, path, quality, Int32(lossless), effort)
+            let result = swift_vips_webpsave(pointer, path, quality, Int32(lossless), effort, options.stripMetadata ? 1 : 0)
             guard result == 0 else {
                 throw HokusaiError.saveFailed(VipsBackend.getLastError())
             }
@@ -64,7 +64,7 @@ extension HokusaiImage {
             let lossless = options.lossless ? 1 : 0
             let effort = Int32(options.effort ?? 4)
 
-            let result = swift_vips_heifsave(pointer, path, quality, Int32(lossless), effort)
+            let result = swift_vips_heifsave(pointer, path, quality, Int32(lossless), effort, options.stripMetadata ? 1 : 0)
             guard result == 0 else {
                 throw HokusaiError.saveFailed(VipsBackend.getLastError())
             }
@@ -74,7 +74,7 @@ extension HokusaiImage {
             let lossless = 0
             let effort = Int32(4)
 
-            let result = swift_vips_heifsave(pointer, path, quality, Int32(lossless), effort)
+            let result = swift_vips_heifsave(pointer, path, quality, Int32(lossless), effort, options.stripMetadata ? 1 : 0)
             guard result == 0 else {
                 throw HokusaiError.saveFailed(VipsBackend.getLastError())
             }
@@ -110,7 +110,8 @@ extension HokusaiImage {
                 pointer,
                 &buffer,
                 &bufferSize,
-                quality
+                quality,
+                options.stripMetadata ? 1 : 0
             )
 
         case .png:
@@ -119,7 +120,8 @@ extension HokusaiImage {
                 pointer,
                 &buffer,
                 &bufferSize,
-                compression
+                compression,
+                options.stripMetadata ? 1 : 0
             )
 
         case .webp:
@@ -132,7 +134,8 @@ extension HokusaiImage {
                 &bufferSize,
                 quality,
                 Int32(lossless),
-                effort
+                effort,
+                options.stripMetadata ? 1 : 0
             )
 
         case .tiff:
@@ -148,7 +151,8 @@ extension HokusaiImage {
                 pointer,
                 &buffer,
                 &bufferSize,
-                quality
+                quality,
+                options.stripMetadata ? 1 : 0
             )
 
         case .gif:
