@@ -1,54 +1,31 @@
 # Benchmark Environment
 
-All numbers in `results.md` / `results.csv` were measured on this machine and build.
-
-### Environment
+The current results in `results.md` and `results.csv` were measured with the
+fixtures committed beside this file. They replace the earlier v0.3.0 figures,
+whose generated input set is no longer present in the repository.
 
 | Property | Value |
-|----------|-------|
-| Hokusai commit | `cbb2e68` (v0.3.0, `main`, clean tree) |
-| Build configuration | Release (`swift build -c release`) |
-| Swift | 6.3.3 (swiftlang-6.3.3.1.3, arm64-apple-macosx) |
-| libvips | 8.18.2 (Homebrew) |
-| libwebp | 1.6.0 |
-| OS | macOS 27.0 (build 26A5378j) |
-| CPU | Apple M4 Pro |
-| RAM | 24 GB |
-| Logical cores | 12 |
-| Default `vips_concurrency` | 12 |
-| Default libvips operation cache | 100 operations |
+| --- | --- |
+| Hokusai commit | `f14f2c7` |
+| Build configuration | Release (`swift run -c release`) |
+| Swift | 6.3.3 |
+| libvips | 8.18.2 |
+| OS | macOS 27.0 (26A5388g) |
+| `vips_concurrency` | 12 (libvips default) |
 
-### Test images
-
-All content derives from a real photograph (tiled + mild gaussian noise), so
-JPEG/WebP entropy is photo-like, not synthetic-flat.
+## Fixtures
 
 | Fixture | Properties |
-|---------|-----------|
-| `6000x4000.jpg` | 24 MP JPEG, Q90, 6.7 MB |
-| `4000x6000.jpg` | 24 MP portrait JPEG, Q90, 6.8 MB |
-| `4000x4000-alpha.png` | 16 MP RGBA PNG, 45 MB |
-| `exif-rotated.jpg` | 3000×2000 JPEG with EXIF Orientation=6 (displays 2000×3000) |
-| `many/` | 50 distinct 3000×2000 JPEGs, Q88, ~57 MB total |
+| --- | --- |
+| `file_example_JPG_1MB.jpg` | 3800 × 2534, 3-channel sRGB progressive JPEG, 1.0 MB |
+| `file_example_WEBP_1500kB.webp` | 5760 × 3840, 3-channel sRGB WebP, 1.4 MB |
 
-### Methodology
+## Method
 
-- Release builds only; every case warmed up before measurement; ≥6–50 measured
-  iterations per case (see `n` column in the CSV). No single-run numbers.
-- Wall time via monotonic clock; user/system CPU via `getrusage(RUSAGE_SELF)`
-  deltas over the measured window; peak RSS via `/usr/bin/time -l`
-  (dedicated process per scenario).
-- The libvips **operation cache** is disabled (`vips_cache_set_max(0)`) for all
-  per-op pipeline benchmarks so numbers reflect real work, **except**
-  benchmark 5's "warm cache" cases, which deliberately keep the default cache
-  to demonstrate its effect. OS page cache is warm everywhere (files recently
-  written); cold-storage I/O is out of scope.
-- Every produced image was validated: WebP RIFF magic, decodable by libvips,
-  exact expected dimensions (EXIF-rotated expectations account for
-  auto-rotation). Encoding to a buffer forces full pipeline evaluation —
-  no lazy-pipeline-creation-only timings.
-- Gaussian blur is not part of Hokusai's public API yet; benchmarks 3–4 call
-  the same libvips functions (`vips_gaussblur`, `vips_webpsave_buffer`) the
-  Hokusai shim wraps, in-process, with identical settings.
-- WebP output is Q80, default effort, in-memory buffers (no disk writes in the
-  measured path).
+- Warm up each path twice, then measure five complete pipeline evaluations.
+- Each evaluation creates a fresh Hokusai pipeline: source decode → optional
+  `blur(sigma: 50)` → WebP Q80 at effort 4 → in-memory output.
+- `data()` forces the entire libvips pipeline to evaluate. Disk writes are not
+  included.
+- The small sample count is intentional for this first reproducible run; use
+  `--iterations 20` or more when comparing changes across machines.

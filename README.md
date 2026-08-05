@@ -101,10 +101,11 @@ Do not call `Hokusai.shutdown()` in a normal server or application lifecycle. It
 ## CLI
 
 ```bash
-swift run hokusai inspect --input photo.jpg
-swift run hokusai resize --input photo.jpg --output social.webp --width 1200 --height 630 --fit cover
-swift run hokusai convert --input photo.jpg --output photo.pdf
-swift run hokusai thumbnail --input photo.jpg --output thumb.jpg --width 400
+hokusai inspect --input photo.jpg
+hokusai resize --input photo.jpg --output social.webp --width 1200 --height 630 --fit cover
+hokusai convert --input photo.jpg --output photo.pdf
+hokusai thumbnail --input photo.jpg --output thumb.jpg --width 400
+hokusai benchmark pipeline --input photo.jpg --sigma 50
 ```
 
 The optimized `thumbnail` CLI command currently uses the intentionally retained legacy thumbnail loader while its public 1.0 pipeline counterpart is designed.

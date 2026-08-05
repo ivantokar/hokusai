@@ -31,7 +31,7 @@ All notable changes to this project are documented in this file.
 - Thumbnail API backed by `vips_thumbnail`: `Hokusai.thumbnail(from:width:options:)` for file paths and buffers, and `HokusaiImage.thumbnail(width:options:)` for already-loaded images, with `ThumbnailOptions` (height bound, `centre`/`attention`/`entropy` crop, `noRotate`) and EXIF auto-rotation by default.
 - `LoadOptions` with `AccessMode` (`random`/`sequential`) exposing the libvips access-pattern hint, plus the `.sequential` preset.
 - `Hokusai.vipsConcurrency` for reading/setting the libvips thread pool size.
-- `hokusai thumbnail` CLI command and `hokusai benchmark thumbnail` comparison benchmark.
+- `hokusai thumbnail` CLI command.
 - `HokusaiError.invalidDimensions` for centralized dimension validation (positive, `Int32`-safe; crop strategies require an explicit height).
 - GitHub Actions CI: build, tests, release CLI build, and CLI smoke tests on macOS and Linux (Swift 6.0/6.1).
 - Realistic test fixtures and an expanded suite (62 tests): geometry, crop strategies, EXIF orientation, error semantics, lifecycle, and concurrency.
@@ -56,7 +56,7 @@ All notable changes to this project are documented in this file.
 
 ### Added
 - Added first-party `hokusai` CLI target.
-- Documented CLI usage from source (`swift run hokusai ...`) and Homebrew installation flow.
+- Documented CLI usage (`hokusai ...`) and Homebrew installation flow.
 
 ### Notes
 - This release builds on the native-backend migration introduced in `0.2.0`.

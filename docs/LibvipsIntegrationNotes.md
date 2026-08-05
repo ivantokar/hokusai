@@ -254,7 +254,7 @@ New benchmark cases added:
 - `thumbnail:file:1200x800` — `vips_thumbnail`, width+height bound
 - `resize:sequential:1200x800` — sequential load + `vips_resize`
 
-New dedicated benchmark: `hokusai benchmark thumbnail` — head-to-head comparison of all resize/thumbnail paths with Op path and Access mode columns.
+The legacy thumbnail comparison benchmark was removed with the legacy CLI surface. The supported benchmark command is `hokusai benchmark pipeline`.
 
 ---
 
