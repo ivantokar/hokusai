@@ -19,14 +19,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install libvips
-        run: brew install vips
+      - name: Install libvips and Cairo PDF support
+        run: brew install vips cairo
 
       - name: Swift version
         run: swift --version
 
       - name: Build (library + CLI + tests)
         run: swift build --build-tests
+
+      - name: Build optional integration products
+        run: |
+          swift build --target HokusaiNIO
+          swift build --target HokusaiLegacy
 
       - name: Test
         run: swift test
@@ -41,6 +46,9 @@ jobs:
           $BIN thumbnail \
             --input Tests/HokusaiTests/Fixtures/landscape-asym.jpg \
             --output /tmp/ci-thumb.jpg --width 100 --height 100 --crop centre
+          $BIN resize \
+            --input Tests/HokusaiTests/Fixtures/landscape-asym.jpg \
+            --output /tmp/ci-resize.webp --width 100 --height 100 --fit cover
           if $BIN thumbnail --input Tests/HokusaiTests/Fixtures/landscape-asym.jpg \
             --output /tmp/ci-bad.jpg --width 0; then
             echo "expected non-zero exit for invalid width" && exit 1
@@ -61,11 +69,16 @@ jobs:
       - name: Install libvips (>= 8.9 required)
         run: |
           apt-get update
-          apt-get install -y libvips-dev pkg-config fonts-dejavu-core
+          apt-get install -y libvips-dev libcairo2-dev pkg-config fonts-dejavu-core
           pkg-config --modversion vips
 
       - name: Build (library + CLI + tests)
         run: swift build --build-tests
+
+      - name: Build optional integration products
+        run: |
+          swift build --target HokusaiNIO
+          swift build --target HokusaiLegacy
 
       - name: Test
         run: swift test
@@ -80,6 +93,9 @@ jobs:
           $BIN thumbnail \
             --input Tests/HokusaiTests/Fixtures/landscape-asym.jpg \
             --output /tmp/ci-thumb.jpg --width 100 --height 100 --crop centre
+          $BIN resize \
+            --input Tests/HokusaiTests/Fixtures/landscape-asym.jpg \
+            --output /tmp/ci-resize.webp --width 100 --height 100 --fit cover
           if $BIN thumbnail --input Tests/HokusaiTests/Fixtures/landscape-asym.jpg \
             --output /tmp/ci-bad.jpg --width 0; then
             echo "expected non-zero exit for invalid width" && exit 1

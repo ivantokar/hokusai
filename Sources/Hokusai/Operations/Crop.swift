@@ -18,6 +18,7 @@ extension HokusaiImage {
         )
 
         guard result == 0, let out = output else {
+            VipsBackend.discardPartialImage(output)
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }
 
@@ -59,6 +60,7 @@ extension HokusaiImage {
             )
 
             guard result == 0, let out = output else {
+                VipsBackend.discardPartialImage(output)
                 throw HokusaiError.vipsError(VipsBackend.getLastError())
             }
 
@@ -75,6 +77,7 @@ extension HokusaiImage {
             )
 
             guard result == 0, let out = output else {
+                VipsBackend.discardPartialImage(output)
                 throw HokusaiError.vipsError(VipsBackend.getLastError())
             }
 
@@ -96,12 +99,23 @@ extension HokusaiImage {
 
     /// PURPOSE: Trim "boring" edges from the image
     public func trim(threshold: Double = 10.0, background: [Double]? = nil) throws -> HokusaiImage {
-        // TODO: Implement trim functionality
-        // PURPOSE: This requires using vips_find_trim to detect trim boundaries,
-        // PURPOSE: then using crop to extract the trimmed region
-
-        // PURPOSE: For now, return a copy
-        return self
+        guard threshold.isFinite, threshold >= 0 else {
+            throw HokusaiError.invalidOperation("Trim threshold must be finite and non-negative")
+        }
+        let pointer = try ensureVipsBackend().getPointer()
+        var left: Int32 = 0
+        var top: Int32 = 0
+        var width: Int32 = 0
+        var height: Int32 = 0
+        // The legacy background parameter was never implemented. Do not accept
+        // it silently: callers should use the 1.0 `Hokusai.trim(threshold:)`.
+        if background != nil {
+            throw HokusaiError.unsupportedFormat("trim background is not supported")
+        }
+        guard swift_vips_find_trim(pointer, &left, &top, &width, &height, threshold) == 0 else {
+            throw HokusaiError.vipsError(VipsBackend.getLastError())
+        }
+        return try crop(left: Int(left), top: Int(top), width: Int(width), height: Int(height))
     }
 
     // MARK: - Private Helpers

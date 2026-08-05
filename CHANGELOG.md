@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.0.0] - 2026-08-05
+
+### Added
+- Immutable `Hokusai` pipelines with typed `Data`, file-`URL`, and optional
+  SwiftNIO `ByteBuffer` inputs.
+- Async `data()` and `write(to:)` terminals, typed JPEG/PNG/WebP/AVIF encoders,
+  typed composition, geometry, colour, alpha, and metadata APIs.
+- Cairo-backed one-page PDF output via `.pdf(pageSize:dpi:)`, including file
+  extension inference and `hokusai convert --output document.pdf`.
+- `HokusaiLegacy` product for intentional, temporary 0.x adapter imports.
+
+### Changed
+- **Breaking:** the recommended API is now `Hokusai(data:)` or `Hokusai(url:)`.
+  Processing returns immutable values; terminal encoding and file writes are
+  asynchronous. See the README's 0.x-to-1.0 migration table.
+- Output metadata is removed by default; use `preserveMetadata()` only when a
+  downstream consumer needs embedded metadata.
+
+### Compatibility
+- The optimised `thumbnail` CLI command continues to use the intentionally
+  retained legacy thumbnail loader while its public 1.0 pipeline counterpart is
+  designed. All other primary CLI transforms use the 1.0 pipeline.
+
 ## [0.3.0] - 2026-07-15
 
 ### Added

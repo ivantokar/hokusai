@@ -33,6 +33,7 @@ extension HokusaiImage {
             pointer, &output, arguments.width, arguments.height, arguments.crop, arguments.noRotate)
 
         guard result == 0, let out = output else {
+            VipsBackend.discardPartialImage(output)
             throw HokusaiError.vipsError("thumbnail transformation failed: \(VipsBackend.getLastError())")
         }
 

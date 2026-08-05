@@ -7,7 +7,28 @@
 **Fast, libvips-powered image processing for Swift server-side applications**
 
 Hokusai is a high-performance image processing library built on **libvips** for blazing-fast operations (resize, crop, rotate, convert, composite) and text rendering via **Pango/Cairo through libvips**.
-Built for modern Swift server applications with comprehensive error handling and a clean, chainable API. (The current API is synchronous; the execution/concurrency policy for offloading work will be defined in the upcoming pipeline-API milestone.)
+
+## Hokusai 1.0 implementation TODO
+
+The Sharp-inspired Swift-native redesign is tracked in
+[`docs/SharpInspiredSwiftDXPlan.md`](docs/SharpInspiredSwiftDXPlan.md). GitHub
+Issues will be published only after this checklist is complete and verified.
+
+- [x] Immutable `Hokusai` pipeline with `Data` and file-`URL` inputs.
+- [x] Typed resize, geometry, composition, selected colour transforms, and async terminal output.
+- [x] Typed JPEG, PNG, WebP, AVIF, and Cairo-backed PDF output configuration.
+- [x] Optional `HokusaiNIO` `ByteBuffer` bridge.
+- [x] Idempotent runtime initialization and refusal to shut down with live native images.
+- [x] Pipeline, lifecycle, thumbnail, and error regression coverage.
+- [x] Metadata model with pages, density, orientation, colour space, and EXIF/ICC/XMP access.
+- [x] Curated transform API, including native trim and tint, with no-op legacy trim removed.
+- [x] Migrate primary CLI transforms and output paths to the public 1.0 pipeline; retain the optimised thumbnail loader through `HokusaiLegacy` during its transition.
+- [x] Add the `HokusaiLegacy` compatibility target and migration guide.
+- [x] Add DocC recipes, pipeline/lifecycle regression coverage, and release validation.
+- [x] Add Linux CI confirmation and 1.0 release notes.
+Built for modern Swift server applications with comprehensive error handling and
+an immutable, chainable pipeline API. Graph construction is synchronous;
+encoding and file output are asynchronous terminal operations.
 
 [![Swift](https://img.shields.io/badge/Swift-6.0+-orange.svg)](https://swift.org)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20|%20Linux-lightgrey.svg)](https://swift.org)
@@ -47,17 +68,18 @@ Hokusai provides a unified Swift API backed by libvips for all operations, inclu
 - Swift 6.0+
 - macOS 13+ or Linux (Ubuntu/Debian tested)
 - libvips **8.9 or newer** (the C shim uses `VipsSource`-based loading and `vips_error_buffer_copy`)
+- Cairo with PDF surface support (for PDF output)
 - `pkg-config` plus the native libraries below
 
 **macOS:**
 ```bash
-brew install vips pkg-config
+brew install vips cairo pkg-config
 ```
 
 **Ubuntu/Debian:**
 ```bash
 sudo apt update
-sudo apt install libvips-dev pkg-config
+sudo apt install libvips-dev libcairo2-dev pkg-config
 ```
 
 ### Swift Package Manager
@@ -66,7 +88,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/ivantokar/hokusai.git", from: "0.2.0")
+    .package(url: "https://github.com/ivantokar/hokusai.git", from: "1.0.0")
 ]
 
 targets: [
@@ -93,6 +115,9 @@ swift run hokusai resize --input ./input.jpg --output ./out.jpg --width 1200 --h
 swift run hokusai thumbnail --input ./photo.jpg --output ./thumb.jpg --width 400
 swift run hokusai thumbnail --input ./photo.jpg --output ./thumb.jpg --width 400 --height 300 --crop attention
 
+# PDF — one raster image page, rendered through Cairo
+swift run hokusai convert --input ./photo.jpg --output ./photo.pdf
+
 # Benchmarks
 swift run hokusai benchmark suite --input ./photo.jpg                      # full suite
 swift run hokusai benchmark thumbnail --input ./photo.jpg --width 400 --height 300  # resize vs thumbnail comparison
@@ -116,33 +141,42 @@ If you have not published the formula yet, use `swift run hokusai ...` until the
 ```swift
 import Hokusai
 
-// Optional: initialize explicitly to surface libvips failures at startup.
-// Loading entry points initialize the runtime automatically otherwise.
-try Hokusai.initialize()
+let output = try await Hokusai(url: URL(fileURLWithPath: "photo.jpg"))
+    .autoOrient()
+    .resize(width: 800, height: 800, fit: .cover)
+    .jpeg(quality: 85)
+    .write(to: URL(fileURLWithPath: "output.jpg"))
 
-// Load an image
-let image = try Hokusai.image(from: "photo.jpg")
-
-// Chain operations
-let processed = try image
-    .resize(width: 800)
-    .rotate(angle: .degree90)
-    .drawText(
-        "Hello World",
-        x: 100,
-        y: 100,
-        options: TextOptions(
-            font: "/path/to/font.ttf",
-            fontSize: 48,
-            color: [255, 255, 255, 255],
-            strokeColor: [0, 0, 0, 255],
-            strokeWidth: 2.0
-        )
-    )
-
-// Save result
-try processed.toFile("output.jpg", quality: 85)
+print("Wrote \(output.width)x\(output.height) JPEG")
 ```
+
+### PDF output
+
+PDF output is Cairo-backed: the Hokusai pipeline is rasterized onto one PDF
+page, while the PDF container and future text layers are rendered by Cairo and
+Pango. It is intended for image documents and does not preserve source PDF
+vectors.
+
+```swift
+let pdf = try await Hokusai(url: URL(fileURLWithPath: "photo.jpg"))
+    .resize(width: 1200)
+    .pdf(pageSize: .a4)
+    .data()
+```
+
+### 0.x to 1.0 migration
+
+The stable API is the `Hokusai` pipeline. Prefer a file `URL` over a path
+string, use `extract` rather than `crop`, and select an encoder before calling
+the asynchronous terminal method.
+
+| 0.x adapter API | 1.0 pipeline API |
+| --- | --- |
+| `Hokusai.image(from: path)` | `Hokusai(url: URL(fileURLWithPath: path))` |
+| `image.resize(...).toFile(path)` | `try await Hokusai(...).resize(...).write(to: URL(...))` |
+| `image.crop(left:top:width:height:)` | `.extract(x:y:width:height:)` |
+| `image.toBuffer(options:)` | `.jpeg()` / `.png()` / `.webp()` / `.avif()`, then `try await .data()` |
+| `Hokusai.shutdown()` | Do not call it in ordinary applications; process exit owns teardown. |
 
 ## API Documentation
 

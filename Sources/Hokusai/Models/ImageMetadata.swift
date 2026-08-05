@@ -32,6 +32,23 @@ public struct ImageMetadata: Sendable {
     /// PURPOSE: File size in bytes (if available)
     public let size: Int?
 
+    /// Typed interpretation of the image colour space when Hokusai recognises it.
+    public let colorSpace: ColorSpace?
+
+    /// Horizontal and vertical image density in dots per inch.
+    public let densityXY: ImageDensity?
+
+    /// Pixel height of each page for multi-page images.
+    public let pageHeight: Int?
+
+    /// Whether the source contains more than one page/frame.
+    public let isAnimated: Bool
+
+    /// Embedded metadata blocks, copied from libvips when present.
+    public let exif: Data?
+    public let iccProfile: Data?
+    public let xmp: Data?
+
     public init(
         width: Int,
         height: Int,
@@ -42,7 +59,14 @@ public struct ImageMetadata: Sendable {
         orientation: Int? = nil,
         density: Double? = nil,
         pages: Int? = nil,
-        size: Int? = nil
+        size: Int? = nil,
+        colorSpace: ColorSpace? = nil,
+        densityXY: ImageDensity? = nil,
+        pageHeight: Int? = nil,
+        isAnimated: Bool = false,
+        exif: Data? = nil,
+        iccProfile: Data? = nil,
+        xmp: Data? = nil
     ) {
         self.width = width
         self.height = height
@@ -54,6 +78,24 @@ public struct ImageMetadata: Sendable {
         self.density = density
         self.pages = pages
         self.size = size
+        self.colorSpace = colorSpace
+        self.densityXY = densityXY
+        self.pageHeight = pageHeight
+        self.isAnimated = isAnimated
+        self.exif = exif
+        self.iccProfile = iccProfile
+        self.xmp = xmp
+    }
+}
+
+/// Image pixel density expressed in dots per inch.
+public struct ImageDensity: Sendable, Equatable {
+    public let horizontal: Double
+    public let vertical: Double
+
+    public init(horizontal: Double, vertical: Double) {
+        self.horizontal = horizontal
+        self.vertical = vertical
     }
 }
 

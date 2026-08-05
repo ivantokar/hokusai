@@ -26,6 +26,15 @@ import Testing
         #expect(try Hokusai.image(from: data).width == 1)
     }
 
+    @Test func shutdownRefusesToTearDownLiveImages() throws {
+        let data = try loadFixtureData(named: "pixel", ext: "png")
+        let image = try Hokusai.image(from: data)
+        #expect(throws: HokusaiError.self) {
+            try Hokusai.shutdown()
+        }
+        #expect(try image.width == 1)
+    }
+
     @Test func concurrentInitializationDoesNotRace() async throws {
         try await withThrowingTaskGroup(of: Void.self) { group in
             for _ in 0..<32 {
