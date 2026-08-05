@@ -352,7 +352,7 @@ under swift-testing on both macOS and Linux.
 
 `Hokusai.image(from:)` was declared `async` while performing synchronous
 libvips work on the caller's executor — a fake-async signature. It is now
-synchronous. The Sharp-inspired DX milestone will define the library's
+synchronous. The ergonomic API milestone will define the library's
 terminal execution and concurrency policy (e.g. where decode work is
 offloaded); until then callers own that decision.
 
