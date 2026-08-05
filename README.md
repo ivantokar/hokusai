@@ -4,7 +4,11 @@
 
 # Hokusai
 
-Hokusai is a Swift-first image-processing API for server-side applications. Version 1.0 uses immutable `Hokusai` values: build a recipe synchronously, then evaluate it with an asynchronous output terminal.
+## High-performance Swift image processing
+
+Hokusai is a Swift image-processing library powered by [libvips](https://www.libvips.org/) for server-side applications. It provides a clear, immutable pipeline API: build a recipe synchronously, then evaluate it with an asynchronous output terminal.
+
+libvips processes images on demand, using small regions of pixel data at a time and available CPU cores efficiently. Hokusai exposes that capability through Swift without spawning child processes.
 
 ## Requirements
 
