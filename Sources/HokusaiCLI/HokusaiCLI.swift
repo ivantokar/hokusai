@@ -3,13 +3,11 @@ import ArgumentParser
 import Hokusai
 import Prompt
 
-/// PURPOSE: CLI entrypoint exposing operational and benchmark commands.
-/// CONSTRAINTS:
-/// - Commands use public Hokusai APIs; ordinary CLI operation never shuts down
-///   the process-global libvips runtime explicitly.
-/// - Keep output human-readable for local operator workflows.
-/// AI HINTS:
-/// - Prefer additive subcommands over behavior changes in existing commands.
+/// Entry point for the first-party Hokusai command-line tool.
+///
+/// Commands deliberately use only public Hokusai APIs. The process-global
+/// libvips runtime remains active for the command's lifetime, and output is
+/// intended for an operator reading it in a terminal.
 @main
 struct HokusaiCLI: AsyncParsableCommand {
     static let configuration = CommandConfiguration(

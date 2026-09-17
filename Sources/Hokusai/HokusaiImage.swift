@@ -1,15 +1,17 @@
 import Foundation
 import CVips
 
-/// PURPOSE: Storage for backend image data
+/// The concrete native storage used by a legacy image handle.
 enum ImageData {
     case vips(VipsBackend)
 }
 
-/// PURPOSE: Unified image wrapper used by all public image operations.
-/// CONSTRAINTS:
-/// - Uses Hokusai's native image runtime.
-/// - Keep this as a thin façade over backend operations.
+/// A legacy reference-style image handle backed by an immutable libvips graph.
+///
+/// New code should prefer the value-semantic ``Hokusai`` pipeline. This type
+/// remains public for migration compatibility and for the optimized legacy
+/// thumbnail API. Every transform returns a new handle; the receiver is never
+/// mutated.
 ///
 /// Concurrency policy (`@unchecked Sendable`): a `HokusaiImage` is a handle to
 /// an immutable libvips image pipeline. The wrapper never mutates its backend
@@ -21,15 +23,14 @@ enum ImageData {
 public final class HokusaiImage: @unchecked Sendable {
     private let imageData: ImageData
 
-    /// PURPOSE: Internal initializer with backend data
+    /// Creates a handle that owns the supplied backend storage.
     init(backend: ImageData) {
         self.imageData = backend
     }
 
     // MARK: - Backend Management
 
-    /// PURPOSE: Resolve and return the active libvips backend instance.
-    /// OUTPUT: Live `VipsBackend` for this image.
+    /// Returns the backend that owns this image's native pointer.
     func ensureVipsBackend() throws -> VipsBackend {
         switch imageData {
         case .vips(let backend):
@@ -39,7 +40,7 @@ public final class HokusaiImage: @unchecked Sendable {
 
     // MARK: - Metadata Access
 
-    /// PURPOSE: Get image width
+    /// The current image width in pixels.
     public var width: Int {
         get throws {
             switch imageData {
@@ -49,7 +50,7 @@ public final class HokusaiImage: @unchecked Sendable {
         }
     }
 
-    /// PURPOSE: Get image height
+    /// The current image height in pixels.
     public var height: Int {
         get throws {
             switch imageData {
@@ -59,7 +60,7 @@ public final class HokusaiImage: @unchecked Sendable {
         }
     }
 
-    /// PURPOSE: Get number of bands (channels)
+    /// The number of channels in the current image.
     public var bands: Int {
         get throws {
             switch imageData {
@@ -69,7 +70,7 @@ public final class HokusaiImage: @unchecked Sendable {
         }
     }
 
-    /// PURPOSE: Check if image has alpha channel
+    /// Whether the current image has an alpha channel.
     public var hasAlpha: Bool {
         get throws {
             switch imageData {
@@ -79,10 +80,10 @@ public final class HokusaiImage: @unchecked Sendable {
         }
     }
 
-    /// PURPOSE: Return normalized metadata common to all API consumers.
-    /// OUTPUT: `ImageMetadata` with dimensions/channels/alpha and optional fields.
-    /// AI HINTS:
-    /// - Keep optional fields nil unless we can extract them reliably.
+    /// Returns normalized metadata available from the current libvips image.
+    ///
+    /// Optional fields remain `nil` when the loader did not expose them. This
+    /// call may inspect headers but does not encode an output image.
     public func metadata() throws -> ImageMetadata {
         let metadata = try extendedMetadata()
         let format = metadata["vips-loader"].flatMap { loader in
@@ -109,8 +110,10 @@ public final class HokusaiImage: @unchecked Sendable {
         )
     }
 
-    /// PURPOSE: Return extended libvips-derived metadata key/value map.
-    /// OUTPUT: Best-effort dictionary with normalized convenience aliases.
+    /// Returns a best-effort view of libvips metadata fields.
+    ///
+    /// Prefer ``metadata()`` for stable application code. This compatibility
+    /// API exposes loader-specific keys and normalized convenience aliases.
     public func extendedMetadata() throws -> [String: String] {
         switch imageData {
         case .vips(let backend):
@@ -118,6 +121,7 @@ public final class HokusaiImage: @unchecked Sendable {
         }
     }
 
+    /// Normalizes recognised libvips interpretation names to the public enum.
     private static func colorSpace(from interpretation: String?) -> ColorSpace? {
         switch interpretation?.lowercased() {
         case "srgb", "rgb16": .sRGB
@@ -126,6 +130,7 @@ public final class HokusaiImage: @unchecked Sendable {
         }
     }
 
+    /// Builds a density value only when both libvips resolutions are present.
     private static func density(from metadata: [String: String]) -> ImageDensity? {
         guard let horizontal = metadata["xresDpi"].flatMap(Double.init),
               let vertical = metadata["yresDpi"].flatMap(Double.init) else {
@@ -134,6 +139,7 @@ public final class HokusaiImage: @unchecked Sendable {
         return ImageDensity(horizontal: horizontal, vertical: vertical)
     }
 
+    /// Copies one optional binary metadata block out of the native image.
     private func metadataBlob(named name: String) throws -> Data? {
         switch imageData {
         case .vips(let backend): return try backend.metadataBlob(named: name)
@@ -142,9 +148,11 @@ public final class HokusaiImage: @unchecked Sendable {
 
     // MARK: - Save Operations
 
-    /// PURPOSE: Encode and write image to file.
-    /// INPUT: Destination `path`; optional `format` and `quality` overrides.
-    /// SIDE EFFECTS: Filesystem write.
+    /// Encodes this legacy handle and writes it to a file.
+    ///
+    /// The format is inferred from `path` unless supplied explicitly. This is
+    /// synchronous compatibility behavior; prefer ``Hokusai/write(to:)`` in
+    /// new async server code.
     public func toFile(_ path: String, format: String? = nil, quality: Int? = nil) throws {
         switch imageData {
         case .vips(let backend):
@@ -152,8 +160,10 @@ public final class HokusaiImage: @unchecked Sendable {
         }
     }
 
-    /// PURPOSE: Encode image into an in-memory buffer.
-    /// OUTPUT: Encoded bytes in requested or inferred format.
+    /// Encodes this legacy handle into owned bytes.
+    ///
+    /// The default format is JPEG when `format` is omitted. Prefer a 1.0
+    /// pipeline with an explicit encoder and ``Hokusai/data()`` for new code.
     public func toBuffer(format: String? = nil, quality: Int? = nil) throws -> Data {
         switch imageData {
         case .vips(let backend):
@@ -184,13 +194,14 @@ public final class HokusaiImage: @unchecked Sendable {
 
     // MARK: - Get Backend (for operations)
 
-    /// PURPOSE: Get VipsBackend pointer (used by vips operations)
+    /// Returns the native pointer for internal operation adapters.
     func getVipsPointer() throws -> UnsafeMutablePointer<CVips.VipsImage> {
         let backend = try ensureVipsBackend()
         return try backend.getPointer()
     }
 }
 
+/// Calculated page and centered-raster geometry for Cairo-backed PDF output.
 private struct PDFGeometry {
     let pageWidth: Double
     let pageHeight: Double
@@ -199,6 +210,7 @@ private struct PDFGeometry {
     let imageWidth: Double
     let imageHeight: Double
 
+    /// Validates page options and scales the source to fit without distortion.
     static func resolve(imageWidth: Int, imageHeight: Int, options: PDFOptions) throws -> Self {
         guard options.dpi.isFinite, options.dpi > 0 else {
             throw HokusaiError.invalidOption(name: "dpi", reason: "must be a finite value greater than zero")

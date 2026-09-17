@@ -1,24 +1,24 @@
 import Foundation
 
-/// PURPOSE: How the image should be resized to fit the target dimensions
+/// The aspect-ratio policy for a resize with two target dimensions.
 public enum ResizeFit: Sendable {
-    /// PURPOSE: Preserving aspect ratio, resize to be as large as possible while ensuring dimensions are less than or equal to specified
+    /// Preserves aspect ratio while fitting entirely inside the target bounds.
     case inside
 
-    /// PURPOSE: Preserving aspect ratio, resize to be as small as possible while ensuring dimensions are greater than or equal to specified
+    /// Preserves aspect ratio while ensuring both dimensions meet the bounds.
     case outside
 
-    /// PURPOSE: Ignore aspect ratio, resize to exact dimensions
+    /// Ignores aspect ratio and stretches to the exact target dimensions.
     case fill
 
-    /// PURPOSE: Preserving aspect ratio, resize and crop to cover the specified dimensions
+    /// Preserves aspect ratio, then crops overflow to cover the target.
     case cover
 
-    /// PURPOSE: Preserving aspect ratio, resize to fit within dimensions, padding with background color if needed
+    /// Preserves aspect ratio and pads remaining space with the background.
     case contain
 }
 
-/// PURPOSE: Position for crop and cover operations
+/// An anchor or smart-crop strategy used by legacy resize and crop APIs.
 public enum Position: Sendable {
     case center
     case top
@@ -30,14 +30,14 @@ public enum Position: Sendable {
     case bottomLeft
     case bottomRight
 
-    /// PURPOSE: Entropy-based crop (smart crop)
+    /// Chooses the crop with the greatest visual information density.
     case entropy
 
-    /// PURPOSE: Attention-based crop (focus on most important area)
+    /// Chooses the crop around libvips' detected focal region.
     case attention
 }
 
-/// PURPOSE: Interpolation kernel for resize operations
+/// An interpolation kernel used when resampling an image.
 public enum Kernel: String, Sendable {
     case nearest
     case linear
@@ -47,14 +47,14 @@ public enum Kernel: String, Sendable {
     case lanczos3
 }
 
-/// PURPOSE: Direction for flip operation
+/// The axis or axes used by a legacy flip operation.
 public enum FlipDirection: Sendable {
     case horizontal
     case vertical
     case both
 }
 
-/// PURPOSE: Angle for rotation
+/// A right angle or an arbitrary rotation used by the native adapter.
 public enum RotationAngle: Sendable {
     case degree90
     case degree180

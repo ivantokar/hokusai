@@ -1,33 +1,37 @@
 import Foundation
 
-/// PURPOSE: Protocol defining the common interface for image processing backends
+/// Internal contract implemented by an image-processing backend.
+///
+/// The legacy API delegates decoding, encoding, and pixel inspection through
+/// this narrow surface so public code never depends on a native backend type.
 protocol ImageBackend {
-    /// PURPOSE: Load image from file path
+    /// Decodes an image from a local path using the supplied loading options.
     static func loadFromFile(_ path: String, options: LoadOptions) throws -> Self
 
-    /// PURPOSE: Load image from data buffer
+    /// Decodes an image from an owned data buffer using the supplied options.
     static func loadFromBuffer(_ data: Data, options: LoadOptions) throws -> Self
 
-    /// PURPOSE: Save image to file
+    /// Encodes the image and writes it to a local file.
     func saveToFile(_ path: String, format: String?, quality: Int?) throws
 
-    /// PURPOSE: Convert image to data buffer
+    /// Encodes the image into an in-memory data buffer.
     func toBuffer(format: String?, quality: Int?) throws -> Data
 
-    /// PURPOSE: Get image width
+    /// Returns the current width in pixels.
     func getWidth() throws -> Int
 
-    /// PURPOSE: Get image height
+    /// Returns the current height in pixels.
     func getHeight() throws -> Int
 
-    /// PURPOSE: Get number of bands (channels)
+    /// Returns the current number of pixel bands (channels).
     func getBands() throws -> Int
 
-    /// PURPOSE: Check if image has alpha channel
+    /// Reports whether the current image contains an alpha channel.
     func hasAlpha() throws -> Bool
 }
 
-/// PURPOSE: Backend type identifier
+/// Internal backend identifier kept for legacy compatibility.
 enum BackendType {
-    case vips    // libvips - fast, streaming, memory-efficient
+    /// libvips provides streaming, memory-efficient image evaluation.
+    case vips
 }

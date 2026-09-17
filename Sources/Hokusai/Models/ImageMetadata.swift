@@ -1,35 +1,35 @@
 import Foundation
 
-/// PURPOSE: Metadata information about an image
+/// A typed snapshot of the current image's dimensions, pixel model, and embedded metadata.
 public struct ImageMetadata: Sendable {
-    /// PURPOSE: Image width in pixels
+    /// Image width in pixels.
     public let width: Int
 
-    /// PURPOSE: Image height in pixels
+    /// Image height in pixels.
     public let height: Int
 
-    /// PURPOSE: Number of color channels
+    /// Number of colour channels in each pixel.
     public let channels: Int
 
-    /// PURPOSE: Image format
+    /// Decoded image format when libvips can identify it.
     public let format: ImageFormat?
 
-    /// PURPOSE: Color space
+    /// Backend-reported colour space name, when available.
     public let space: String?
 
-    /// PURPOSE: Whether the image has an alpha channel
+    /// Whether the image has an alpha channel.
     public let hasAlpha: Bool
 
-    /// PURPOSE: Image orientation (EXIF)
+    /// EXIF orientation value, when present.
     public let orientation: Int?
 
-    /// PURPOSE: Density in DPI
+    /// Legacy single density value in dots per inch.
     public let density: Double?
 
-    /// PURPOSE: Number of pages (for multi-page formats like GIF, PDF)
+    /// Number of pages for a multi-page image, when available.
     public let pages: Int?
 
-    /// PURPOSE: File size in bytes (if available)
+    /// Source size in bytes, when the decoder reports it.
     public let size: Int?
 
     /// Typed interpretation of the image colour space when Hokusai recognises it.
@@ -49,6 +49,7 @@ public struct ImageMetadata: Sendable {
     public let iccProfile: Data?
     public let xmp: Data?
 
+    /// Creates metadata explicitly, which is useful when adapting another image source.
     public init(
         width: Int,
         height: Int,
@@ -90,9 +91,12 @@ public struct ImageMetadata: Sendable {
 
 /// Image pixel density expressed in dots per inch.
 public struct ImageDensity: Sendable, Equatable {
+    /// Horizontal resolution in dots per inch.
     public let horizontal: Double
+    /// Vertical resolution in dots per inch.
     public let vertical: Double
 
+    /// Creates an anisotropic pixel-density value.
     public init(horizontal: Double, vertical: Double) {
         self.horizontal = horizontal
         self.vertical = vertical

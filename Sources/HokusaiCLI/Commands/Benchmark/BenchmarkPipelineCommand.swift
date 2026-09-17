@@ -36,6 +36,7 @@ struct BenchmarkPipelineCommand: AsyncParsableCommand {
     @Option(help: "Output JSON file path.")
     var jsonOutput: String?
 
+    /// Validates benchmark inputs before any measurements alter runtime concurrency.
     func validate() throws {
         guard sigma.isFinite, sigma > 0 else {
             throw ValidationError("sigma must be a finite value greater than zero")
@@ -51,6 +52,10 @@ struct BenchmarkPipelineCommand: AsyncParsableCommand {
         }
     }
 
+    /// Measures equivalent WebP pipelines and optionally sweeps libvips concurrency.
+    ///
+    /// The original runtime concurrency is restored on every exit path so the
+    /// command does not leak a benchmark-specific setting into later work.
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
@@ -131,6 +136,7 @@ struct BenchmarkPipelineCommand: AsyncParsableCommand {
         }
     }
 
+    /// Times one named load-to-WebP pipeline and retains raw samples for JSON output.
     private func measure(
         name: String,
         appliesBlur: Bool,
@@ -151,5 +157,4 @@ struct BenchmarkPipelineCommand: AsyncParsableCommand {
         return BenchmarkSuiteCaseResult(name: name, stats: stats, samplesMs: samples)
     }
 }
-
 

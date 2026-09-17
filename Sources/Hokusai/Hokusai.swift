@@ -1,13 +1,25 @@
 import Foundation
 import CVips
 
-/// PURPOSE: Main static API entry point for Hokusai image processing.
-/// CONSTRAINTS:
-/// - Initialize libvips exactly once during process startup.
-/// - Do not instantiate this type directly.
-/// AI HINTS:
-/// - Keep this surface minimal and stable.
-/// - Route all image loading through libvips-backed helpers.
+/// An immutable image-processing pipeline backed by libvips.
+///
+/// Create a value from encoded bytes or a local file, append transformations,
+/// select an encoder, then evaluate it with ``data()`` or ``write(to:)``.
+/// Assigning the value is a safe way to branch work because transformations
+/// always return a new pipeline.
+///
+/// ```swift
+/// let card = try Hokusai(url: photoURL)
+///     .autoOrient()
+///     .resize(width: 1200, height: 630, fit: .cover)
+///
+/// async let webp = card.webp(quality: 82).data()
+/// async let png = card.png().data()
+/// ```
+///
+/// Pipeline construction can inspect image headers synchronously. Expensive
+/// encoding and file writes run only at terminal methods, on Hokusai's bounded
+/// executor rather than Swift's cooperative executor.
 public struct Hokusai: Sendable {
     /// The immutable native pipeline backing this value.
     ///
@@ -32,10 +44,15 @@ public struct Hokusai: Sendable {
 
     // MARK: - Pipeline input
 
-    /// Creates an immutable pipeline from encoded image data.
+    /// Creates a pipeline from encoded image bytes.
     ///
-    /// Construction may read source headers synchronously. Pixel evaluation and
-    /// encoding occur only in terminal methods such as ``data()``.
+    /// The input is copied by the native loader, so the caller may reuse or
+    /// release `data` after this initializer returns. Header decoding can occur
+    /// here; pixel evaluation and encoding occur at a terminal method.
+    ///
+    /// ```swift
+    /// let avatar = try Hokusai(data: upload)
+    /// ```
     public init(data: Data, options: InputOptions = .init()) throws {
         try Self.validate(options: options)
         do {
@@ -45,7 +62,11 @@ public struct Hokusai: Sendable {
         }
     }
 
-    /// Creates an immutable pipeline from a local file URL.
+    /// Creates a pipeline from a local file URL.
+    ///
+    /// Remote URLs are intentionally rejected: networking, timeouts, and
+    /// request-size policy belong to the calling server. Read remote content
+    /// into `Data` first when that is the desired application behavior.
     public init(url: URL, options: InputOptions = .init()) throws {
         guard url.isFileURL else {
             throw HokusaiError.invalidInput("only file URLs are supported; use init(data:) for in-memory input")
@@ -59,24 +80,42 @@ public struct Hokusai: Sendable {
     }
 
     /// Creates a pipeline from a path string.
+    ///
+    /// This compatibility initializer is deprecated because `URL` makes the
+    /// local-file requirement explicit.
     @available(*, deprecated, message: "Use init(url:) with a file URL.")
     public init(path: String, options: InputOptions = .init()) throws {
         try self.init(url: URL(fileURLWithPath: path), options: options)
     }
 
-    /// Creates a portable colour from conventional 8-bit RGBA components.
+    /// Converts conventional 8-bit RGBA components into Hokusai's unit-range
+    /// ``Color`` value.
+    ///
+    /// Use this at boundaries that receive CSS- or UI-style colour values:
+    /// `Hokusai.rgba(red: 255, green: 255, blue: 255)`.
     public static func rgba(red: Double, green: Double, blue: Double, opacity: Double = 255) -> Color {
         Color(red: red / 255, green: green / 255, blue: blue / 255, opacity: opacity / 255)
     }
 
     // MARK: - Pipeline transformations
 
-    /// Applies EXIF orientation to the pipeline.
+    /// Applies the source EXIF orientation before later transformations.
     public func autoOrient() throws -> Self {
         try transforming("auto orient") { try $0.autoRotate() }
     }
 
     /// Resizes the pipeline using familiar fit and position semantics.
+    ///
+    /// Supplying one dimension preserves aspect ratio. With both dimensions,
+    /// `fit` controls whether Hokusai crops, pads, stretches, or constrains
+    /// the result. `position` affects cover crops and `background` affects
+    /// contain padding.
+    ///
+    /// ```swift
+    /// let thumbnail = try image.resize(
+    ///     width: 400, height: 400, fit: .cover, position: .attention
+    /// )
+    /// ```
     public func resize(
         width: Int? = nil,
         height: Int? = nil,
@@ -103,7 +142,10 @@ public struct Hokusai: Sendable {
         return try transforming("resize") { try $0.resize(width: width, height: height, options: options) }
     }
 
-    /// Rotates the pipeline clockwise by the supplied number of degrees.
+    /// Rotates the pipeline clockwise by a finite number of degrees.
+    ///
+    /// Use ``autoOrient()`` for camera orientation. This method is for an
+    /// intentional visual rotation and fills exposed corners with `background`.
     public func rotate(by degrees: Double, background: Color = .transparent) throws -> Self {
         guard degrees.isFinite else {
             throw HokusaiError.invalidOption(name: "degrees", reason: "must be finite")
@@ -117,7 +159,10 @@ public struct Hokusai: Sendable {
     /// Mirrors the image horizontally using familiar image-processing terminology.
     public func flop() throws -> Self { try transforming("flop") { try $0.flipHorizontal() } }
 
-    /// Extracts a rectangle from the image.
+    /// Extracts a rectangle from the current image.
+    ///
+    /// Coordinates are measured from the current top-left corner, so calling
+    /// this before or after ``resize(width:height:fit:position:kernel:withoutEnlargement:withoutReduction:background:)`` produces different results.
     public func extract(x: Int, y: Int, width: Int, height: Int) throws -> Self {
         try Self.validate(dimension: width, name: "width")
         try Self.validate(dimension: height, name: "height")
@@ -125,6 +170,9 @@ public struct Hokusai: Sendable {
     }
 
     /// Extends the canvas to an exact size using an anchored background.
+    ///
+    /// This operation can only add canvas. Use `resize` or `extract` when a
+    /// requested size is smaller than the current image.
     public func extend(to size: ImageSize, anchor: CanvasAnchor = .center, background: Color = .transparent) throws -> Self {
         try Self.validate(dimension: size.width, name: "width")
         try Self.validate(dimension: size.height, name: "height")
@@ -150,7 +198,10 @@ public struct Hokusai: Sendable {
         return Self(pipeline: HokusaiImage(backend: .vips(VipsBackend(takingOwnership: output))), selectedOutput: selectedOutput, preservesMetadata: preservesMetadata)
     }
 
-    /// Removes edges similar to the image background.
+    /// Removes edges whose pixels are similar to the image background.
+    ///
+    /// `threshold` controls tolerance: lower values remove only nearly
+    /// identical borders, while higher values remove a broader range.
     public func trim(threshold: Double = 10) throws -> Self {
         guard threshold.isFinite, threshold >= 0 else {
             throw HokusaiError.invalidOption(name: "threshold", reason: "must be a finite value greater than or equal to zero")
@@ -165,6 +216,8 @@ public struct Hokusai: Sendable {
     }
 
     /// Applies a Gaussian blur with a positive pixel sigma.
+    ///
+    /// Larger sigma values blur a wider area and require more work.
     public func blur(sigma: Double = 1) throws -> Self {
         guard sigma.isFinite, sigma > 0 else {
             throw HokusaiError.invalidOption(name: "sigma", reason: "must be a finite value greater than zero")
@@ -199,7 +252,7 @@ public struct Hokusai: Sendable {
         }
     }
 
-    /// Normalizes image contrast using libvips histogram normalization.
+    /// Normalizes contrast using libvips histogram normalization.
     public func normalize() throws -> Self {
         try nativeTransform("normalize") { input, output in
             swift_vips_hist_norm(input, output)
@@ -251,6 +304,10 @@ public struct Hokusai: Sendable {
     }
 
     /// Composites layers over the pipeline in array order.
+    ///
+    /// Later layers draw over earlier layers. Each layer may reuse another
+    /// pipeline, allowing a logo or watermark to be prepared once and applied
+    /// to many base images.
     public func composite(_ layers: [CompositeLayer]) throws -> Self {
         var result = try image()
         for layer in layers {
@@ -283,28 +340,41 @@ public struct Hokusai: Sendable {
     // MARK: - Output configuration
 
     /// Selects an output encoder for subsequent terminal operations.
+    ///
+    /// Selecting a second encoder replaces the first; no bytes are produced
+    /// until ``data()`` or ``write(to:)`` is called.
     public func encode(as format: OutputFormat) throws -> Self {
         try Self.validate(output: format)
         return Self(pipeline: try image(), selectedOutput: format, preservesMetadata: preservesMetadata)
     }
 
+    /// Selects JPEG output with optional progressive encoding.
     public func jpeg(quality: Int = 80, progressive: Bool = false) throws -> Self {
         try encode(as: .jpeg(.init(quality: quality, progressive: progressive)))
     }
 
+    /// Selects PNG output with a compression level from 0 through 9.
     public func png(compressionLevel: Int = 6, progressive: Bool = false) throws -> Self {
         try encode(as: .png(.init(compressionLevel: compressionLevel, progressive: progressive)))
     }
 
+    /// Selects WebP output.
+    ///
+    /// `effort` trades CPU time for compression efficiency; `lossless` changes
+    /// the encoder mode rather than merely increasing quality.
     public func webp(quality: Int = 80, effort: Int = 4, lossless: Bool = false) throws -> Self {
         try encode(as: .webp(.init(quality: quality, effort: effort, lossless: lossless)))
     }
 
+    /// Selects AVIF output.
     public func avif(quality: Int = 50, effort: Int = 4, lossless: Bool = false) throws -> Self {
         try encode(as: .avif(.init(quality: quality, effort: effort, lossless: lossless)))
     }
 
     /// Configures a one-page Cairo PDF document from the current image pipeline.
+    ///
+    /// The resulting PDF contains rasterized pipeline output. It is suitable
+    /// for image reports but does not preserve selectable vector text.
     public func pdf(pageSize: PDFPageSize = .image, dpi: Double = 72) throws -> Self {
         try encode(as: .pdf(.init(pageSize: pageSize, dpi: dpi)))
     }
@@ -330,6 +400,9 @@ public struct Hokusai: Sendable {
     }
 
     /// Evaluates and encodes the pipeline on Hokusai's bounded executor.
+    ///
+    /// Call an encoder method first. The returned ``Output`` includes both the
+    /// owned bytes and the actual encoded dimensions, format, and byte count.
     public func data() async throws -> Output {
         let image = try self.image()
         guard let format = selectedOutput else {
@@ -352,6 +425,9 @@ public struct Hokusai: Sendable {
     }
 
     /// Evaluates and writes the pipeline to a local file URL.
+    ///
+    /// If no encoder was selected, the file extension determines the format.
+    /// Parent directories are not created automatically.
     @discardableResult
     public func write(to url: URL) async throws -> OutputInfo {
         guard url.isFileURL else {
@@ -622,24 +698,27 @@ public struct Hokusai: Sendable {
 
     // MARK: - Version Information
 
-    /// PURPOSE: Return runtime libvips version string.
+    /// The version string reported by the linked libvips runtime.
     public static var vipsVersion: String {
         return VipsBackend.version
     }
 
-    /// PURPOSE: Legacy ImageMagick version shim kept for API compatibility.
+    /// Deprecated compatibility placeholder for the removed ImageMagick backend.
     @available(*, deprecated, message: "ImageMagick backend was removed. Use vipsVersion instead.")
     public static var magickVersion: String {
         return "removed (native runtime)"
     }
 
-    /// PURPOSE: Get combined version string
+    /// A human-readable Hokusai and libvips version summary.
     public static var version: String {
         return "Hokusai (libvips \(vipsVersion))"
     }
 
-    /// PURPOSE: Get or set the libvips global thread concurrency.
-    /// Setting to 0 restores the libvips default (number of CPU cores).
+    /// Gets or sets libvips' process-wide worker-thread concurrency.
+    ///
+    /// Setting `0` restores libvips' default. Changes affect every image in
+    /// the process, so configure this during application startup rather than
+    /// per request.
     public static var vipsConcurrency: Int {
         get { VipsBackend.concurrency }
         set { VipsBackend.concurrency = newValue }

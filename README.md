@@ -122,6 +122,53 @@ The optimized `thumbnail` CLI command currently uses the intentionally retained 
 
 Import `HokusaiLegacy` only as a temporary adapter during migration.
 
+## 1.0 ergonomics roadmap
+
+Hokusai follows the useful parts of Sharp's server-side image-processing
+ergonomics—clear input, fluent transforms, configured output, and useful
+metadata—while keeping Swift-native value semantics and async/await. A checked
+item is implemented and covered by the current package; an unchecked item is a
+deliberate, tracked capability rather than an implied promise.
+
+### Core pipeline
+
+- [x] Immutable, `Sendable` pipelines that safely branch by assignment.
+- [x] Encoded `Data`, local file `URL`, and optional SwiftNIO `ByteBuffer`
+  inputs.
+- [x] Fluent geometry, colour, alpha, text, and typed compositing transforms.
+- [x] Async `data()` and `write(to:)` terminals on a bounded executor.
+- [x] Typed JPEG, PNG, WebP, AVIF, and single-page raster PDF output.
+- [x] Typed header metadata plus privacy-safe metadata removal by default.
+- [ ] [First-class pipeline thumbnails with shrink-on-load](https://github.com/ivantokar/hokusai/issues/20).
+- [ ] [Complete page, decoder-failure, and upload-safety input controls](https://github.com/ivantokar/hokusai/issues/21).
+- [ ] [Typed raw-pixel input and output](https://github.com/ivantokar/hokusai/issues/22).
+
+### Output, metadata, and composition
+
+- [ ] [Capability-aware TIFF, GIF, and HEIF output](https://github.com/ivantokar/hokusai/issues/23).
+- [ ] [Statistics and granular EXIF, ICC, XMP, orientation, and density controls](https://github.com/ivantokar/hokusai/issues/24).
+- [ ] [Gravity placement and a broader typed blend-mode set](https://github.com/ivantokar/hokusai/issues/25).
+- [ ] [A staged set of advanced transforms](https://github.com/ivantokar/hokusai/issues/26), beginning with common server-side operations rather than a generic native wrapper.
+- [ ] [A documented multi-page and animation contract](https://github.com/ivantokar/hokusai/issues/27).
+
+### Server operation and migration
+
+- [x] Idempotent, process-safe libvips initialization and guarded final teardown.
+- [x] Concurrent pipeline evaluation and copied buffer-input ownership.
+- [ ] [Runtime format capabilities, queue observability, and safe process-level configuration](https://github.com/ivantokar/hokusai/issues/28).
+- [ ] [A clean 1.0-first public API boundary and semver-safe legacy retirement plan](https://github.com/ivantokar/hokusai/issues/29).
+- [ ] [Correct the CLI thumbnail documentation to match its implementation](https://github.com/ivantokar/hokusai/issues/30).
+
+### Intentional Swift differences
+
+The roadmap does not copy Sharp mechanically. Hokusai deliberately does not
+add mutable `clone()` calls because assignment creates a safe immutable branch.
+It uses async/await instead of Node callbacks or streams, typed Swift options
+instead of JavaScript option bags, and local inputs rather than remote URL
+fetching. Deep-zoom/tile serving, unrestricted native-operation dispatch, and
+animation encoding remain separate product decisions, not implicit promises of
+the core pipeline.
+
 ## Related projects
 
 - [Hokusai Vapor](https://github.com/ivantokar/hokusai-vapor)

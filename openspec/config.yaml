@@ -1,0 +1,29 @@
+schema: spec-driven
+
+context: |
+  Hokusai is a Swift 6 image-processing package backed by libvips and Cairo.
+  Its public products are Hokusai (the immutable async pipeline), HokusaiCLI,
+  HokusaiNIO (ByteBuffer bridges), and HokusaiLegacy (temporary 0.x adapters).
+  Swift tools 6.0 and macOS 13+ are required; Debian/Ubuntu is also supported
+  when libvips, Cairo, and pkg-config are installed.
+
+  The public pipeline is value-semantic and safe to branch across tasks.
+  Construction and transformations build pipelines synchronously; data() and
+  write(to:) evaluate on a bounded non-cooperative executor. Keep libvips calls
+  centralized in the backend and preserve its process-global lifecycle rules.
+
+  Tests use Swift Testing and fixtures in Tests/HokusaiTests/Fixtures. Prefer
+  focused swift test validation; native dependencies are required to build.
+rules:
+  specs:
+    - Describe observable public behavior and compatibility guarantees, not internal implementation details.
+    - Keep each capability focused on one public product or cross-cutting contract.
+  proposal:
+    - State compatibility impact for public API, CLI, and output-format changes.
+  tasks:
+    - Include focused Swift Testing coverage for behavior changes.
+operations:
+  apply:
+    guidance:
+      - Preserve immutable pipeline semantics and process-global libvips lifecycle safety.
+      - Do not introduce synchronous native evaluation on Swift cooperative executors.

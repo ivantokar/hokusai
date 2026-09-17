@@ -5,18 +5,14 @@
 #include <cairo/cairo-pdf.h>
 
 /**
- * @brief PURPOSE: Thin C bridge that exposes libvips APIs to Swift.
- * CONSTRAINTS:
- * - Requires libvips >= 8.9 (vips_source_new_from_blob, vips_image_new_from_source,
- *   vips_thumbnail_source, vips_error_buffer_copy).
- * - Keep wrappers minimal and side-effect equivalent to libvips calls.
- * - Avoid policy/business logic in this layer.
- * AI HINTS:
- * - Add new wrappers only when Swift interop requires it.
- * - Preserve ownership/NULL semantics from underlying libvips APIs.
+ * @brief Minimal C bridge that makes libvips APIs usable from Swift.
+ *
+ * Requires libvips 8.9 or later for source-backed loading, thumbnails, and
+ * copied error buffers. Wrappers preserve libvips ownership and NULL semantics;
+ * validation and product policy belong in the Swift layer.
  */
 
-// PURPOSE: Export commonly used vips enums and types for Swift
+// Re-export commonly used libvips enums and types for Swift interop.
 typedef VipsKernel VipsKernel;
 typedef VipsBlendMode VipsBlendMode;
 typedef VipsAlign VipsAlign;
@@ -273,7 +269,7 @@ static inline int swift_vips_text_full(
     int spacing,
     int rgba
 ) {
-    // PURPOSE: Render text with explicit layout parameters and RGBA output.
+    // Forward full layout and RGBA controls to libvips text rendering.
     return vips_text(
         out,
         text,
@@ -300,7 +296,7 @@ static inline int swift_vips_text_full_fontfile(
     int spacing,
     int rgba
 ) {
-    // PURPOSE: Render text with optional explicit font file override.
+    // Include a font-file override only when the caller supplied one.
     if (fontfile && fontfile[0] != '\0') {
         return vips_text(
             out,
@@ -600,12 +596,10 @@ static inline int swift_vips_smartcrop(
 }
 
 // MARK: - Thumbnail Operations
-// PURPOSE: Expose vips_thumbnail family for shrink-on-load workflows.
-// CONSTRAINTS:
-//   - height <= 0 means no height bound. VIPS_MAX_COORD is passed explicitly
-//     because vips_thumbnail defaults an unset height to `width`, which would
-//     bound the output to a square instead of preserving the aspect ratio.
-//   - crop == VIPS_INTERESTING_NONE and no_rotate == 0 match the libvips defaults.
+// These wrappers expose the vips_thumbnail family for shrink-on-load workflows.
+// A non-positive height becomes VIPS_MAX_COORD: unlike an unset height, that
+// preserves aspect ratio instead of limiting output to a width-by-width square.
+// `VIPS_INTERESTING_NONE` and `no_rotate == 0` retain libvips defaults.
 
 /** @brief Thumbnail from file path. Enables shrink-on-load for formats that support it. */
 static inline int swift_vips_thumbnail(

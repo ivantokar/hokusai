@@ -59,6 +59,7 @@ public struct ThumbnailOptions: Sendable {
     /// orientation, which is the expected behaviour for photos.
     public var noRotate: Bool
 
+    /// Creates thumbnail options. The defaults preserve aspect ratio and apply EXIF rotation.
     public init(
         height: Int? = nil,
         crop: ThumbnailCrop = .none,

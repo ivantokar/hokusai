@@ -1,22 +1,22 @@
 import Foundation
 import CVips
 
-/// PURPOSE: Blend modes for image compositing
+/// The blend modes currently supported by Hokusai compositing.
 public enum BlendMode: Sendable {
-    /// PURPOSE: Porter-Duff over (default alpha compositing)
+    /// Standard Porter-Duff source-over compositing.
     case over
-    /// PURPOSE: Add (lighten)
+    /// Adds colour components, producing a lighter result.
     case add
-    /// PURPOSE: Multiply (darken)
+    /// Multiplies colour components, producing a darker result.
     case multiply
 }
 
-/// PURPOSE: Options for image compositing
+/// Options for a legacy image-overlay operation.
 public struct CompositeOptions: Sendable {
-    /// PURPOSE: Blend mode
+    /// The rule used to combine base and overlay pixels.
     public var mode: BlendMode
 
-    /// PURPOSE: Opacity of overlay image (0.0 - 1.0)
+    /// Overlay opacity clamped to the range `0...1` during initialization.
     public var opacity: Double
 
     public init(
@@ -29,9 +29,7 @@ public struct CompositeOptions: Sendable {
 }
 
 extension HokusaiImage {
-    /// PURPOSE: Composite (overlay) another image on top of this image
-    ///
-    /// CONSTRAINTS: Preserve overlay position, blend mode, and opacity semantics.
+    /// Draws `overlay` over this image at the supplied pixel offset.
     ///
     /// Example:
     /// ```swift
@@ -61,7 +59,8 @@ extension HokusaiImage {
         let basePointer = try baseBackend.getPointer()
         let overlayPointer = try overlayBackend.getPointer()
 
-        // PURPOSE: Normalize inputs to RGBA so compositing behaves consistently.
+        // Normalize both sources before blending so alpha handling does not
+        // depend on whether an input started as grayscale, RGB, or RGBA.
         let baseWithAlpha = try ensureRGBA(basePointer)
         defer { g_object_unref(baseWithAlpha) }
 
@@ -105,6 +104,7 @@ extension HokusaiImage {
 
     // MARK: - Private Helpers
 
+    /// Multiplies the alpha band while preserving the RGB bands unchanged.
     private func applyOpacity(
         _ image: UnsafeMutablePointer<CVips.VipsImage>,
         opacity: Double
@@ -156,14 +156,11 @@ extension HokusaiImage {
         return out
     }
 
-    /// PURPOSE: Ensure the input image is RGBA (4 bands).
-    /// ALGORITHM:
-    /// - Convert grayscale inputs to RGB when needed.
-    /// - Append alpha channel when missing.
+    /// Returns an owned RGBA copy suitable for native compositing.
     private func ensureRGBA(_ image: UnsafeMutablePointer<CVips.VipsImage>) throws -> UnsafeMutablePointer<CVips.VipsImage> {
         let bands = vips_image_get_bands(image)
 
-        // PURPOSE: If already RGBA (4 bands), return a copy.
+        // A copy gives this helper a consistently owned result to return.
         if bands == 4 {
             var output: UnsafeMutablePointer<CVips.VipsImage>?
             let result = swift_vips_copy(image, &output)
@@ -174,7 +171,7 @@ extension HokusaiImage {
             return out
         }
 
-        // PURPOSE: If grayscale (1 or 2 bands), convert to RGB.
+        // Expand grayscale input before adding alpha so channels have RGB meaning.
         var rgbImage = image
         if bands == 1 || bands == 2 {
             var converted: UnsafeMutablePointer<CVips.VipsImage>?

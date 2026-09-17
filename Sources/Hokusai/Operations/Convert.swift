@@ -2,19 +2,25 @@ import Foundation
 import CVips
 
 extension HokusaiImage {
-    /// PURPOSE: Convert image to specified format with quality/compression options
+    /// Legacy placeholder for selecting an output format.
+    ///
+    /// Conversion happens only when a synchronous legacy terminal is called.
+    /// New code should use ``Hokusai/encode(as:)`` or a typed encoder on the
+    /// immutable pipeline, which records this choice explicitly.
     public func toFormat(_ format: ImageFormat, quality: Int? = nil, compression: Int? = nil) throws -> HokusaiImage {
-        // PURPOSE: Note: Actual format conversion happens during save
-        // PURPOSE: This method returns self but marks the desired format for later use
-        // PURPOSE: We'll implement actual conversion in the save methods
+        // This legacy method cannot persist encoder configuration, so preserve
+        // its historic no-op behavior rather than pretending conversion happened.
         return self
     }
 
-    /// PURPOSE: Save image to file
+    /// Encodes and writes this legacy image to `path`.
+    ///
+    /// A `SaveOptions.format` overrides extension inference. The call is
+    /// synchronous and does not create parent directories.
     public func toFile(_ path: String, options: SaveOptions = SaveOptions()) throws {
         let pointer = try ensureVipsBackend().getPointer()
 
-        // PURPOSE: Determine format from path extension or options
+        // Explicit format wins; otherwise use the destination extension.
         let format = options.format ?? ImageFormat.from(fileExtension: (path as NSString).pathExtension)
 
         guard let outputFormat = format else {
@@ -90,7 +96,9 @@ extension HokusaiImage {
         }
     }
 
-    /// PURPOSE: Save image to Data buffer
+    /// Encodes this legacy image into an owned data buffer.
+    ///
+    /// Buffers have no filename, so callers must select `options.format`.
     public func toBuffer(options: SaveOptions = SaveOptions()) throws -> Data {
         let pointer = try ensureVipsBackend().getPointer()
 
@@ -168,7 +176,8 @@ extension HokusaiImage {
 
         guard result == 0, let buf = buffer else {
             let errorMsg = VipsBackend.getLastError()
-            // PURPOSE: Debug: include result code in error
+            // Native encoders sometimes provide no diagnostic; retain the
+            // result code in that case so callers still receive actionable context.
             let debugMsg = errorMsg.isEmpty ? "result code: \(result)" : errorMsg
             throw HokusaiError.saveFailed(debugMsg)
         }
@@ -179,7 +188,7 @@ extension HokusaiImage {
         return data
     }
 
-    /// PURPOSE: Convenience method to save as JPEG
+    /// Writes a JPEG using the supplied quality.
     public func toJpeg(path: String, quality: Int = 85) throws {
         var options = SaveOptions()
         options.format = .jpeg
@@ -187,7 +196,7 @@ extension HokusaiImage {
         try toFile(path, options: options)
     }
 
-    /// PURPOSE: Convenience method to save as PNG
+    /// Writes a PNG using the supplied compression level.
     public func toPng(path: String, compression: Int = 6) throws {
         var options = SaveOptions()
         options.format = .png
@@ -195,7 +204,7 @@ extension HokusaiImage {
         try toFile(path, options: options)
     }
 
-    /// PURPOSE: Convenience method to save as WebP
+    /// Writes a WebP image with optional lossless encoding.
     public func toWebp(path: String, quality: Int = 80, lossless: Bool = false) throws {
         var options = SaveOptions()
         options.format = .webp

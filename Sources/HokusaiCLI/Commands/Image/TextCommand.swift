@@ -63,6 +63,10 @@ struct TextCommand: AsyncParsableCommand {
     @Option(help: "Rotation in degrees.")
     var rotation: Double?
 
+    /// Maps command-line options to `TextOptions`, draws the layer, and saves it.
+    ///
+    /// Shadow colour applies only when both shadow offsets are supplied, which
+    /// avoids constructing an invisible or positionless shadow layer.
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
@@ -100,5 +104,4 @@ struct TextCommand: AsyncParsableCommand {
         ])
     }
 }
-
 

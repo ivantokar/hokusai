@@ -7,6 +7,10 @@ import NIOCore
 /// This optional product copies readable bytes into the pipeline so a caller's
 /// `ByteBuffer` may be released or reused before asynchronous evaluation.
 public extension Hokusai {
+    /// Copies readable bytes from a NIO buffer into an immutable Hokusai input.
+    ///
+    /// The copy lets the caller reuse or release `buffer` before the pipeline
+    /// is asynchronously evaluated.
     init(buffer: ByteBuffer, options: InputOptions = .init()) throws {
         self = try Hokusai(data: Data(buffer.readableBytesView), options: options)
     }
