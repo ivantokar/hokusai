@@ -27,6 +27,7 @@ struct CropCommand: AsyncParsableCommand {
     @Option(help: "Crop height.")
     var height: Int
 
+    /// Extracts the requested pixel rectangle and writes the cropped image.
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
@@ -43,5 +44,4 @@ struct CropCommand: AsyncParsableCommand {
         ])
     }
 }
-
 

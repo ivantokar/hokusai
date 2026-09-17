@@ -1,6 +1,10 @@
 import Foundation
 
-/// PURPOSE: Supported image formats
+/// Image formats recognized by Hokusai's loaders and legacy encoders.
+///
+/// Availability is runtime-dependent for some formats because it follows the
+/// linked libvips build. The 1.0 pipeline currently exposes a smaller typed
+/// output subset; see ``OutputFormat``.
 public enum ImageFormat: String, CaseIterable, Sendable {
     case jpeg = "jpeg"
     case png = "png"
@@ -12,7 +16,7 @@ public enum ImageFormat: String, CaseIterable, Sendable {
     case pdf = "pdf"
     case svg = "svg"
 
-    /// PURPOSE: File extension for the format
+    /// The preferred filename extension without a leading dot.
     public var fileExtension: String {
         switch self {
         case .jpeg: return "jpg"
@@ -27,7 +31,7 @@ public enum ImageFormat: String, CaseIterable, Sendable {
         }
     }
 
-    /// PURPOSE: MIME type for the format
+    /// The conventional MIME type for the format.
     public var mimeType: String {
         switch self {
         case .jpeg: return "image/jpeg"
@@ -42,7 +46,10 @@ public enum ImageFormat: String, CaseIterable, Sendable {
         }
     }
 
-    /// PURPOSE: Detect format from file extension
+    /// Returns the recognized format for a filename extension.
+    ///
+    /// Both `.jpg` and `.jpeg`, as well as `.heic` and `.heif`, map to their
+    /// shared format cases. Unknown extensions return `nil` rather than guessing.
     public static func from(fileExtension: String) -> ImageFormat? {
         let ext = fileExtension.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
         switch ext {

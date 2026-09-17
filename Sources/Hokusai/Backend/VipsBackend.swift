@@ -1,13 +1,11 @@
 import Foundation
 import CVips
 
-/// PURPOSE: Own libvips image pointer lifecycle and encode/decode primitives.
-/// CONSTRAINTS:
-/// - Maintain single-pointer ownership semantics.
-/// - Free pointer exactly once in `deinit`.
-/// AI HINTS:
-/// - Keep libvips calls centralized here.
-/// - Do not bypass `getPointer()` from higher layers.
+/// Owns one libvips image pointer and centralizes native decode and encode work.
+///
+/// `VipsBackend` is the ownership boundary between Swift and libvips. It
+/// serializes access to its pointer, releases it exactly once in `deinit`, and
+/// keeps process-wide runtime state behind a separate lock.
 final class VipsBackend: ImageBackend {
     private var imagePointer: UnsafeMutablePointer<CVips.VipsImage>?
     private let lock = NSLock()
@@ -26,11 +24,11 @@ final class VipsBackend: ImageBackend {
     nonisolated(unsafe) private static var liveImageCount = 0
     private static let runtimeLock = NSLock()
 
-    /// PURPOSE: Initialize the process-wide libvips runtime.
-    /// Idempotent and thread-safe: concurrent and repeated calls are safe and
-    /// only the first successful call performs work. Load entry points call
-    /// this automatically.
-    /// CONSTRAINTS: Throws after `shutdown()`; libvips cannot be restarted.
+    /// Initializes the process-wide libvips runtime once.
+    ///
+    /// Loading entry points call this automatically. Repeated and concurrent
+    /// calls are safe. A successful final shutdown is irreversible because
+    /// libvips cannot be reinitialized in the same process.
     static func initialize() throws {
         runtimeLock.lock()
         defer { runtimeLock.unlock() }
@@ -49,9 +47,7 @@ final class VipsBackend: ImageBackend {
         }
     }
 
-    /// PURPOSE: Permanently shut down the process-wide libvips runtime.
-    /// CONSTRAINTS: Final and irreversible; must not run while any image is
-    /// still alive. Idempotent — repeated calls are no-ops.
+    /// Performs final process teardown after every image handle has been released.
     static func shutdown() throws {
         runtimeLock.lock()
         defer { runtimeLock.unlock() }
@@ -65,8 +61,7 @@ final class VipsBackend: ImageBackend {
         runtimeState = .shutdownCompleted
     }
 
-    /// PURPOSE: Adopt ownership of an existing libvips image pointer.
-    /// INPUT: `pointer` must be a valid owned `VipsImage*`.
+    /// Takes ownership of a valid, owned libvips image pointer.
     init(takingOwnership pointer: UnsafeMutablePointer<CVips.VipsImage>) {
         self.imagePointer = pointer
         Self.runtimeLock.lock()
@@ -87,9 +82,7 @@ final class VipsBackend: ImageBackend {
         }
     }
 
-    /// PURPOSE: Return currently owned `VipsImage*`.
-    /// OUTPUT: Live non-null pointer.
-    /// CONSTRAINTS: Throws if pointer already released.
+    /// Returns the live native pointer or throws if it was already released.
     func getPointer() throws -> UnsafeMutablePointer<CVips.VipsImage> {
         lock.lock()
         defer { lock.unlock() }
@@ -102,6 +95,7 @@ final class VipsBackend: ImageBackend {
 
     // MARK: - ImageBackend Protocol Implementation
 
+    /// Opens a local source lazily with libvips' requested access pattern.
     static func loadFromFile(_ path: String, options: LoadOptions = LoadOptions()) throws -> VipsBackend {
         try initialize()
 
@@ -124,6 +118,7 @@ final class VipsBackend: ImageBackend {
         return VipsBackend(takingOwnership: img)
     }
 
+    /// Copies encoded bytes into native ownership and opens them lazily.
     static func loadFromBuffer(_ data: Data, options: LoadOptions = LoadOptions()) throws -> VipsBackend {
         try initialize()
 
@@ -131,7 +126,8 @@ final class VipsBackend: ImageBackend {
             throw HokusaiError.invalidImageData
         }
 
-        // The shim copies the bytes, so the pointer does not outlive the closure.
+        // The shim copies bytes into libvips-owned storage before this closure
+        // returns, so lazy evaluation never borrows `Data` storage.
         let output: UnsafeMutablePointer<CVips.VipsImage>? = data.withUnsafeBytes { bytes in
             switch options.access {
             case .sequential:
@@ -148,6 +144,7 @@ final class VipsBackend: ImageBackend {
         return VipsBackend(takingOwnership: img)
     }
 
+    /// Opens a local source through libvips' shrink-on-load thumbnail path.
     static func thumbnailFromFile(_ path: String, width: Int, options: ThumbnailOptions) throws -> VipsBackend {
         try initialize()
         let arguments = try ThumbnailArguments.validate(width: width, options: options)
@@ -168,6 +165,7 @@ final class VipsBackend: ImageBackend {
         return VipsBackend(takingOwnership: img)
     }
 
+    /// Creates a shrink-on-load thumbnail from copied encoded bytes.
     static func thumbnailFromBuffer(_ data: Data, width: Int, options: ThumbnailOptions) throws -> VipsBackend {
         try initialize()
         let arguments = try ThumbnailArguments.validate(width: width, options: options)
@@ -176,7 +174,8 @@ final class VipsBackend: ImageBackend {
             throw HokusaiError.invalidImageData
         }
 
-        // The shim copies the bytes, so the pointer does not outlive the closure.
+        // As with normal buffer loading, the shim copies bytes before lazy
+        // thumbnail evaluation can outlive the Swift `Data` value.
         var output: UnsafeMutablePointer<CVips.VipsImage>?
         let result = data.withUnsafeBytes { bytes -> Int32 in
             swift_vips_thumbnail_buffer(
@@ -192,6 +191,7 @@ final class VipsBackend: ImageBackend {
         return VipsBackend(takingOwnership: img)
     }
 
+    /// Selects a legacy encoder and writes the evaluated image to a local path.
     func saveToFile(_ path: String, format: String?, quality: Int?) throws {
         let pointer = try getPointer()
         let detectedFormat = format ?? detectFormat(from: path)
@@ -219,6 +219,7 @@ final class VipsBackend: ImageBackend {
         }
     }
 
+    /// Selects a legacy encoder and returns its bytes in Swift-owned storage.
     func toBuffer(format: String?, quality: Int?) throws -> Data {
         let pointer = try getPointer()
         let targetFormat = format ?? "jpeg"
@@ -253,26 +254,31 @@ final class VipsBackend: ImageBackend {
         return Data(bytes: buf, count: length)
     }
 
+    /// Reads the current native width without forcing an encode.
     func getWidth() throws -> Int {
         let pointer = try getPointer()
         return Int(vips_image_get_width(pointer))
     }
 
+    /// Reads the current native height without forcing an encode.
     func getHeight() throws -> Int {
         let pointer = try getPointer()
         return Int(vips_image_get_height(pointer))
     }
 
+    /// Reads the current count of pixel bands.
     func getBands() throws -> Int {
         let pointer = try getPointer()
         return Int(vips_image_get_bands(pointer))
     }
 
+    /// Checks the native image's alpha capability.
     func hasAlpha() throws -> Bool {
         let pointer = try getPointer()
         return vips_image_hasalpha(pointer) != 0
     }
 
+    /// Copies scalar libvips fields and adds stable aliases used by Hokusai.
     func extendedMetadata() throws -> [String: String] {
         let pointer = try getPointer()
         var metadata: [String: String] = [:]
@@ -291,7 +297,8 @@ final class VipsBackend: ImageBackend {
             }
         }
 
-        // PURPOSE: Add convenient normalized aliases for frequent UI/API consumers.
+        // Add stable aliases where libvips exposes a native enum or resolution
+        // only through its lower-level metadata dictionary.
         metadata["width"] = metadata["width"] ?? String(Int(vips_image_get_width(pointer)))
         metadata["height"] = metadata["height"] ?? String(Int(vips_image_get_height(pointer)))
         metadata["bands"] = metadata["bands"] ?? String(Int(vips_image_get_bands(pointer)))
@@ -325,6 +332,7 @@ final class VipsBackend: ImageBackend {
         return metadata
     }
 
+    /// Copies an optional binary libvips metadata field into Swift data.
     func metadataBlob(named name: String) throws -> Data? {
         let pointer = try getPointer()
         var length = 0
@@ -337,6 +345,7 @@ final class VipsBackend: ImageBackend {
 
     // MARK: - Helper Methods
 
+    /// Uses a filename extension, retaining JPEG as the legacy no-extension default.
     private func detectFormat(from path: String) -> String {
         let ext = (path as NSString).pathExtension
         return ext.isEmpty ? "jpeg" : ext
@@ -348,10 +357,10 @@ final class VipsBackend: ImageBackend {
         if let image { g_object_unref(image) }
     }
 
-    /// PURPOSE: Copy and clear the global libvips error buffer.
-    /// CONSTRAINTS: Uses vips_error_buffer_copy so the text is copied before
-    /// the buffer is cleared (copying after clearing loses the message and
-    /// races with writers on other threads).
+    /// Copies and clears libvips' process-global error buffer atomically.
+    ///
+    /// Copying before clearing preserves the diagnostic and avoids returning a
+    /// pointer into shared native storage.
     static func getLastError() -> String {
         guard let buffer = swift_vips_error_copy() else {
             return "Unknown vips error"
@@ -361,7 +370,7 @@ final class VipsBackend: ImageBackend {
         return message.isEmpty ? "Unknown vips error" : message
     }
 
-    /// PURPOSE: Get libvips version
+    /// The linked libvips version string.
     static var version: String {
         guard let versionStr = vips_version_string() else {
             return "unknown"
@@ -369,6 +378,7 @@ final class VipsBackend: ImageBackend {
         return String(cString: versionStr)
     }
 
+    /// Process-wide libvips worker concurrency exposed by the legacy runtime API.
     static var concurrency: Int {
         get { Int(swift_vips_concurrency_get()) }
         set { swift_vips_concurrency_set(Int32(newValue)) }

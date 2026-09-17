@@ -33,6 +33,7 @@ struct ResizeCommand: AsyncParsableCommand {
     @Flag(help: "Prevent downscaling.")
     var withoutReduction = false
 
+    /// Rejects invalid dimensions before the command opens the input image.
     func validate() throws {
         if let width {
             try CLIParser.validateDimension(width, name: "width")
@@ -42,7 +43,7 @@ struct ResizeCommand: AsyncParsableCommand {
         }
     }
 
-    /// PURPOSE: Resize an input image and save to destination path.
+    /// Resizes an input image with typed pipeline options and writes the result.
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
@@ -65,5 +66,4 @@ struct ResizeCommand: AsyncParsableCommand {
         ])
     }
 }
-
 

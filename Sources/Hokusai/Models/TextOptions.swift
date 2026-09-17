@@ -1,62 +1,65 @@
 import Foundation
 
-/// PURPOSE: Options for text rendering
+/// Styling and layout options for libvips/Pango text rendering.
+///
+/// Colours use 8-bit RGBA component order. This compatibility-oriented model
+/// is intentionally broad; new typography work should evolve it through a
+/// dedicated typed API rather than adding unvalidated options.
 public struct TextOptions: Sendable {
-    /// PURPOSE: Font family name or Pango font description (e.g., "Arial", "Helvetica Bold")
-    /// CONSTRAINTS: Accept font file paths for backward compatibility.
+    /// Pango font family or description, for example `"Helvetica Bold"`.
     public var font: String
 
-    /// PURPOSE: Optional explicit font file path (TTF/OTF). When set, `font` remains the family/style descriptor.
+    /// Optional TTF or OTF file path; `font` still supplies family and style.
     public var fontFile: String?
 
-    /// PURPOSE: Font size in points
+    /// Font size in points at the configured DPI.
     public var fontSize: Int
 
-    /// PURPOSE: Text color [R, G, B, A] (0-255)
+    /// Foreground colour in 8-bit RGBA component order.
     public var color: [Double]
 
-    /// PURPOSE: Horizontal alignment
+    /// Horizontal alignment when a width constraint is supplied.
     public var align: TextAlignment
 
-    /// PURPOSE: DPI for text rendering
+    /// Text-rendering resolution in dots per inch.
     public var dpi: Int
 
-    /// PURPOSE: Text width for wrapping (nil = no wrapping)
+    /// Optional wrapping width in pixels.
     public var width: Int?
 
-    /// PURPOSE: Text height limit
+    /// Optional maximum text height in pixels.
     public var height: Int?
 
     // MARK: - Advanced Text Features (best-effort via libvips)
 
-    /// PURPOSE: Stroke (outline) color [R, G, B, A] (0-255)
+    /// Optional outline colour in 8-bit RGBA component order.
     public var strokeColor: [Double]?
 
-    /// PURPOSE: Stroke (outline) width in pixels
+    /// Optional outline width in pixels.
     public var strokeWidth: Double?
 
-    /// PURPOSE: Shadow offset (x, y) in pixels
+    /// Optional shadow offset in pixels.
     public var shadowOffset: (x: Double, y: Double)?
 
-    /// PURPOSE: Shadow color [R, G, B, A] (0-255)
+    /// Optional shadow colour in 8-bit RGBA component order.
     public var shadowColor: [Double]?
 
-    /// PURPOSE: Shadow opacity (0.0-1.0)
+    /// Optional shadow opacity from 0 through 1.
     public var shadowOpacity: Double?
 
-    /// PURPOSE: Letter spacing (kerning) in pixels
+    /// Optional additional letter spacing in pixels.
     public var kerning: Double?
 
-    /// PURPOSE: Line spacing multiplier (e.g., 1.5 for 150% spacing)
+    /// Optional line-spacing multiplier, such as `1.5` for 150% spacing.
     public var lineSpacing: Double?
 
-    /// PURPOSE: Text gravity for positioning
+    /// Optional gravity used by the semantic-position drawing overload.
     public var gravity: TextGravity?
 
-    /// PURPOSE: Enable anti-aliasing (default: true)
+    /// Whether libvips should antialias text edges.
     public var antialiasing: Bool
 
-    /// PURPOSE: Rotation angle in degrees
+    /// Optional clockwise rotation in degrees.
     public var rotation: Double?
 
     public init(
@@ -100,14 +103,14 @@ public struct TextOptions: Sendable {
     }
 }
 
-/// PURPOSE: Text alignment options
+/// Horizontal text alignment for constrained text layout.
 public enum TextAlignment: String, Sendable {
     case left
     case center
     case right
 }
 
-/// PURPOSE: Text gravity for image positioning
+/// A semantic position for placing text inside an image.
 public enum TextGravity: String, Sendable {
     case center
     case north

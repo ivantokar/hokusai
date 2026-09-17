@@ -52,6 +52,7 @@ public struct LoadOptions: Sendable {
     /// The libvips access-pattern hint to use when decoding the source image.
     public var access: AccessMode
 
+    /// Creates loading options; random access is the safe default for all transforms.
     public init(access: AccessMode = .random) {
         self.access = access
     }

@@ -36,7 +36,9 @@ struct ConvertCommand: AsyncParsableCommand {
     @Option(help: "Encoder effort where supported.")
     var effort: Int?
 
-    /// PURPOSE: Re-encode image with explicit format and encoder options.
+    /// Re-encodes an image with the selected format and explicit encoder options.
+    ///
+    /// When `--format` is omitted, the output filename extension selects it.
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
@@ -63,5 +65,4 @@ struct ConvertCommand: AsyncParsableCommand {
         ])
     }
 }
-
 

@@ -14,6 +14,11 @@ enum PipelineExecutor {
         value: max(1, ProcessInfo.processInfo.activeProcessorCount)
     )
 
+    /// Runs a blocking terminal operation off the cooperative executor.
+    ///
+    /// The semaphore bounds simultaneous libvips evaluations to available CPU
+    /// cores. Cancellation is checked before queueing and immediately before
+    /// evaluation, then surfaced as Hokusai's stable cancellation error.
     static func run<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
         try Task.checkCancellation()
         return try await withCheckedThrowingContinuation { continuation in

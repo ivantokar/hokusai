@@ -9,7 +9,7 @@ struct InfoCommand: AsyncParsableCommand {
         abstract: "Show Hokusai and libvips version information."
     )
 
-    /// PURPOSE: Print runtime versions for Hokusai and libvips.
+    /// Initializes the runtime and prints the Hokusai and linked libvips versions.
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
@@ -32,7 +32,7 @@ struct InspectCommand: AsyncParsableCommand {
     @Option(name: .shortAndLong, help: "Input image path.")
     var input: String
 
-    /// PURPOSE: Show decoded metadata for a local image file.
+    /// Decodes a local image and displays the metadata exposed by Hokusai.
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
@@ -50,5 +50,4 @@ struct InspectCommand: AsyncParsableCommand {
         ])
     }
 }
-
 

@@ -3,7 +3,9 @@ import ArgumentParser
 import Hokusai
 import Prompt
 
+/// Converts CLI strings into Hokusai's typed public options.
 enum CLIParser {
+    /// Parses a resize fit, defaulting unknown values to the safe inside mode.
     static func parseFit(_ value: String) -> ResizeFit {
         switch value.lowercased() {
         case "inside": return .inside
@@ -15,6 +17,7 @@ enum CLIParser {
         }
     }
 
+    /// Parses a legacy resize kernel, defaulting unknown values to Lanczos3.
     static func parseKernel(_ value: String) -> Kernel {
         switch value.lowercased() {
         case "nearest": return .nearest
@@ -26,6 +29,7 @@ enum CLIParser {
         }
     }
 
+    /// Adapts the legacy kernel parser for the immutable pipeline API.
     static func parsePipelineKernel(_ value: String) -> ResizeKernel {
         switch parseKernel(value) {
         case .nearest: .nearest
@@ -37,6 +41,7 @@ enum CLIParser {
         }
     }
 
+    /// Applies encoder settings and the requested metadata policy to a pipeline.
     static func configurePipelineOutput(
         _ pipeline: Hokusai,
         format: ImageFormat,
@@ -65,6 +70,7 @@ enum CLIParser {
         return try stripMetadata ? configured.removeMetadata() : configured.preserveMetadata()
     }
 
+    /// Parses the three text-alignment names accepted by the CLI.
     static func parseTextAlign(_ value: String) -> TextAlignment {
         switch value.lowercased() {
         case "center": return .center
@@ -73,6 +79,7 @@ enum CLIParser {
         }
     }
 
+    /// Uses an explicit format or, when absent, the output filename extension.
     static func parseFormat(_ value: String?, fallbackPath: String?) throws -> ImageFormat {
         if let value, !value.isEmpty {
             if let format = parseFormatAlias(value) {
@@ -90,6 +97,7 @@ enum CLIParser {
         throw ValidationError("Could not infer image format. Use --format or output extension.")
     }
 
+    /// Accepts common filename aliases before consulting the typed format enum.
     private static func parseFormatAlias(_ value: String) -> ImageFormat? {
         let normalized = value.lowercased()
         if normalized == "jpg" { return .jpeg }
@@ -98,6 +106,7 @@ enum CLIParser {
         return ImageFormat(rawValue: normalized)
     }
 
+    /// Parses a thumbnail crop word, with `none` represented by nil placement.
     static func parseThumbnailPosition(_ value: String) throws -> ResizePosition? {
         switch value.lowercased() {
         case "none": return nil
@@ -109,6 +118,7 @@ enum CLIParser {
         }
     }
 
+    /// Ensures a dimension is positive and safe to pass through the C bridge.
     static func validateDimension(_ value: Int, name: String) throws {
         guard value > 0 else {
             throw ValidationError("--\(name) must be greater than zero.")
@@ -118,6 +128,7 @@ enum CLIParser {
         }
     }
 
+    /// Parses a comma-separated RGB/RGBA byte vector and clamps each component.
     static func parseRGBA(_ value: String) throws -> [Double] {
         let parts = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
         guard parts.count == 3 || parts.count == 4 else {

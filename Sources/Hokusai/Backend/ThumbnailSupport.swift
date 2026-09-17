@@ -1,12 +1,9 @@
 import CVips
 
-/// PURPOSE: Single home for thumbnail argument validation and the mapping
-/// from public thumbnail types onto libvips types.
-/// CONSTRAINTS:
-/// - All thumbnail entry points (file, buffer, existing image, CLI via the
-///   library) must validate through `ThumbnailArguments.validate`.
-/// - Public model types must not expose libvips types; the mapping lives here
-///   as an internal extension instead.
+/// Internal bridge from typed thumbnail options to libvips arguments.
+///
+/// Every thumbnail entry point validates here. This keeps CVips types out of
+/// the public model layer and makes all callers apply the same dimension rules.
 
 extension ThumbnailCrop {
     /// The libvips smart-crop strategy backing this public case.
@@ -40,6 +37,10 @@ enum ThumbnailArguments {
         let noRotate: Int32
     }
 
+    /// Validates public options before they cross the C boundary.
+    ///
+    /// Smart-crop modes need both dimensions. Without a height, the shim uses
+    /// the `0` sentinel to apply only the width constraint.
     static func validate(width: Int, options: ThumbnailOptions) throws -> Validated {
         let validWidth = try validateDimension(width, name: "width")
 
@@ -62,6 +63,7 @@ enum ThumbnailArguments {
         )
     }
 
+    /// Ensures a positive Swift integer can be represented by libvips.
     private static func validateDimension(_ value: Int, name: String) throws -> Int32 {
         guard value > 0 else {
             throw HokusaiError.invalidDimensions("thumbnail \(name) must be greater than zero, got \(value)")

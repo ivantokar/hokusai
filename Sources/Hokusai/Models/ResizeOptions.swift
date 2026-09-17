@@ -1,29 +1,32 @@
 import Foundation
 
-/// PURPOSE: Options for resize operations
+/// Legacy resize configuration used by the compatibility image-handle API.
+///
+/// New pipeline code should prefer ``Hokusai/resize(width:height:fit:position:kernel:withoutEnlargement:withoutReduction:background:)``,
+/// whose labelled arguments use the 1.0 value types.
 public struct ResizeOptions: Sendable {
-    /// PURPOSE: Target width (nil to auto-calculate)
+    /// Requested output width, or `nil` to calculate it from height.
     public var width: Int?
 
-    /// PURPOSE: Target height (nil to auto-calculate)
+    /// Requested output height, or `nil` to calculate it from width.
     public var height: Int?
 
-    /// PURPOSE: How to fit the image
+    /// The aspect-ratio policy used when both dimensions are present.
     public var fit: ResizeFit
 
-    /// PURPOSE: Position for cover/contain operations
+    /// The crop or anchor position for fitting modes that need one.
     public var position: Position
 
-    /// PURPOSE: Interpolation kernel
+    /// The interpolation kernel used to resample pixels.
     public var kernel: Kernel
 
-    /// PURPOSE: Don't enlarge if the input is smaller than the target
+    /// Prevents enlarging an image that is already smaller than the target.
     public var withoutEnlargement: Bool
 
-    /// PURPOSE: Don't reduce if the input is larger than the target
+    /// Prevents reducing an image that is already larger than the target.
     public var withoutReduction: Bool
 
-    /// PURPOSE: Background color for contain mode [R, G, B, A]
+    /// Optional contain-mode background in 8-bit RGBA component order.
     public var background: [Double]?
 
     public init(
@@ -47,27 +50,29 @@ public struct ResizeOptions: Sendable {
     }
 }
 
-/// PURPOSE: Options for format conversion and saving
+/// Legacy encoder settings used by synchronous `HokusaiImage` terminals.
+///
+/// The 1.0 pipeline uses ``OutputFormat`` and its typed option values instead.
 public struct SaveOptions: Sendable {
-    /// PURPOSE: Output format
+    /// Explicit output format, or `nil` to infer it from the destination path.
     public var format: ImageFormat?
 
-    /// PURPOSE: Quality (1-100, for lossy formats)
+    /// Lossy-encoder quality from 1 through 100 where supported.
     public var quality: Int?
 
-    /// PURPOSE: Compression level (0-9, for PNG)
+    /// PNG compression level from 0 through 9.
     public var compression: Int?
 
-    /// PURPOSE: Enable progressive/interlaced output
+    /// Requests progressive JPEG or interlaced PNG output where supported.
     public var progressive: Bool
 
-    /// PURPOSE: Strip metadata
+    /// Removes metadata that the selected encoder can omit.
     public var stripMetadata: Bool
 
-    /// PURPOSE: Enable lossless compression (for WebP)
+    /// Selects lossless WebP encoding.
     public var lossless: Bool
 
-    /// PURPOSE: Effort level (1-9, for AVIF/WebP)
+    /// Encoder effort where the selected codec supports a speed-quality trade-off.
     public var effort: Int?
 
     public init(
@@ -89,18 +94,18 @@ public struct SaveOptions: Sendable {
     }
 }
 
-/// PURPOSE: Options for crop operations
+/// A rectangular region for the legacy crop API.
 public struct CropOptions: Sendable {
-    /// PURPOSE: Left offset
+    /// Zero-based horizontal offset from the image's left edge.
     public var left: Int
 
-    /// PURPOSE: Top offset
+    /// Zero-based vertical offset from the image's top edge.
     public var top: Int
 
-    /// PURPOSE: Width
+    /// Width of the extracted region in pixels.
     public var width: Int
 
-    /// PURPOSE: Height
+    /// Height of the extracted region in pixels.
     public var height: Int
 
     public init(left: Int, top: Int, width: Int, height: Int) {

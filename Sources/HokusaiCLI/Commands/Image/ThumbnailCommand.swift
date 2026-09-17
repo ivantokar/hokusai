@@ -6,10 +6,10 @@ import Prompt
 struct ThumbnailCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "thumbnail",
-        abstract: "Create a thumbnail via the libvips optimised load+resize path (vips_thumbnail).",
+        abstract: "Create a thumbnail through the Hokusai pipeline.",
         discussion: """
             EXIF auto-rotation is applied by default. Sources smaller than the \
-            target are upscaled (libvips default). The output format is inferred \
+            target may be upscaled. The output format is inferred \
             from the output file extension; an existing output file is overwritten.
             """
     )
@@ -32,6 +32,7 @@ struct ThumbnailCommand: AsyncParsableCommand {
     @Flag(help: "Disable EXIF auto-rotation (default: rotate upright per EXIF orientation).")
     var noRotate: Bool = false
 
+    /// Checks dimensions and prevents crop modes without a target rectangle.
     func validate() throws {
         try CLIParser.validateDimension(width, name: "width")
         if let height {
@@ -43,6 +44,10 @@ struct ThumbnailCommand: AsyncParsableCommand {
         }
     }
 
+    /// Builds the current pipeline-based thumbnail flow and saves its result.
+    ///
+    /// This command uses `autoOrient` and `resize`; it does not currently use
+    /// the separate shrink-on-load thumbnail API.
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
@@ -63,4 +68,3 @@ struct ThumbnailCommand: AsyncParsableCommand {
         ])
     }
 }
-

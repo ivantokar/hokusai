@@ -1,7 +1,6 @@
 import Foundation
 
-/// PURPOSE: Comprehensive error enum for all Hokusai operations
-/// A stable, Swift-facing description of an image-processing failure.
+/// A stable Swift-facing description of an image-processing failure.
 ///
 /// The cases that name libvips directly remain deprecated compatibility cases.
 /// New pipeline APIs use the typed input, option, decode, transform, encode,
@@ -36,18 +35,20 @@ public enum HokusaiError: Error, Sendable {
     case notSupported(String)
 }
 
-/// Context retained for a stable public error while keeping native details
-/// behind Hokusai's adapter boundary.
+/// Context retained by typed errors while native details stay behind Hokusai's
+/// adapter boundary.
 public struct FailureContext: Sendable, Equatable {
     public let operation: String
     public let message: String
 
+    /// Creates context that identifies the failed operation and its explanation.
     public init(operation: String, message: String) {
         self.operation = operation
         self.message = message
     }
 }
 
+/// The filesystem action associated with an ``HokusaiError/io(url:operation:reason:)`` error.
 public enum FileOperation: String, Sendable {
     case read
     case write

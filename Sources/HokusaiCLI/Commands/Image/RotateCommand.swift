@@ -21,7 +21,10 @@ struct RotateCommand: AsyncParsableCommand {
     @Option(help: "Optional background RGBA (comma-separated), e.g. 255,255,255,255")
     var background: String?
 
-    /// PURPOSE: Rotate image by arbitrary degree angle and save result.
+    /// Rotates an image by an arbitrary angle and writes the result to disk.
+    ///
+    /// The optional background fills pixels uncovered by the rotation. For
+    /// example, `--background 255,255,255,255` produces an opaque white fill.
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()
@@ -40,5 +43,4 @@ struct RotateCommand: AsyncParsableCommand {
         ])
     }
 }
-
 

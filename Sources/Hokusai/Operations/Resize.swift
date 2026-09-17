@@ -2,14 +2,11 @@ import Foundation
 import CVips
 
 extension HokusaiImage {
-    /// PURPOSE: Resize image using libvips with fit and kernel controls.
-    /// INPUT:
-    /// - `width`/`height`: optional target bounds.
-    /// - `options`: fit, kernel, and constraint flags.
-    /// OUTPUT: New resized image instance.
-    /// AI HINTS:
-    /// - Keep geometry math deterministic.
-    /// - Preserve cover/contain post-processing behavior.
+    /// Returns a resized legacy image handle using libvips.
+    ///
+    /// The method first computes a proportional intermediate size. `cover`
+    /// crops that result, while `contain` embeds it in the requested canvas.
+    /// This mirrors the geometry rules used by the 1.0 pipeline API.
     public func resize(width: Int? = nil, height: Int? = nil, options: ResizeOptions = ResizeOptions()) throws -> HokusaiImage {
         let vipsBackend = try ensureVipsBackend()
         let pointer = try vipsBackend.getPointer()
@@ -17,7 +14,7 @@ extension HokusaiImage {
         let currentWidth = try vipsBackend.getWidth()
         let currentHeight = try vipsBackend.getHeight()
 
-        // PURPOSE: Merge provided dimensions with options
+        // Explicit arguments take precedence over dimensions stored in options.
         let targetWidth = width ?? options.width
         let targetHeight = height ?? options.height
 
@@ -25,7 +22,7 @@ extension HokusaiImage {
             throw HokusaiError.invalidOperation("Must specify at least width or height")
         }
 
-        // PURPOSE: Calculate target dimensions based on fit mode
+        // Resolve the proportional intermediate image before crop or padding.
         let (finalWidth, finalHeight) = try calculateDimensions(
             currentWidth: currentWidth,
             currentHeight: currentHeight,
@@ -36,16 +33,16 @@ extension HokusaiImage {
             withoutReduction: options.withoutReduction
         )
 
-        // PURPOSE: Calculate scale factors
+        // libvips resize accepts horizontal and vertical scale factors.
         let hscale = Double(finalWidth) / Double(currentWidth)
         let vscale = Double(finalHeight) / Double(currentHeight)
 
         var output: UnsafeMutablePointer<CVips.VipsImage>?
 
-        // PURPOSE: Map kernel to vips kernel
+        // Keep Swift's stable kernel names separate from native enum values.
         let vipsKernel = mapKernel(options.kernel)
 
-        // PURPOSE: Perform resize
+        // The native call returns a new owned image; the input remains valid.
         let result = swift_vips_resize(pointer, &output, hscale, vscale, vipsKernel)
 
         guard result == 0, let out = output else {
@@ -55,7 +52,7 @@ extension HokusaiImage {
 
         let resized = HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
 
-        // PURPOSE: Handle fit modes that require cropping or embedding
+        // Cover and contain need a second step after proportional resampling.
         switch options.fit {
         case .cover:
             if let w = targetWidth, let h = targetHeight {
@@ -80,22 +77,21 @@ extension HokusaiImage {
         }
     }
 
-    /// PURPOSE: Force exact output dimensions.
-    /// CONSTRAINTS: Ignores source aspect ratio (`fit = .fill`).
+    /// Stretches the image to exact dimensions without preserving aspect ratio.
     public func resize(width: Int, height: Int) throws -> HokusaiImage {
         var options = ResizeOptions()
         options.fit = .fill
         return try resize(width: width, height: height, options: options)
     }
 
-    /// PURPOSE: Resize to fit inside bounds without cropping.
+    /// Resizes to fit inside optional bounds without cropping.
     public func resizeToFit(width: Int? = nil, height: Int? = nil) throws -> HokusaiImage {
         var options = ResizeOptions()
         options.fit = .inside
         return try resize(width: width, height: height, options: options)
     }
 
-    /// PURPOSE: Resize to fully cover bounds and crop overflow.
+    /// Resizes to cover bounds and crops overflow at the selected position.
     public func resizeToCover(width: Int, height: Int, position: Position = .center) throws -> HokusaiImage {
         var options = ResizeOptions()
         options.fit = .cover
@@ -105,6 +101,7 @@ extension HokusaiImage {
 
     // MARK: - Private Helpers
 
+    /// Calculates the proportional intermediate size before crop or canvas padding.
     private func calculateDimensions(
         currentWidth: Int,
         currentHeight: Int,
@@ -114,10 +111,8 @@ extension HokusaiImage {
         withoutEnlargement: Bool,
         withoutReduction: Bool
     ) throws -> (width: Int, height: Int) {
-        // PURPOSE: Resolve final output dimensions before libvips resize call.
-        // CONSTRAINTS:
-        // PURPOSE: - Always return positive dimensions.
-        // PURPOSE: - Honor no-enlarge/no-reduction flags after fit calculation.
+        // Calculate geometry in Swift so all native calls receive one coherent,
+        // positive target size. Size constraints are applied after fit math.
         let aspectRatio = Double(currentWidth) / Double(currentHeight)
 
         var finalWidth: Int
@@ -130,7 +125,7 @@ extension HokusaiImage {
 
         case .inside, .contain:
             if let w = targetWidth, let h = targetHeight {
-                // PURPOSE: Both dimensions specified
+                // Choose the largest proportional size that remains inside both bounds.
                 let targetAspect = Double(w) / Double(h)
                 if aspectRatio > targetAspect {
                     finalWidth = w
@@ -140,11 +135,11 @@ extension HokusaiImage {
                     finalWidth = Int(Double(h) * aspectRatio)
                 }
             } else if let w = targetWidth {
-                // PURPOSE: Only width specified
+                // Preserve aspect ratio when width is the only constraint.
                 finalWidth = w
                 finalHeight = Int(Double(w) / aspectRatio)
             } else if let h = targetHeight {
-                // PURPOSE: Only height specified
+                // Preserve aspect ratio when height is the only constraint.
                 finalHeight = h
                 finalWidth = Int(Double(h) * aspectRatio)
             } else {
@@ -153,7 +148,7 @@ extension HokusaiImage {
 
         case .outside, .cover:
             if let w = targetWidth, let h = targetHeight {
-                // PURPOSE: Both dimensions specified
+                // Choose the smallest proportional size that covers both bounds.
                 let targetAspect = Double(w) / Double(h)
                 if aspectRatio > targetAspect {
                     finalHeight = h
@@ -163,11 +158,11 @@ extension HokusaiImage {
                     finalHeight = Int(Double(w) / aspectRatio)
                 }
             } else if let w = targetWidth {
-                // PURPOSE: Only width specified
+                // A single width still preserves aspect ratio for cover/outside.
                 finalWidth = w
                 finalHeight = Int(Double(w) / aspectRatio)
             } else if let h = targetHeight {
-                // PURPOSE: Only height specified
+                // A single height still preserves aspect ratio for cover/outside.
                 finalHeight = h
                 finalWidth = Int(Double(h) * aspectRatio)
             } else {
@@ -175,7 +170,7 @@ extension HokusaiImage {
             }
         }
 
-        // PURPOSE: Apply enlargement/reduction constraints
+        // Clamp the calculated result when callers forbid upscaling or downscaling.
         if withoutEnlargement {
             if finalWidth > currentWidth || finalHeight > currentHeight {
                 finalWidth = currentWidth
@@ -193,6 +188,7 @@ extension HokusaiImage {
         return (finalWidth, finalHeight)
     }
 
+    /// Maps the stable legacy kernel names to the libvips convolution enum.
     private func mapKernel(_ kernel: Kernel) -> VipsKernel {
         switch kernel {
         case .nearest: return VIPS_KERNEL_NEAREST
@@ -204,13 +200,14 @@ extension HokusaiImage {
         }
     }
 
+    /// Places the resized image on a larger canvas using an owned RGBA background.
     private func embed(width: Int, height: Int, position: Position, background: [Double]) throws -> HokusaiImage {
         let vipsBackend = try ensureVipsBackend()
         let pointer = try vipsBackend.getPointer()
         let currentWidth = try vipsBackend.getWidth()
         let currentHeight = try vipsBackend.getHeight()
 
-        // PURPOSE: Calculate position
+        // Compute the top-left origin for the requested canvas anchor.
         let (x, y) = calculateEmbedPosition(
             imageWidth: currentWidth,
             imageHeight: currentHeight,
@@ -221,7 +218,7 @@ extension HokusaiImage {
 
         var output: UnsafeMutablePointer<CVips.VipsImage>?
 
-        // PURPOSE: Create background array for vips
+        // libvips expects an owned VipsArray for the RGBA background.
         let vipsBackground = background.withUnsafeBufferPointer { ptr in
             swift_vips_array_double_new(ptr.baseAddress, Int32(background.count))
         }
@@ -243,6 +240,7 @@ extension HokusaiImage {
         return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
     }
 
+    /// Resolves a canvas anchor into the top-left position for the resized image.
     private func calculateEmbedPosition(
         imageWidth: Int,
         imageHeight: Int,

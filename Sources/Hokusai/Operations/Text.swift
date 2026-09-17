@@ -1,17 +1,18 @@
 import Foundation
 import CVips
 
-/// PURPOSE: Text rendering operations using libvips text rendering (Pango/Cairo)
+/// Text rendering and composition backed by libvips and Pango.
 extension HokusaiImage {
-    /// PURPOSE: Render styled text and composite it onto the base image.
-    /// INPUT:
-    /// - `text`: source text/markup content.
-    /// - `x`/`y`: anchor offset (used with optional gravity).
-    /// - `options`: typography, stroke, shadow, and layout controls.
-    /// OUTPUT: New image with rendered text overlay.
-    /// AI HINTS:
-    /// - Keep render flow: primary -> shadow -> stroke -> final text.
-    /// - Preserve out-of-bounds checks before each composite call.
+    /// Renders styled text and composites it onto this image.
+    ///
+    /// The rendering order is shadow, outline, then primary text. `x` and `y`
+    /// are offsets from the top-left unless `options.gravity` supplies a
+    /// semantic anchor. Layers that fall completely outside the base image are
+    /// skipped rather than making a native composite call.
+    ///
+    /// ```swift
+    /// let labelled = try image.drawText("Hello", x: 24, y: 24)
+    /// ```
     public func drawText(
         _ text: String,
         x: Int,
@@ -114,7 +115,7 @@ extension HokusaiImage {
         return result
     }
 
-    /// PURPOSE: Draw text by semantic position with optional padding.
+    /// Draws text at a semantic image position with optional edge padding.
     public func drawText(
         _ text: String,
         position: Position,
@@ -129,13 +130,14 @@ extension HokusaiImage {
 
     // MARK: - Private Helpers
 
+    /// Renders one independent Pango-backed RGBA layer before compositing it.
     private func buildTextOverlay(
         text: String,
         options: TextOptions,
         color: [Double]
     ) throws -> HokusaiImage {
-        // PURPOSE: Build a text-only RGBA image layer using libvips text rendering.
-        // DO NOT: Composite here; composition happens in caller.
+        // Render an independent RGBA layer. The caller decides where and in
+        // which order it is composited with shadow and outline layers.
         var renderedText: UnsafeMutablePointer<CVips.VipsImage>?
 
         let (fontSpec, fontFile) = fontSpecAndFile(from: options)
@@ -184,6 +186,7 @@ extension HokusaiImage {
         return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: renderedText)))
     }
 
+    /// Applies arbitrary rotation only when the caller requested a nonzero angle.
     private func maybeRotateTextLayer(_ image: HokusaiImage, options: TextOptions) throws -> HokusaiImage {
         guard let rotation = options.rotation, rotation != 0 else {
             return image
@@ -195,6 +198,7 @@ extension HokusaiImage {
         )
     }
 
+    /// Softens a shadow layer without altering the original text layer.
     private func blurTextLayer(_ image: HokusaiImage, sigma: Double) throws -> HokusaiImage {
         let pointer = try image.ensureVipsBackend().getPointer()
         var output: UnsafeMutablePointer<CVips.VipsImage>?
@@ -208,6 +212,7 @@ extension HokusaiImage {
         return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
     }
 
+    /// Converts a semantic gravity anchor and offsets into an absolute top-left origin.
     private func resolveTextOrigin(
         x: Int,
         y: Int,
@@ -217,7 +222,7 @@ extension HokusaiImage {
         textHeight: Int,
         gravity: TextGravity?
     ) -> (Int, Int) {
-        // PURPOSE: Convert gravity + offsets into absolute top-left origin.
+        // Convert an anchor plus caller offsets into one absolute top-left point.
         guard let gravity else {
             return (x, y)
         }
@@ -248,6 +253,7 @@ extension HokusaiImage {
         return (anchor.0 + x, anchor.1 + y)
     }
 
+    /// Maps Hokusai alignment names to the corresponding Pango/libvips values.
     private func mapTextAlignment(_ alignment: TextAlignment) -> VipsAlign {
         switch alignment {
         case .left: return VIPS_ALIGN_LOW
@@ -256,6 +262,7 @@ extension HokusaiImage {
         }
     }
 
+    /// Translates a font-relative line-spacing multiplier into Pango spacing.
     private func computeLineSpacing(_ options: TextOptions) -> Int {
         guard let lineSpacing = options.lineSpacing else {
             return 0
@@ -265,6 +272,7 @@ extension HokusaiImage {
         return Int((Double(options.fontSize) * (multiplier - 1.0)).rounded())
     }
 
+    /// Separates a Pango font specification from an optional explicit font file.
     private func fontSpecAndFile(from options: TextOptions) -> (fontSpec: String, fontFile: String?) {
         let fontValue = options.font.trimmingCharacters(in: .whitespacesAndNewlines)
         let fallbackFamily = "sans"
@@ -284,10 +292,12 @@ extension HokusaiImage {
         return (appendFontSizeIfMissing(familyOrSpec, size: options.fontSize), nil)
     }
 
+    /// Recognises the path-like font values accepted for legacy compatibility.
     private func isFontFilePath(_ value: String) -> Bool {
         return value.contains("/") || value.hasSuffix(".ttf") || value.hasSuffix(".otf") || value.hasSuffix(".ttc")
     }
 
+    /// Treats blank font-file options as absent before passing them to libvips.
     private func normalizedFontFilePath(_ value: String?) -> String? {
         guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
             return nil
@@ -295,6 +305,7 @@ extension HokusaiImage {
         return value
     }
 
+    /// Adds a size to a font family only when the caller did not provide one.
     private func appendFontSizeIfMissing(_ fontSpec: String, size: Int) -> String {
         let trimmed = fontSpec.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -308,6 +319,7 @@ extension HokusaiImage {
         return "\(trimmed) \(size)"
     }
 
+    /// Pads, truncates, and clamps a caller colour to an RGBA 0...255 vector.
     private func normalizeRGBA(_ values: [Double]) -> [Double] {
         var rgba = values
 
@@ -322,6 +334,7 @@ extension HokusaiImage {
         return rgba.map { min(max($0, 0.0), 255.0) }
     }
 
+    /// Escapes user text and wraps it in the Pango markup used to set RGBA colour.
     private func pangoMarkupText(text: String, color: [Double]) -> String {
         let escaped = text
             .replacingOccurrences(of: "&", with: "&amp;")
@@ -339,6 +352,7 @@ extension HokusaiImage {
         return "<span foreground=\"\(hex)\">\(escaped)</span>"
     }
 
+    /// Returns whether an overlay rectangle intersects the base image at all.
     private func shouldComposite(
         overlayX: Int,
         overlayY: Int,
@@ -352,6 +366,7 @@ extension HokusaiImage {
         return overlayX < baseWidth && overlayY < baseHeight && right > 0 && bottom > 0
     }
 
+    /// Maps the legacy semantic position to a gravity anchor and signed padding.
     private func positionPlacement(
         position: Position,
         padding: Int

@@ -3,7 +3,9 @@ import ArgumentParser
 import Hokusai
 import Prompt
 
+/// Shared timing, statistics, and JSON helpers for benchmark commands.
 enum BenchmarkRunner {
+    /// Executes async warmups and measured runs, returning milliseconds per run.
     static func runAsync(
         prompt: PromptService,
         name: String,
@@ -36,6 +38,7 @@ enum BenchmarkRunner {
         return (BenchmarkStats(samplesMs: samplesMs), samplesMs)
     }
 
+    /// Executes synchronous warmups and measured runs while displaying a spinner.
     static func run(
         prompt: PromptService,
         name: String,
@@ -75,6 +78,7 @@ enum BenchmarkRunner {
         return (stats, samplesMs)
     }
 
+    /// Prints a complete human-readable statistical summary for one case.
     static func printStats(prompt: PromptService, name: String, stats: BenchmarkStats) {
         prompt.panel("Results: \(name)", items: [
             ("Mean", formatMs(stats.meanMs)),
@@ -88,6 +92,7 @@ enum BenchmarkRunner {
         ])
     }
 
+    /// Encodes a payload deterministically and writes it to a local JSON file.
     static func writeJSON<T: Encodable>(_ value: T, to path: String) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -95,11 +100,13 @@ enum BenchmarkRunner {
         try data.write(to: URL(fileURLWithPath: path))
     }
 
+    /// Formats a millisecond duration for terminal output.
     static func formatMs(_ value: Double) -> String {
         String(format: "%.2f ms", value)
     }
 }
 
+/// Descriptive statistics calculated from one set of measured millisecond samples.
 struct BenchmarkStats: Encodable {
     let meanMs: Double
     let medianMs: Double
@@ -110,12 +117,14 @@ struct BenchmarkStats: Encodable {
     let stdDevMs: Double
     let opsPerSecond: Double
 
+    /// Computes percentile and dispersion values. Empty input produces zeroes.
     init(samplesMs: [Double]) {
         let sorted = samplesMs.sorted()
         let count = max(1, sorted.count)
         let sum = sorted.reduce(0, +)
         let mean = sum / Double(count)
 
+        /// Uses nearest-rank rounding over the sorted sample set.
         func percentile(_ p: Double) -> Double {
             guard !sorted.isEmpty else { return 0 }
             let rank = Int((p * Double(sorted.count - 1)).rounded())
@@ -148,6 +157,7 @@ struct BenchmarkStats: Encodable {
     }
 }
 
+/// JSON payload for a single benchmark case.
 struct BenchmarkResultPayload: Encodable {
     let generatedAt: String
     let benchmark: String
@@ -157,17 +167,18 @@ struct BenchmarkResultPayload: Encodable {
     let samplesMs: [Double]
 }
 
+/// Named result within a multi-case benchmark suite.
 struct BenchmarkSuiteCaseResult: Encodable {
     let name: String
     let stats: BenchmarkStats
     let samplesMs: [Double]
 }
 
+/// JSON payload containing all cases from one benchmark invocation.
 struct BenchmarkSuitePayload: Encodable {
     let generatedAt: String
     let warmup: Int
     let iterations: Int
     let cases: [BenchmarkSuiteCaseResult]
 }
-
 
