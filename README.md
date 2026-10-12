@@ -109,7 +109,7 @@ PDF output is Cairo-backed and contains the evaluated raster pipeline on one pag
 
 Loading a pipeline initializes the runtime automatically. Call `Hokusai.initialize()` at application startup only if you want startup failures surfaced explicitly.
 
-Do not call `Hokusai.shutdown()` in a normal server or application lifecycle. It is a final process-teardown operation for short-lived tools after all native images have been released.
+libvips is process-scoped: Hokusai initializes it at most once and it stays available until the process exits. There is no teardown API; the operating system reclaims native resources at exit.
 
 ## CLI
 
@@ -166,7 +166,7 @@ deliberate, tracked capability rather than an implied promise.
 
 ### Server operation and migration
 
-- [x] Idempotent, process-safe libvips initialization and guarded final teardown.
+- [x] Idempotent, process-safe, one-way libvips initialization.
 - [x] Concurrent pipeline evaluation and copied buffer-input ownership.
 - [ ] [Runtime format capabilities, queue observability, and safe process-level configuration](https://github.com/ivantokar/hokusai/issues/28).
 - [ ] [A clean 1.0-first public API boundary and semver-safe legacy retirement plan](https://github.com/ivantokar/hokusai/issues/29).
