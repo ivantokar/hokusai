@@ -4,69 +4,15 @@ import CVips
 /// Owns one libvips image pointer and centralizes native decode and encode work.
 ///
 /// `VipsBackend` is the ownership boundary between Swift and libvips. It
-/// serializes access to its pointer, releases it exactly once in `deinit`, and
-/// keeps process-wide runtime state behind a separate lock.
+/// serializes access to its pointer and releases it exactly once in `deinit`.
+/// Process-wide initialization belongs to `VipsRuntime`.
 final class VipsBackend: ImageBackend {
     private var imagePointer: UnsafeMutablePointer<CVips.VipsImage>?
     private let lock = NSLock()
 
-    // MARK: - Runtime Lifecycle
-
-    private enum RuntimeState {
-        case uninitialized
-        case initialized
-        case shutdownCompleted
-    }
-
-    /// Process-global libvips state. Only read or written while holding
-    /// `runtimeLock`, which makes the `nonisolated(unsafe)` sound.
-    nonisolated(unsafe) private static var runtimeState: RuntimeState = .uninitialized
-    nonisolated(unsafe) private static var liveImageCount = 0
-    private static let runtimeLock = NSLock()
-
-    /// Initializes the process-wide libvips runtime once.
-    ///
-    /// Loading entry points call this automatically. Repeated and concurrent
-    /// calls are safe. A successful final shutdown is irreversible because
-    /// libvips cannot be reinitialized in the same process.
-    static func initialize() throws {
-        runtimeLock.lock()
-        defer { runtimeLock.unlock() }
-
-        switch runtimeState {
-        case .initialized:
-            return
-        case .shutdownCompleted:
-            throw HokusaiError.initializationFailed(
-                "libvips cannot be re-initialized after shutdown(); shutdown() is a final process-teardown operation")
-        case .uninitialized:
-            guard vips_init("Hokusai") == 0 else {
-                throw HokusaiError.initializationFailed(getLastError())
-            }
-            runtimeState = .initialized
-        }
-    }
-
-    /// Performs final process teardown after every image handle has been released.
-    static func shutdown() throws {
-        runtimeLock.lock()
-        defer { runtimeLock.unlock() }
-
-        guard runtimeState == .initialized else { return }
-        guard liveImageCount == 0 else {
-            throw HokusaiError.invalidOperation(
-                "Cannot shut down libvips while \(liveImageCount) Hokusai image handle(s) are still alive")
-        }
-        vips_shutdown()
-        runtimeState = .shutdownCompleted
-    }
-
     /// Takes ownership of a valid, owned libvips image pointer.
     init(takingOwnership pointer: UnsafeMutablePointer<CVips.VipsImage>) {
         self.imagePointer = pointer
-        Self.runtimeLock.lock()
-        Self.liveImageCount += 1
-        Self.runtimeLock.unlock()
     }
 
     deinit {
@@ -76,9 +22,6 @@ final class VipsBackend: ImageBackend {
         if let pointer = imagePointer {
             g_object_unref(pointer)
             imagePointer = nil
-            Self.runtimeLock.lock()
-            Self.liveImageCount -= 1
-            Self.runtimeLock.unlock()
         }
     }
 
@@ -97,7 +40,7 @@ final class VipsBackend: ImageBackend {
 
     /// Opens a local source lazily with libvips' requested access pattern.
     static func loadFromFile(_ path: String, options: LoadOptions = LoadOptions()) throws -> VipsBackend {
-        try initialize()
+        try VipsRuntime.ensureInitialized()
 
         guard FileManager.default.fileExists(atPath: path) else {
             throw HokusaiError.fileNotFound(path)
@@ -120,7 +63,7 @@ final class VipsBackend: ImageBackend {
 
     /// Copies encoded bytes into native ownership and opens them lazily.
     static func loadFromBuffer(_ data: Data, options: LoadOptions = LoadOptions()) throws -> VipsBackend {
-        try initialize()
+        try VipsRuntime.ensureInitialized()
 
         guard !data.isEmpty else {
             throw HokusaiError.invalidImageData
@@ -146,7 +89,7 @@ final class VipsBackend: ImageBackend {
 
     /// Opens a local source through libvips' shrink-on-load thumbnail path.
     static func thumbnailFromFile(_ path: String, width: Int, options: ThumbnailOptions) throws -> VipsBackend {
-        try initialize()
+        try VipsRuntime.ensureInitialized()
         let arguments = try ThumbnailArguments.validate(width: width, options: options)
 
         guard FileManager.default.fileExists(atPath: path) else {
@@ -167,7 +110,7 @@ final class VipsBackend: ImageBackend {
 
     /// Creates a shrink-on-load thumbnail from copied encoded bytes.
     static func thumbnailFromBuffer(_ data: Data, width: Int, options: ThumbnailOptions) throws -> VipsBackend {
-        try initialize()
+        try VipsRuntime.ensureInitialized()
         let arguments = try ThumbnailArguments.validate(width: width, options: options)
 
         guard !data.isEmpty else {

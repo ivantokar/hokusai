@@ -555,35 +555,16 @@ public struct Hokusai: Sendable {
 
     /// Initialize the libvips runtime.
     ///
-    /// Idempotent and thread-safe: repeated and concurrent calls are safe,
-    /// and only the first successful call performs work. All image-loading
-    /// entry points initialize the runtime automatically, so an explicit call
-    /// is only needed when you want initialization failures surfaced at
-    /// application startup.
+    /// libvips is process-scoped: it is initialized at most once and remains
+    /// available until the process exits. Repeated and concurrent calls are
+    /// safe. Every native entry point initializes the runtime automatically,
+    /// so an explicit call is only needed to surface initialization failures
+    /// at application startup.
     ///
     /// - Throws: ``HokusaiError/initializationFailed(_:)`` if libvips could
-    ///   not be initialized, or if ``shutdown()`` has already been called
-    ///   (libvips cannot be restarted within the same process).
+    ///   not be initialized. The failure is final for the process.
     public static func initialize() throws {
-        try VipsBackend.initialize()
-    }
-
-    /// Permanently shut down the libvips runtime.
-    ///
-    /// This is an advanced, final process-teardown operation — not part of
-    /// the ordinary application lifecycle. Long-running applications such as
-    /// servers should never call it; the operating system reclaims libvips
-    /// resources at process exit. Call it, at most once, immediately before
-    /// process exit (for example, to produce clean leak-checker reports), and
-    /// only after every `HokusaiImage` has been released — shutting down while
-    /// images are still alive is undefined behaviour in libvips.
-    ///
-    /// After `shutdown()` the runtime cannot be re-initialized: subsequent
-    /// loads throw ``HokusaiError/initializationFailed(_:)``. Repeated calls
-    /// are no-ops.
-    @available(*, deprecated, message: "Ordinary applications should not shut down libvips. The process reclaims it at exit.")
-    public static func shutdown() throws {
-        try VipsBackend.shutdown()
+        try VipsRuntime.ensureInitialized()
     }
 
     // MARK: - Image Loading

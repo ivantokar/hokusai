@@ -4,11 +4,8 @@ import Testing
 
 /// Lifecycle idempotency and concurrent-use behavior.
 ///
-/// `Hokusai.shutdown()` is intentionally not exercised here: it permanently
-/// tears down libvips for the whole process, so an in-process test would
-/// poison every other test. Its contract (final, idempotent, re-init throws)
-/// is enforced by the state machine in `VipsBackend` and exercised end-to-end
-/// by every CLI invocation, which runs initialize → work → shutdown → exit.
+/// libvips is process-scoped: it is initialized at most once and never torn
+/// down, so these tests only cover repeated and concurrent initialization.
 @Suite struct LifecycleConcurrencyTests {
     init() throws {
         try Hokusai.initialize()
@@ -24,15 +21,6 @@ import Testing
         // The runtime must remain usable afterwards.
         let data = try loadFixtureData(named: "pixel", ext: "png")
         #expect(try Hokusai.image(from: data).width == 1)
-    }
-
-    @Test func shutdownRefusesToTearDownLiveImages() throws {
-        let data = try loadFixtureData(named: "pixel", ext: "png")
-        let image = try Hokusai.image(from: data)
-        #expect(throws: HokusaiError.self) {
-            try Hokusai.shutdown()
-        }
-        #expect(try image.width == 1)
     }
 
     @Test func concurrentInitializationDoesNotRace() async throws {

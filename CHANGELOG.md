@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Removed
+- **Breaking:** `Hokusai.shutdown()`. libvips is now process-scoped: it is
+  initialized at most once and stays available until the process exits.
+  Remove calls to `shutdown()`; the operating system reclaims native resources
+  at exit.
+
 ### Changed
 - **Breaking:** the native baseline is now libvips 8.16+ and Cairo 1.16+.
   Older libraries are rejected at compile time instead of failing on missing
