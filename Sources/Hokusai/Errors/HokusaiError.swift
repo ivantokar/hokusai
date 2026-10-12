@@ -4,7 +4,8 @@ import Foundation
 ///
 /// The cases that name libvips directly remain deprecated compatibility cases.
 /// New pipeline APIs use the typed input, option, decode, transform, encode,
-/// I/O, cancellation, and runtime categories below.
+/// I/O, and runtime categories below. Cancellation is reported as Swift's
+/// standard `CancellationError`.
 public enum HokusaiError: Error, Sendable {
     case invalidInput(String)
     case invalidOption(name: String, reason: String)
@@ -13,7 +14,6 @@ public enum HokusaiError: Error, Sendable {
     case transform(FailureContext)
     case encode(FailureContext)
     case io(url: URL, operation: FileOperation, reason: String)
-    case cancelled
     case runtime(FailureContext)
 
     // MARK: Legacy compatibility
@@ -71,8 +71,6 @@ extension HokusaiError: LocalizedError {
             return "Could not encode image during \(context.operation): \(context.message)"
         case .io(let url, let operation, let reason):
             return "Could not \(operation.rawValue) \(url.path): \(reason)"
-        case .cancelled:
-            return "Image processing was cancelled"
         case .runtime(let context):
             return "Hokusai runtime failure during \(context.operation): \(context.message)"
         case .initializationFailed(let message):
@@ -118,7 +116,7 @@ extension HokusaiError {
     static func pipeline(_ error: Error, operation: String, category: PipelineFailureCategory) -> HokusaiError {
         if let error = error as? HokusaiError {
             switch error {
-            case .invalidInput, .invalidOption, .unsupported, .decode, .transform, .encode, .io, .cancelled, .runtime:
+            case .invalidInput, .invalidOption, .unsupported, .decode, .transform, .encode, .io, .runtime:
                 return error
             case .fileNotFound(let path): return .io(url: URL(fileURLWithPath: path), operation: .read, reason: "file not found")
             case .invalidImageData: return .invalidInput("encoded data is empty or invalid")

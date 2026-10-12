@@ -19,8 +19,10 @@ import CVips
 ///
 /// Building a pipeline only records intent and validates options; it performs
 /// no native work. The source is opened, transformed, and encoded when a
-/// terminal method runs, on Hokusai's bounded executor rather than Swift's
-/// cooperative executor. Decode failures and pixel-dependent errors (such as
+/// terminal method runs, on Hokusai's evaluation scheduler rather than Swift's
+/// cooperative executor. Cancelling the calling task cancels a queued
+/// evaluation or asks libvips to stop a running one; both throw
+/// `CancellationError`. Decode failures and pixel-dependent errors (such as
 /// extending to a smaller canvas) therefore surface from the terminal.
 public struct Hokusai: Sendable {
     let plan: ImagePlan
@@ -327,13 +329,13 @@ public struct Hokusai: Sendable {
     /// headers, but does not promise to evaluate every output pixel.
     public func metadata() throws -> ImageMetadata {
         do {
-            return try Evaluator.lower(plan).metadata()
+            return try Evaluator.lower(plan, context: EvaluationContext()).metadata()
         } catch {
             throw HokusaiError.pipeline(error, operation: "read metadata", category: .transform)
         }
     }
 
-    /// Evaluates and encodes the pipeline on Hokusai's bounded executor.
+    /// Evaluates and encodes the pipeline on Hokusai's evaluation scheduler.
     ///
     /// Call an encoder method first. The returned ``Output`` includes both the
     /// owned bytes and the actual encoded dimensions, format, and byte count.
@@ -342,8 +344,8 @@ public struct Hokusai: Sendable {
             throw HokusaiError.invalidOption(name: "output format", reason: "call jpeg(), png(), webp(), avif(), pdf(), or encode(as:) before data()")
         }
         let plan = plan, terminal = terminal
-        return try await PipelineExecutor.run {
-            try Evaluator.encode(plan, terminal, as: format)
+        return try await EvaluationScheduler.shared.run { context in
+            try Evaluator.encode(plan, terminal, as: format, context: context)
         }
     }
 
@@ -358,8 +360,8 @@ public struct Hokusai: Sendable {
         }
         let format = try terminal.encoder ?? Self.outputFormat(from: url)
         let plan = plan, terminal = terminal
-        return try await PipelineExecutor.run {
-            try Evaluator.write(plan, terminal, as: format, to: url)
+        return try await EvaluationScheduler.shared.run { context in
+            try Evaluator.write(plan, terminal, as: format, to: url, context: context)
         }
     }
 
