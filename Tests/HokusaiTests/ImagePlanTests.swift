@@ -10,6 +10,17 @@ import Testing
         pipeline.plan.linearized.operations.map(\.name)
     }
 
+    /// Returns the error thrown by a terminal. Avoids `#expect(throws:)` with
+    /// a predicate closure, which crashes the Swift 6.0 type checker.
+    private func terminalError(_ body: () async throws -> Output) async -> Error? {
+        do {
+            _ = try await body()
+            return nil
+        } catch {
+            return error
+        }
+    }
+
     @Test func chainingPreservesExactOperationOrder() async throws {
         let input = try loadFixtureData(named: "landscape-asym", ext: "jpg")
         let resizeThenExtract = try Hokusai(data: input)
@@ -48,36 +59,36 @@ import Testing
             .webp(quality: 80)
             .preserveMetadata()
 
-        await #expect {
-            try await configured.data()
-        } throws: { error in
-            guard case HokusaiError.decode(let context) = error else { return false }
-            return context.operation == "decode input data"
+        let error = await terminalError { try await configured.data() }
+        guard case HokusaiError.decode(let context)? = error else {
+            Issue.record("expected a decode error, got \(String(describing: error))")
+            return
         }
+        #expect(context.operation == "decode input data")
     }
 
     @Test func missingFileIsReportedByTheTerminal() async throws {
         let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("missing-\(UUID().uuidString).jpg")
         let pipeline = try Hokusai(url: url).jpeg()
 
-        await #expect {
-            try await pipeline.data()
-        } throws: { error in
-            guard case HokusaiError.io(_, let operation, _) = error else { return false }
-            return operation == .read
+        let error = await terminalError { try await pipeline.data() }
+        guard case HokusaiError.io(_, let operation, _)? = error else {
+            Issue.record("expected an I/O error, got \(String(describing: error))")
+            return
         }
+        #expect(operation == .read)
     }
 
     @Test func pixelDependentValidationRunsAtEvaluation() async throws {
         let input = try loadFixtureData(named: "landscape-asym", ext: "jpg")
         let shrinking = try Hokusai(data: input).extend(to: ImageSize(width: 10, height: 10)).png()
 
-        await #expect {
-            try await shrinking.data()
-        } throws: { error in
-            guard case HokusaiError.invalidOption(let name, _) = error else { return false }
-            return name == "size"
+        let error = await terminalError { try await shrinking.data() }
+        guard case HokusaiError.invalidOption(let name, _)? = error else {
+            Issue.record("expected an invalid-option error, got \(String(describing: error))")
+            return
         }
+        #expect(name == "size")
     }
 
     @Test func dataAndWriteShareEvaluatorSemantics() async throws {
