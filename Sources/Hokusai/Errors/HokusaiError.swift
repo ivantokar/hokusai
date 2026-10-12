@@ -106,3 +106,30 @@ extension HokusaiError: LocalizedError {
         }
     }
 }
+
+/// Which stage of pipeline evaluation produced an untyped failure.
+enum PipelineFailureCategory { case decode, transform, encode }
+
+extension HokusaiError {
+    /// Maps an evaluation failure to the stable pipeline error vocabulary.
+    ///
+    /// Already-typed pipeline errors pass through unchanged; legacy and native
+    /// errors are wrapped with the failing operation and stage.
+    static func pipeline(_ error: Error, operation: String, category: PipelineFailureCategory) -> HokusaiError {
+        if let error = error as? HokusaiError {
+            switch error {
+            case .invalidInput, .invalidOption, .unsupported, .decode, .transform, .encode, .io, .cancelled, .runtime:
+                return error
+            case .fileNotFound(let path): return .io(url: URL(fileURLWithPath: path), operation: .read, reason: "file not found")
+            case .invalidImageData: return .invalidInput("encoded data is empty or invalid")
+            default: break
+            }
+        }
+        let context = FailureContext(operation: operation, message: error.localizedDescription)
+        switch category {
+        case .decode: return .decode(context)
+        case .transform: return .transform(context)
+        case .encode: return .encode(context)
+        }
+    }
+}

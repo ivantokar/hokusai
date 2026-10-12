@@ -24,19 +24,17 @@ extension HokusaiImage {
     ///   dimensions, or ``HokusaiError/vipsError(_:)`` when the libvips
     ///   thumbnail transformation fails.
     public func thumbnail(width: Int, options: ThumbnailOptions = ThumbnailOptions()) throws -> HokusaiImage {
+        HokusaiImage(native: try native().thumbnail(width: width, options: options))
+    }
+}
+
+extension NativeImage {
+    /// Resizes with `vips_thumbnail_image()` on an already-opened image.
+    func thumbnail(width: Int, options: ThumbnailOptions) throws -> NativeImage {
         let arguments = try ThumbnailArguments.validate(width: width, options: options)
-        let backend = try ensureVipsBackend()
-        let pointer = try backend.getPointer()
-
-        var output: UnsafeMutablePointer<CVips.VipsImage>?
-        let result = swift_vips_thumbnail_image(
-            pointer, &output, arguments.width, arguments.height, arguments.crop, arguments.noRotate)
-
-        guard result == 0, let out = output else {
-            VipsBackend.discardPartialImage(output)
-            throw HokusaiError.vipsError("thumbnail transformation failed: \(VipsBackend.getLastError())")
-        }
-
-        return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
+        return try applying({ input, output in
+            swift_vips_thumbnail_image(
+                input, output, arguments.width, arguments.height, arguments.crop, arguments.noRotate)
+        }, failure: { HokusaiError.vipsError("thumbnail transformation failed: \($0)") })
     }
 }

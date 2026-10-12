@@ -62,6 +62,8 @@ let output = try await Hokusai(url: URL(fileURLWithPath: "photo.jpg"))
 print("Wrote \(output.width) × \(output.height)")
 ```
 
+Building a pipeline only records what to do. The source is opened and processed when `data()` or `write(to:)` runs, so invalid image bytes, missing files, and pixel-dependent errors are thrown by the terminal, not by `Hokusai(data:)` or the transform call. Option validation (dimensions, quality, colours) still happens immediately.
+
 ## Inputs and output terminals
 
 ```swift

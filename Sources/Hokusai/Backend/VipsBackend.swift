@@ -1,137 +1,44 @@
 import Foundation
 import CVips
 
-/// Owns one libvips image pointer and centralizes native decode and encode work.
+/// Legacy backend facade over a ``NativeImage``.
 ///
-/// `VipsBackend` is the ownership boundary between Swift and libvips. It
-/// serializes access to its pointer and releases it exactly once in `deinit`.
+/// Native ownership lives in `NativeImage`; this type only adapts it to the
+/// legacy `ImageBackend` string-based encoder surface until #32 removes it.
 /// Process-wide initialization belongs to `VipsRuntime`.
 final class VipsBackend: ImageBackend {
-    private var imagePointer: UnsafeMutablePointer<CVips.VipsImage>?
-    private let lock = NSLock()
+    let native: NativeImage
+
+    init(native: NativeImage) {
+        self.native = native
+    }
 
     /// Takes ownership of a valid, owned libvips image pointer.
-    init(takingOwnership pointer: UnsafeMutablePointer<CVips.VipsImage>) {
-        self.imagePointer = pointer
+    convenience init(takingOwnership pointer: UnsafeMutablePointer<CVips.VipsImage>) {
+        self.init(native: NativeImage(takingOwnership: pointer))
     }
 
-    deinit {
-        lock.lock()
-        defer { lock.unlock() }
-
-        if let pointer = imagePointer {
-            g_object_unref(pointer)
-            imagePointer = nil
-        }
-    }
-
-    /// Returns the live native pointer or throws if it was already released.
+    /// Returns the native pointer, valid for this backend's lifetime.
     func getPointer() throws -> UnsafeMutablePointer<CVips.VipsImage> {
-        lock.lock()
-        defer { lock.unlock() }
-
-        guard let pointer = imagePointer else {
-            throw HokusaiError.invalidOperation("Image has been deallocated")
-        }
-        return pointer
+        native.pointer
     }
 
     // MARK: - ImageBackend Protocol Implementation
 
-    /// Opens a local source lazily with libvips' requested access pattern.
     static func loadFromFile(_ path: String, options: LoadOptions = LoadOptions()) throws -> VipsBackend {
-        try VipsRuntime.ensureInitialized()
-
-        guard FileManager.default.fileExists(atPath: path) else {
-            throw HokusaiError.fileNotFound(path)
-        }
-
-        let output: UnsafeMutablePointer<CVips.VipsImage>?
-        switch options.access {
-        case .sequential:
-            output = swift_vips_image_new_from_file_sequential(path)
-        case .random:
-            output = swift_vips_image_new_from_file(path)
-        }
-
-        guard let img = output else {
-            throw HokusaiError.loadFailed("\(path): \(getLastError())")
-        }
-
-        return VipsBackend(takingOwnership: img)
+        VipsBackend(native: try NativeImage.open(path: path, options: options))
     }
 
-    /// Copies encoded bytes into native ownership and opens them lazily.
     static func loadFromBuffer(_ data: Data, options: LoadOptions = LoadOptions()) throws -> VipsBackend {
-        try VipsRuntime.ensureInitialized()
-
-        guard !data.isEmpty else {
-            throw HokusaiError.invalidImageData
-        }
-
-        // The shim copies bytes into libvips-owned storage before this closure
-        // returns, so lazy evaluation never borrows `Data` storage.
-        let output: UnsafeMutablePointer<CVips.VipsImage>? = data.withUnsafeBytes { bytes in
-            switch options.access {
-            case .sequential:
-                return swift_vips_image_new_from_buffer_sequential(bytes.baseAddress, data.count)
-            case .random:
-                return swift_vips_image_new_from_buffer(bytes.baseAddress, data.count)
-            }
-        }
-
-        guard let img = output else {
-            throw HokusaiError.loadFailed(getLastError())
-        }
-
-        return VipsBackend(takingOwnership: img)
+        VipsBackend(native: try NativeImage.open(data: data, options: options))
     }
 
-    /// Opens a local source through libvips' shrink-on-load thumbnail path.
     static func thumbnailFromFile(_ path: String, width: Int, options: ThumbnailOptions) throws -> VipsBackend {
-        try VipsRuntime.ensureInitialized()
-        let arguments = try ThumbnailArguments.validate(width: width, options: options)
-
-        guard FileManager.default.fileExists(atPath: path) else {
-            throw HokusaiError.fileNotFound(path)
-        }
-
-        var output: UnsafeMutablePointer<CVips.VipsImage>?
-        let result = swift_vips_thumbnail(
-            path, &output, arguments.width, arguments.height, arguments.crop, arguments.noRotate)
-
-        guard result == 0, let img = output else {
-            discardPartialImage(output)
-            throw HokusaiError.loadFailed("thumbnail of \(path): \(getLastError())")
-        }
-
-        return VipsBackend(takingOwnership: img)
+        VipsBackend(native: try NativeImage.thumbnail(path: path, width: width, options: options))
     }
 
-    /// Creates a shrink-on-load thumbnail from copied encoded bytes.
     static func thumbnailFromBuffer(_ data: Data, width: Int, options: ThumbnailOptions) throws -> VipsBackend {
-        try VipsRuntime.ensureInitialized()
-        let arguments = try ThumbnailArguments.validate(width: width, options: options)
-
-        guard !data.isEmpty else {
-            throw HokusaiError.invalidImageData
-        }
-
-        // As with normal buffer loading, the shim copies bytes before lazy
-        // thumbnail evaluation can outlive the Swift `Data` value.
-        var output: UnsafeMutablePointer<CVips.VipsImage>?
-        let result = data.withUnsafeBytes { bytes -> Int32 in
-            swift_vips_thumbnail_buffer(
-                bytes.baseAddress, data.count, &output,
-                arguments.width, arguments.height, arguments.crop, arguments.noRotate)
-        }
-
-        guard result == 0, let img = output else {
-            discardPartialImage(output)
-            throw HokusaiError.loadFailed("thumbnail from buffer: \(getLastError())")
-        }
-
-        return VipsBackend(takingOwnership: img)
+        VipsBackend(native: try NativeImage.thumbnail(data: data, width: width, options: options))
     }
 
     /// Selects a legacy encoder and writes the evaluated image to a local path.
@@ -197,94 +104,13 @@ final class VipsBackend: ImageBackend {
         return Data(bytes: buf, count: length)
     }
 
-    /// Reads the current native width without forcing an encode.
-    func getWidth() throws -> Int {
-        let pointer = try getPointer()
-        return Int(vips_image_get_width(pointer))
-    }
+    func getWidth() throws -> Int { native.width }
 
-    /// Reads the current native height without forcing an encode.
-    func getHeight() throws -> Int {
-        let pointer = try getPointer()
-        return Int(vips_image_get_height(pointer))
-    }
+    func getHeight() throws -> Int { native.height }
 
-    /// Reads the current count of pixel bands.
-    func getBands() throws -> Int {
-        let pointer = try getPointer()
-        return Int(vips_image_get_bands(pointer))
-    }
+    func getBands() throws -> Int { native.bands }
 
-    /// Checks the native image's alpha capability.
-    func hasAlpha() throws -> Bool {
-        let pointer = try getPointer()
-        return vips_image_hasalpha(pointer) != 0
-    }
-
-    /// Copies scalar libvips fields and adds stable aliases used by Hokusai.
-    func extendedMetadata() throws -> [String: String] {
-        let pointer = try getPointer()
-        var metadata: [String: String] = [:]
-
-        if let fields = swift_vips_image_get_fields(pointer) {
-            defer { swift_vips_g_strfreev(fields) }
-
-            var index = 0
-            while let fieldPointer = fields[index] {
-                let field = String(cString: fieldPointer)
-                if let valuePointer = swift_vips_image_get_as_string(pointer, field) {
-                    metadata[field] = String(cString: valuePointer)
-                    swift_vips_g_free(valuePointer)
-                }
-                index += 1
-            }
-        }
-
-        // Add stable aliases where libvips exposes a native enum or resolution
-        // only through its lower-level metadata dictionary.
-        metadata["width"] = metadata["width"] ?? String(Int(vips_image_get_width(pointer)))
-        metadata["height"] = metadata["height"] ?? String(Int(vips_image_get_height(pointer)))
-        metadata["bands"] = metadata["bands"] ?? String(Int(vips_image_get_bands(pointer)))
-        metadata["hasAlpha"] = metadata["hasAlpha"] ?? String(vips_image_hasalpha(pointer) != 0)
-
-        let interpretation = swift_vips_image_get_interpretation(pointer)
-        metadata["interpretation"] = metadata["interpretation"] ?? String(interpretation)
-        if metadata["interpretationNick"] == nil, let nick = swift_vips_interpretation_nick(interpretation) {
-            metadata["interpretationNick"] = String(cString: nick)
-        }
-
-        let bandFormat = swift_vips_image_get_band_format(pointer)
-        metadata["bandFormat"] = metadata["bandFormat"] ?? String(bandFormat)
-        if metadata["bandFormatNick"] == nil, let nick = swift_vips_band_format_nick(bandFormat) {
-            metadata["bandFormatNick"] = String(cString: nick)
-        }
-
-        let coding = swift_vips_image_get_coding(pointer)
-        metadata["coding"] = metadata["coding"] ?? String(coding)
-        if metadata["codingNick"] == nil, let nick = swift_vips_coding_nick(coding) {
-            metadata["codingNick"] = String(cString: nick)
-        }
-
-        let xres = swift_vips_image_get_xres(pointer)
-        let yres = swift_vips_image_get_yres(pointer)
-        metadata["xres"] = metadata["xres"] ?? String(xres)
-        metadata["yres"] = metadata["yres"] ?? String(yres)
-        metadata["xresDpi"] = metadata["xresDpi"] ?? String(xres * 25.4)
-        metadata["yresDpi"] = metadata["yresDpi"] ?? String(yres * 25.4)
-
-        return metadata
-    }
-
-    /// Copies an optional binary libvips metadata field into Swift data.
-    func metadataBlob(named name: String) throws -> Data? {
-        let pointer = try getPointer()
-        var length = 0
-        guard let copied = swift_vips_image_get_blob_copy(pointer, name, &length) else {
-            return nil
-        }
-        defer { g_free(copied) }
-        return Data(bytes: copied, count: length)
-    }
+    func hasAlpha() throws -> Bool { native.hasAlpha }
 
     // MARK: - Helper Methods
 

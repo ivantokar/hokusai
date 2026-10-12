@@ -53,11 +53,15 @@ extension HokusaiImage {
         y: Int = 0,
         options: CompositeOptions = CompositeOptions()
     ) throws -> HokusaiImage {
-        let baseBackend = try ensureVipsBackend()
-        let overlayBackend = try overlay.ensureVipsBackend()
+        HokusaiImage(native: try native().composite(overlay: try overlay.native(), x: x, y: y, options: options))
+    }
+}
 
-        let basePointer = try baseBackend.getPointer()
-        let overlayPointer = try overlayBackend.getPointer()
+extension NativeImage {
+    /// Draws `overlay` over this image at the supplied pixel offset.
+    func composite(overlay: NativeImage, x: Int, y: Int, options: CompositeOptions) throws -> NativeImage {
+        let basePointer = pointer
+        let overlayPointer = overlay.pointer
 
         // Normalize both sources before blending so alpha handling does not
         // depend on whether an input started as grayscale, RGB, or RGBA.
@@ -99,7 +103,7 @@ extension HokusaiImage {
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }
 
-        return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
+        return NativeImage(takingOwnership: out)
     }
 
     // MARK: - Private Helpers
