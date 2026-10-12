@@ -12,18 +12,31 @@ libvips processes images on demand, using small regions of pixel data at a time 
 
 ## Requirements
 
-- Swift 6.0+
-- macOS 13+ or Ubuntu/Debian Linux
-- libvips 8.9+, Cairo PDF support, and `pkg-config`
+Required:
+
+- Swift 6.0+ (tested with Swift 6.0 and 6.4)
+- macOS 13+ or Linux
+- libvips 8.16+ — older versions are rejected at compile time
+- Cairo 1.16+ with PDF surface support
+- `pkg-config`
 
 ```bash
 # macOS
 brew install vips cairo pkg-config
 
-# Ubuntu/Debian
+# Debian 13+ / Ubuntu 25.04+ (distro libvips 8.16+)
 sudo apt update
 sudo apt install libvips-dev libcairo2-dev pkg-config
 ```
+
+Ubuntu 24.04 and Debian 12 ship libvips older than 8.16; on those releases
+build libvips from a [release tarball](https://github.com/libvips/libvips/releases)
+(see `.github/scripts/install-libvips.sh` for the configuration CI uses).
+
+Build-dependent capabilities depend on how libvips was compiled, not on
+Hokusai's package dependencies: HEIF/AVIF, JPEG XL, JPEG 2000, PDF input, SVG,
+Pango text rendering, and other optional codecs. Run `hokusai info` to inspect
+the runtime you actually installed.
 
 ## Installation
 

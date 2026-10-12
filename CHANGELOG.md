@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **Breaking:** the native baseline is now libvips 8.16+ and Cairo 1.16+.
+  Older libraries are rejected at compile time instead of failing on missing
+  symbols. The previously documented libvips 8.9 minimum was no longer true.
+- Swift 6.4 is a supported, CI-tested toolchain; the minimum stays Swift 6.0.
+- `HokusaiNIO` depends on `NIOFoundationCompat` for its `Data` conversions.
+- CI pins and reports the exact Swift, libvips, and Cairo versions it tests.
+
 ## [1.0.0] - 2026-08-05
 
 ### Added

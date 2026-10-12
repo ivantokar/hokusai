@@ -33,7 +33,9 @@ let package = Package(
         .package(url: "https://github.com/ivantokar/prompt.git", from: "1.1.2"),
     ],
     targets: [
-        // PURPOSE: System library wrapper for libvips
+        // PURPOSE: System library wrapper for libvips. The native baseline
+        // (libvips >= 8.16, Cairo >= 1.16) is enforced at compile time by the
+        // module headers because pkg-config targets cannot express versions.
         .systemLibrary(
             name: "CVips",
             pkgConfig: "vips",
@@ -53,10 +55,7 @@ let package = Package(
         // PURPOSE: Main Hokusai library target
         .target(
             name: "Hokusai",
-            dependencies: ["CVips", "CCairo"],
-            swiftSettings: [
-                .enableExperimentalFeature("StrictConcurrency")
-            ]
+            dependencies: ["CVips", "CCairo"]
         ),
         .executableTarget(
             name: "HokusaiCLI",
@@ -71,6 +70,7 @@ let package = Package(
             dependencies: [
                 "Hokusai",
                 .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOFoundationCompat", package: "swift-nio"),
             ]
         ),
         .target(

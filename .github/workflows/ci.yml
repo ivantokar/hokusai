@@ -9,65 +9,60 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Support matrix (#49): the baseline job proves the minimum contract
+# (Swift 6.0, libvips 8.16, Cairo 1.16); the current jobs cover Swift 6.4 and
+# current native libraries on Linux and macOS.
 jobs:
-  macos:
-    name: macOS (Swift toolchain from Xcode)
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install libvips and Cairo PDF support
-        run: brew install vips cairo
-
-      - name: Swift version
-        run: swift --version
-
-      - name: Build (library + CLI + tests)
-        run: swift build --build-tests
-
-      - name: Build optional integration products
-        run: |
-          swift build --target HokusaiNIO
-          swift build --target HokusaiLegacy
-
-      - name: Test
-        run: swift test
-
-      - name: Build CLI (release)
-        run: swift build -c release --product hokusai
-
-      - name: CLI smoke test
-        run: |
-          BIN=.build/release/hokusai
-          $BIN info
-          $BIN thumbnail \
-            --input Tests/HokusaiTests/Fixtures/landscape-asym.jpg \
-            --output /tmp/ci-thumb.jpg --width 100 --height 100 --crop centre
-          $BIN resize \
-            --input Tests/HokusaiTests/Fixtures/landscape-asym.jpg \
-            --output /tmp/ci-resize.webp --width 100 --height 100 --fit cover
-          if $BIN thumbnail --input Tests/HokusaiTests/Fixtures/landscape-asym.jpg \
-            --output /tmp/ci-bad.jpg --width 0; then
-            echo "expected non-zero exit for invalid width" && exit 1
-          fi
-
   linux:
-    name: Linux (Swift ${{ matrix.swift }})
+    name: Linux ${{ matrix.name }} (Swift ${{ matrix.swift }}, libvips ${{ matrix.vips }})
     runs-on: ubuntu-latest
-    container: swift:${{ matrix.swift }}
+    container: swift:${{ matrix.swift }}-${{ matrix.distro }}
     strategy:
       fail-fast: false
       matrix:
-        # Minimum supported toolchain and a recent one.
-        swift: ["6.0", "6.1"]
+        include:
+          - name: baseline
+            swift: "6.0"
+            distro: jammy # Cairo 1.16.0
+            vips: "8.16.1"
+            extra-packages: ""
+          - name: current
+            swift: "6.4"
+            distro: noble
+            vips: "8.18.7"
+            extra-packages: >-
+              libjxl-dev libhwy-dev libimagequant-dev libcgif-dev
+              libheif-plugin-aomenc libheif-plugin-dav1d
+    env:
+      VIPS_PREFIX: /opt/vips
+      PKG_CONFIG_PATH: /opt/vips/lib/pkgconfig
+      LD_LIBRARY_PATH: /opt/vips/lib
+      EXPECTED_SWIFT: ${{ matrix.swift }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install libvips (>= 8.9 required)
+      - name: Install native build dependencies
         run: |
           apt-get update
-          apt-get install -y libvips-dev libcairo2-dev pkg-config fonts-dejavu-core
-          pkg-config --modversion vips
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            curl ca-certificates xz-utils zstd meson ninja-build pkg-config build-essential \
+            libglib2.0-dev libexpat1-dev libjpeg-dev libpng-dev libwebp-dev \
+            libtiff-dev libgif-dev libexif-dev liblcms2-dev libcairo2-dev \
+            libpango1.0-dev librsvg2-dev libpoppler-glib-dev libheif-dev \
+            libarchive-dev libfftw3-dev liborc-0.4-dev fonts-dejavu-core \
+            ${{ matrix.extra-packages }}
+
+      - name: Restore libvips build
+        uses: actions/cache@v4
+        with:
+          path: /opt/vips
+          key: vips-${{ matrix.vips }}-${{ matrix.distro }}-${{ hashFiles('.github/scripts/install-libvips.sh') }}
+
+      - name: Install libvips ${{ matrix.vips }}
+        run: .github/scripts/install-libvips.sh "${{ matrix.vips }}" "$VIPS_PREFIX"
+
+      - name: Report native versions
+        run: PATH="$VIPS_PREFIX/bin:$PATH" .github/scripts/report-native.sh
 
       - name: Build (library + CLI + tests)
         run: swift build --build-tests
@@ -84,16 +79,45 @@ jobs:
         run: swift build -c release --product hokusai
 
       - name: CLI smoke test
+        run: .github/scripts/cli-smoke.sh
+
+  macos:
+    name: macOS current (Swift 6.4, Homebrew libvips)
+    runs-on: macos-26
+    env:
+      EXPECTED_SWIFT: "6.4"
+    steps:
+      - uses: actions/checkout@v4
+
+      # Runner Xcode releases lag swift.org; install the 6.4 toolchain directly.
+      - name: Install Swift 6.4
         run: |
-          BIN=.build/release/hokusai
-          $BIN info
-          $BIN thumbnail \
-            --input Tests/HokusaiTests/Fixtures/landscape-asym.jpg \
-            --output /tmp/ci-thumb.jpg --width 100 --height 100 --crop centre
-          $BIN resize \
-            --input Tests/HokusaiTests/Fixtures/landscape-asym.jpg \
-            --output /tmp/ci-resize.webp --width 100 --height 100 --fit cover
-          if $BIN thumbnail --input Tests/HokusaiTests/Fixtures/landscape-asym.jpg \
-            --output /tmp/ci-bad.jpg --width 0; then
-            echo "expected non-zero exit for invalid width" && exit 1
-          fi
+          curl -fsSLO https://download.swift.org/swiftly/darwin/swiftly.pkg
+          installer -pkg swiftly.pkg -target CurrentUserHomeDirectory
+          ~/.swiftly/bin/swiftly init --quiet-shell-followup --assume-yes --skip-install
+          . ~/.swiftly/env.sh
+          swiftly install --use --assume-yes 6.4
+          echo "$HOME/.swiftly/bin" >> "$GITHUB_PATH"
+
+      - name: Install libvips and Cairo PDF support
+        run: brew install vips cairo pkg-config
+
+      - name: Report native versions
+        run: .github/scripts/report-native.sh
+
+      - name: Build (library + CLI + tests)
+        run: swift build --build-tests
+
+      - name: Build optional integration products
+        run: |
+          swift build --target HokusaiNIO
+          swift build --target HokusaiLegacy
+
+      - name: Test
+        run: swift test
+
+      - name: Build CLI (release)
+        run: swift build -c release --product hokusai
+
+      - name: CLI smoke test
+        run: .github/scripts/cli-smoke.sh

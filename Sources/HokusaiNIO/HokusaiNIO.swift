@@ -1,6 +1,7 @@
 import Foundation
 import Hokusai
 import NIOCore
+import NIOFoundationCompat
 
 /// SwiftNIO bridges for Hokusai.
 ///
@@ -12,15 +13,13 @@ public extension Hokusai {
     /// The copy lets the caller reuse or release `buffer` before the pipeline
     /// is asynchronously evaluated.
     init(buffer: ByteBuffer, options: InputOptions = .init()) throws {
-        self = try Hokusai(data: Data(buffer.readableBytesView), options: options)
+        self = try Hokusai(data: Data(buffer: buffer, byteTransferStrategy: .copy), options: options)
     }
 }
 
 public extension Output {
     /// Returns owned output bytes in a fresh NIO buffer.
     var byteBuffer: ByteBuffer {
-        var buffer = ByteBufferAllocator().buffer(capacity: data.count)
-        buffer.writeBytes(data)
-        return buffer
+        ByteBuffer(data: data)
     }
 }
