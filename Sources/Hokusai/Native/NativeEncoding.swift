@@ -58,7 +58,7 @@ extension NativeImage {
             let lossless = options.lossless ? 1 : 0
             let effort = Int32(options.effort ?? 4)
 
-            let result = swift_vips_heifsave(pointer, path, quality, Int32(lossless), effort, options.stripMetadata ? 1 : 0)
+            let result = swift_vips_heifsave(pointer, path, quality, Int32(lossless), effort, options.stripMetadata ? 1 : 0, 1)
             guard result == 0 else {
                 throw HokusaiError.saveFailed(VipsBackend.getLastError())
             }
@@ -68,7 +68,7 @@ extension NativeImage {
             let lossless = 0
             let effort = Int32(4)
 
-            let result = swift_vips_heifsave(pointer, path, quality, Int32(lossless), effort, options.stripMetadata ? 1 : 0)
+            let result = swift_vips_heifsave(pointer, path, quality, Int32(lossless), effort, options.stripMetadata ? 1 : 0, 0)
             guard result == 0 else {
                 throw HokusaiError.saveFailed(VipsBackend.getLastError())
             }
@@ -141,13 +141,19 @@ extension NativeImage {
             )
 
         case .avif, .heif:
+            // The codec must be explicit: buffers have no suffix to infer it from.
             let quality = Int32(options.quality ?? 80)
+            let lossless = format == .avif && options.lossless ? 1 : 0
+            let effort = Int32(format == .avif ? options.effort ?? 4 : 4)
             result = swift_vips_heifsave_buffer(
                 pointer,
                 &buffer,
                 &bufferSize,
                 quality,
-                options.stripMetadata ? 1 : 0
+                Int32(lossless),
+                effort,
+                options.stripMetadata ? 1 : 0,
+                format == .avif ? 1 : 0
             )
 
         case .gif:

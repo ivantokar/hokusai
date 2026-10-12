@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- `.avif().data()` returned HEVC-coded HEIC bytes because the buffer encoder
+  used libvips' default codec; it now produces AV1 AVIF and honours `effort`
+  and `lossless`. File output no longer depends on the `.avif` suffix to pick
+  AV1.
+
 ### Removed
 - **Breaking:** `HokusaiError.cancelled`. Cancelled terminals throw Swift's
   `CancellationError`.
