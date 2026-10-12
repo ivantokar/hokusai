@@ -144,9 +144,51 @@ done:
 
 // MARK: - Error Handling
 
-/** @brief Copy and atomically clear the libvips error buffer. Caller frees with g_free(). */
+/**
+ * @brief Copy and clear the libvips error buffer. Caller frees with g_free().
+ *
+ * The buffer is process-global: under concurrent failures the copied text may
+ * include diagnostics from other threads, so it is detail, not identity.
+ */
 static inline char *swift_vips_error_copy(void) {
     return vips_error_buffer_copy();
+}
+
+// MARK: - Evaluation Cancellation
+
+static int swift_vips_passthrough_generate(VipsRegion *out_region, void *seq, void *a, void *b, gboolean *stop) {
+    VipsRegion *input_region = (VipsRegion *) seq;
+    VipsRect *rect = &out_region->valid;
+    if (vips_region_prepare(input_region, rect)) {
+        return -1;
+    }
+    return vips_region_region(out_region, input_region, rect, rect->left, rect->top);
+}
+
+/**
+ * @brief Wrap `in` in a fresh pass-through image that is never shared.
+ *
+ * libvips caches operations process-wide, so the final image of one
+ * evaluation may be the same object another evaluation uses. Setting the kill
+ * flag on that shared image would cancel unrelated work. This wrapper is
+ * created outside the operation cache, so killing it only stops the
+ * evaluation that owns it. The wrapper keeps a reference to `in`.
+ */
+static inline VipsImage *swift_vips_evaluation_image(VipsImage *in) {
+    VipsImage *out = vips_image_new();
+    // Owned by `out`, so `in` outlives every region the wrapper creates.
+    g_object_set_data_full(G_OBJECT(out), "hokusai-input", g_object_ref(in), g_object_unref);
+    if (vips_image_pipelinev(out, VIPS_DEMAND_STYLE_THINSTRIP, in, NULL) ||
+        vips_image_generate(out, vips_start_one, swift_vips_passthrough_generate, vips_stop_one, in, NULL)) {
+        g_object_unref(out);
+        return NULL;
+    }
+    return out;
+}
+
+/** @brief Ask libvips workers evaluating `image` to stop as soon as possible. */
+static inline void swift_vips_image_kill(VipsImage *image) {
+    vips_image_set_kill(image, TRUE);
 }
 
 // MARK: - Image Loading

@@ -126,10 +126,11 @@ final class VipsBackend: ImageBackend {
         if let image { g_object_unref(image) }
     }
 
-    /// Copies and clears libvips' process-global error buffer atomically.
+    /// Copies and clears libvips' process-global error buffer.
     ///
-    /// Copying before clearing preserves the diagnostic and avoids returning a
-    /// pointer into shared native storage.
+    /// The buffer is shared by every thread, so under concurrent failures the
+    /// text may include diagnostics from other evaluations. Treat it as detail;
+    /// the typed Hokusai operation and category identify the failure.
     static func getLastError() -> String {
         guard let buffer = swift_vips_error_copy() else {
             return "Unknown vips error"

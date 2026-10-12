@@ -75,7 +75,7 @@ let png = try await fromData.png(compressionLevel: 6).data()
 let info = try await fromFile.write(to: URL(fileURLWithPath: "output.webp"))
 ```
 
-`data()` and `write(to:)` run the blocking native work off Swift's cooperative executor. Pipelines are immutable and safe to branch across tasks.
+`data()` and `write(to:)` run the blocking native work off Swift's cooperative executor. Concurrent evaluations beyond the scheduler's limit wait as suspended tasks in FIFO order. Cancelling the calling task removes a waiting evaluation or asks libvips to stop a running one; either way the terminal throws `CancellationError`, and the pipeline can be evaluated again. Pipelines are immutable and safe to branch across tasks.
 
 ## Transformations
 
@@ -151,7 +151,7 @@ deliberate, tracked capability rather than an implied promise.
 - [x] Encoded `Data`, local file `URL`, and optional SwiftNIO `ByteBuffer`
   inputs.
 - [x] Fluent geometry, colour, alpha, text, and typed compositing transforms.
-- [x] Async `data()` and `write(to:)` terminals on a bounded executor.
+- [x] Async `data()` and `write(to:)` terminals with FIFO admission and cancellation that stops running libvips work.
 - [x] Typed JPEG, PNG, WebP, AVIF, and single-page raster PDF output.
 - [x] Typed header metadata plus privacy-safe metadata removal by default.
 - [ ] [First-class pipeline thumbnails with shrink-on-load](https://github.com/ivantokar/hokusai/issues/20).

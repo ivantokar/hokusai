@@ -5,6 +5,8 @@ All notable changes to this project are documented in this file.
 ## [Unreleased]
 
 ### Removed
+- **Breaking:** `HokusaiError.cancelled`. Cancelled terminals throw Swift's
+  `CancellationError`.
 - **Breaking:** `Hokusai.shutdown()`. libvips is now process-scoped: it is
   initialized at most once and stays available until the process exits.
   Remove calls to `shutdown()`; the operating system reclaims native resources
@@ -17,6 +19,9 @@ All notable changes to this project are documented in this file.
   pixel-dependent errors (e.g. `extend` to a smaller canvas) are now thrown by
   the terminal (or `metadata()`). Option validation is still immediate, and
   output pixels are unchanged.
+- Terminal evaluations are admitted by an asynchronous FIFO scheduler: callers
+  beyond the concurrency limit wait as suspended tasks instead of blocking
+  threads. Cancelling the calling task now also stops running libvips work.
 - Composite layers contribute only their image transformations; a layer's
   encoder and metadata settings are ignored.
 - **Breaking:** the native baseline is now libvips 8.16+ and Cairo 1.16+.

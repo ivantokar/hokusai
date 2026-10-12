@@ -3,19 +3,24 @@ import CVips
 
 /// Lowers immutable plans to libvips graphs and drives terminal sinks.
 ///
-/// Every method performs native work and must run inside the terminal
-/// execution boundary (`PipelineExecutor`, replaced by #41). Composite layers
-/// are lowered within the same call; the evaluator never schedules work.
+/// Every method performs native work and must run inside one
+/// `EvaluationScheduler` slot. Composite layers are lowered within the same
+/// call; the evaluator never schedules work or acquires another slot.
 /// libvips stays the pixel engine: lowering only builds its lazy graph, and
 /// pixels are computed when a sink pulls them.
 enum Evaluator {
     /// Builds the native image graph described by `plan`.
-    static func lower(_ plan: ImagePlan) throws -> NativeImage {
+    ///
+    /// Cancellation is checked between steps; a cancelled evaluation throws
+    /// `CancellationError` before starting the next native operation.
+    static func lower(_ plan: ImagePlan, context: EvaluationContext) throws -> NativeImage {
         let (source, operations) = plan.linearized
+        try context.checkCancellation()
         var image = try open(source)
         for operation in operations {
+            try context.checkCancellation()
             do {
-                image = try apply(operation, to: image)
+                image = try apply(operation, to: image, context: context)
             } catch {
                 throw HokusaiError.pipeline(error, operation: operation.name, category: .transform)
             }
@@ -24,8 +29,8 @@ enum Evaluator {
     }
 
     /// Evaluates `plan` and returns encoded bytes.
-    static func encode(_ plan: ImagePlan, _ terminal: TerminalConfig, as format: OutputFormat) throws -> Output {
-        let image = try lower(plan)
+    static func encode(_ plan: ImagePlan, _ terminal: TerminalConfig, as format: OutputFormat, context: EvaluationContext) throws -> Output {
+        let image = try context.sink(for: lower(plan, context: context))
         do {
             let data: Data
             switch format {
@@ -41,8 +46,8 @@ enum Evaluator {
     }
 
     /// Evaluates `plan` and writes it to a local file.
-    static func write(_ plan: ImagePlan, _ terminal: TerminalConfig, as format: OutputFormat, to url: URL) throws -> OutputInfo {
-        let image = try lower(plan)
+    static func write(_ plan: ImagePlan, _ terminal: TerminalConfig, as format: OutputFormat, to url: URL, context: EvaluationContext) throws -> OutputInfo {
+        let image = try context.sink(for: lower(plan, context: context))
         do {
             switch format {
             case .pdf(let options):
@@ -76,7 +81,7 @@ enum Evaluator {
         }
     }
 
-    private static func apply(_ operation: ImageOperation, to image: NativeImage) throws -> NativeImage {
+    private static func apply(_ operation: ImageOperation, to image: NativeImage, context: EvaluationContext) throws -> NativeImage {
         switch operation {
         case .autoOrient:
             return try image.autoRotate()
@@ -151,7 +156,7 @@ enum Evaluator {
             var result = image
             for layer in layers {
                 result = try result.composite(
-                    overlay: try lower(layer.plan),
+                    overlay: try lower(layer.plan, context: context),
                     x: layer.x,
                     y: layer.y,
                     options: CompositeOptions(mode: layer.blend, opacity: layer.opacity)
