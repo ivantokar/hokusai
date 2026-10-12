@@ -8,11 +8,41 @@ extension HokusaiImage {
     /// crops that result, while `contain` embeds it in the requested canvas.
     /// This mirrors the geometry rules used by the 1.0 pipeline API.
     public func resize(width: Int? = nil, height: Int? = nil, options: ResizeOptions = ResizeOptions()) throws -> HokusaiImage {
-        let vipsBackend = try ensureVipsBackend()
-        let pointer = try vipsBackend.getPointer()
+        HokusaiImage(native: try native().resize(width: width, height: height, options: options))
+    }
 
-        let currentWidth = try vipsBackend.getWidth()
-        let currentHeight = try vipsBackend.getHeight()
+    /// Stretches the image to exact dimensions without preserving aspect ratio.
+    public func resize(width: Int, height: Int) throws -> HokusaiImage {
+        var options = ResizeOptions()
+        options.fit = .fill
+        return try resize(width: width, height: height, options: options)
+    }
+
+    /// Resizes to fit inside optional bounds without cropping.
+    public func resizeToFit(width: Int? = nil, height: Int? = nil) throws -> HokusaiImage {
+        var options = ResizeOptions()
+        options.fit = .inside
+        return try resize(width: width, height: height, options: options)
+    }
+
+    /// Resizes to cover bounds and crops overflow at the selected position.
+    public func resizeToCover(width: Int, height: Int, position: Position = .center) throws -> HokusaiImage {
+        var options = ResizeOptions()
+        options.fit = .cover
+        options.position = position
+        return try resize(width: width, height: height, options: options)
+    }
+}
+
+extension NativeImage {
+    /// Returns a resized image using libvips.
+    ///
+    /// The method first computes a proportional intermediate size. `cover`
+    /// crops that result, while `contain` embeds it in the requested canvas.
+    /// This mirrors the geometry rules used by the 1.0 pipeline API.
+    func resize(width: Int?, height: Int?, options: ResizeOptions) throws -> NativeImage {
+        let currentWidth = self.width
+        let currentHeight = self.height
 
         // Explicit arguments take precedence over dimensions stored in options.
         let targetWidth = width ?? options.width
@@ -50,7 +80,7 @@ extension HokusaiImage {
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }
 
-        let resized = HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
+        let resized = NativeImage(takingOwnership: out)
 
         // Cover and contain need a second step after proportional resampling.
         switch options.fit {
@@ -75,28 +105,6 @@ extension HokusaiImage {
         default:
             return resized
         }
-    }
-
-    /// Stretches the image to exact dimensions without preserving aspect ratio.
-    public func resize(width: Int, height: Int) throws -> HokusaiImage {
-        var options = ResizeOptions()
-        options.fit = .fill
-        return try resize(width: width, height: height, options: options)
-    }
-
-    /// Resizes to fit inside optional bounds without cropping.
-    public func resizeToFit(width: Int? = nil, height: Int? = nil) throws -> HokusaiImage {
-        var options = ResizeOptions()
-        options.fit = .inside
-        return try resize(width: width, height: height, options: options)
-    }
-
-    /// Resizes to cover bounds and crops overflow at the selected position.
-    public func resizeToCover(width: Int, height: Int, position: Position = .center) throws -> HokusaiImage {
-        var options = ResizeOptions()
-        options.fit = .cover
-        options.position = position
-        return try resize(width: width, height: height, options: options)
     }
 
     // MARK: - Private Helpers
@@ -201,11 +209,9 @@ extension HokusaiImage {
     }
 
     /// Places the resized image on a larger canvas using an owned RGBA background.
-    private func embed(width: Int, height: Int, position: Position, background: [Double]) throws -> HokusaiImage {
-        let vipsBackend = try ensureVipsBackend()
-        let pointer = try vipsBackend.getPointer()
-        let currentWidth = try vipsBackend.getWidth()
-        let currentHeight = try vipsBackend.getHeight()
+    private func embed(width: Int, height: Int, position: Position, background: [Double]) throws -> NativeImage {
+        let currentWidth = self.width
+        let currentHeight = self.height
 
         // Compute the top-left origin for the requested canvas anchor.
         let (x, y) = calculateEmbedPosition(
@@ -237,7 +243,7 @@ extension HokusaiImage {
 
         vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
 
-        return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
+        return NativeImage(takingOwnership: out)
     }
 
     /// Resolves a canvas anchor into the top-left position for the resized image.

@@ -19,15 +19,75 @@ extension HokusaiImage {
         y: Int,
         options: TextOptions = TextOptions()
     ) throws -> HokusaiImage {
-        let baseWidth = try self.width
-        let baseHeight = try self.height
+        HokusaiImage(native: try native().drawText(text, x: x, y: y, options: options))
+    }
+
+    /// Draws text at a semantic image position with optional edge padding.
+    public func drawText(
+        _ text: String,
+        position: Position,
+        options: TextOptions = TextOptions(),
+        padding: Int = 10
+    ) throws -> HokusaiImage {
+        let (gravity, x, y) = positionPlacement(position: position, padding: padding)
+        var positionedOptions = options
+        positionedOptions.gravity = gravity
+        return try drawText(text, x: x, y: y, options: positionedOptions)
+    }
+
+    // MARK: - Private Helpers
+
+    /// Maps the legacy semantic position to a gravity anchor and signed padding.
+    private func positionPlacement(
+        position: Position,
+        padding: Int
+    ) -> (gravity: TextGravity, x: Int, y: Int) {
+        switch position {
+        case .center:
+            return (.center, 0, 0)
+        case .top:
+            return (.north, 0, padding)
+        case .bottom:
+            return (.south, 0, -padding)
+        case .left:
+            return (.west, padding, 0)
+        case .right:
+            return (.east, -padding, 0)
+        case .topLeft:
+            return (.northWest, padding, padding)
+        case .topRight:
+            return (.northEast, -padding, padding)
+        case .bottomLeft:
+            return (.southWest, padding, -padding)
+        case .bottomRight:
+            return (.southEast, -padding, -padding)
+        default:
+            return (.center, 0, 0)
+        }
+    }
+}
+
+extension NativeImage {
+    /// Renders styled text and composites it onto this image.
+    ///
+    /// The rendering order is shadow, outline, then primary text. `x` and `y`
+    /// are offsets from the top-left unless `options.gravity` supplies a
+    /// semantic anchor. Layers that fall completely outside the base image are
+    /// skipped rather than making a native composite call.
+    ///
+    /// ```swift
+    /// let labelled = try image.drawText("Hello", x: 24, y: 24)
+    /// ```
+    func drawText(_ text: String, x: Int, y: Int, options: TextOptions) throws -> NativeImage {
+        let baseWidth = width
+        let baseHeight = height
 
         var result = self
         let primaryOverlay = try buildTextOverlay(text: text, options: options, color: options.color)
         let rotatedPrimary = try maybeRotateTextLayer(primaryOverlay, options: options)
 
-        let primaryWidth = try rotatedPrimary.width
-        let primaryHeight = try rotatedPrimary.height
+        let primaryWidth = rotatedPrimary.width
+        let primaryHeight = rotatedPrimary.height
         let (baseX, baseY) = resolveTextOrigin(
             x: x,
             y: y,
@@ -47,8 +107,8 @@ extension HokusaiImage {
             var shadowOverlay = try buildTextOverlay(text: text, options: options, color: shadowColor)
             shadowOverlay = try maybeRotateTextLayer(shadowOverlay, options: options)
             shadowOverlay = try blurTextLayer(shadowOverlay, sigma: 1.2)
-            let shadowWidth = try shadowOverlay.width
-            let shadowHeight = try shadowOverlay.height
+            let shadowWidth = shadowOverlay.width
+            let shadowHeight = shadowOverlay.height
             let shadowX = baseX + Int(shadowOffset.x.rounded())
             let shadowY = baseY + Int(shadowOffset.y.rounded())
 
@@ -63,7 +123,8 @@ extension HokusaiImage {
                 result = try result.composite(
                     overlay: shadowOverlay,
                     x: shadowX,
-                    y: shadowY
+                    y: shadowY,
+                    options: CompositeOptions()
                 )
             }
         }
@@ -96,7 +157,8 @@ extension HokusaiImage {
                     result = try result.composite(
                         overlay: strokeOverlay,
                         x: strokeX,
-                        y: strokeY
+                        y: strokeY,
+                        options: CompositeOptions()
                     )
                 }
             }
@@ -110,32 +172,17 @@ extension HokusaiImage {
             baseWidth: baseWidth,
             baseHeight: baseHeight
         ) {
-            result = try result.composite(overlay: rotatedPrimary, x: baseX, y: baseY)
+            result = try result.composite(overlay: rotatedPrimary, x: baseX, y: baseY, options: CompositeOptions())
         }
         return result
     }
-
-    /// Draws text at a semantic image position with optional edge padding.
-    public func drawText(
-        _ text: String,
-        position: Position,
-        options: TextOptions = TextOptions(),
-        padding: Int = 10
-    ) throws -> HokusaiImage {
-        let (gravity, x, y) = positionPlacement(position: position, padding: padding)
-        var positionedOptions = options
-        positionedOptions.gravity = gravity
-        return try drawText(text, x: x, y: y, options: positionedOptions)
-    }
-
-    // MARK: - Private Helpers
 
     /// Renders one independent Pango-backed RGBA layer before compositing it.
     private func buildTextOverlay(
         text: String,
         options: TextOptions,
         color: [Double]
-    ) throws -> HokusaiImage {
+    ) throws -> NativeImage {
         // Render an independent RGBA layer. The caller decides where and in
         // which order it is composited with shadow and outline layers.
         var renderedText: UnsafeMutablePointer<CVips.VipsImage>?
@@ -183,11 +230,11 @@ extension HokusaiImage {
             throw HokusaiError.textRenderingFailed(VipsBackend.getLastError())
         }
 
-        return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: renderedText)))
+        return NativeImage(takingOwnership: renderedText)
     }
 
     /// Applies arbitrary rotation only when the caller requested a nonzero angle.
-    private func maybeRotateTextLayer(_ image: HokusaiImage, options: TextOptions) throws -> HokusaiImage {
+    private func maybeRotateTextLayer(_ image: NativeImage, options: TextOptions) throws -> NativeImage {
         guard let rotation = options.rotation, rotation != 0 else {
             return image
         }
@@ -199,8 +246,8 @@ extension HokusaiImage {
     }
 
     /// Softens a shadow layer without altering the original text layer.
-    private func blurTextLayer(_ image: HokusaiImage, sigma: Double) throws -> HokusaiImage {
-        let pointer = try image.ensureVipsBackend().getPointer()
+    private func blurTextLayer(_ image: NativeImage, sigma: Double) throws -> NativeImage {
+        let pointer = image.pointer
         var output: UnsafeMutablePointer<CVips.VipsImage>?
 
         let result = swift_vips_gaussblur(pointer, &output, sigma)
@@ -209,7 +256,7 @@ extension HokusaiImage {
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }
 
-        return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
+        return NativeImage(takingOwnership: out)
     }
 
     /// Converts a semantic gravity anchor and offsets into an absolute top-left origin.
@@ -364,34 +411,5 @@ extension HokusaiImage {
         let right = overlayX + overlayWidth
         let bottom = overlayY + overlayHeight
         return overlayX < baseWidth && overlayY < baseHeight && right > 0 && bottom > 0
-    }
-
-    /// Maps the legacy semantic position to a gravity anchor and signed padding.
-    private func positionPlacement(
-        position: Position,
-        padding: Int
-    ) -> (gravity: TextGravity, x: Int, y: Int) {
-        switch position {
-        case .center:
-            return (.center, 0, 0)
-        case .top:
-            return (.north, 0, padding)
-        case .bottom:
-            return (.south, 0, -padding)
-        case .left:
-            return (.west, padding, 0)
-        case .right:
-            return (.east, -padding, 0)
-        case .topLeft:
-            return (.northWest, padding, padding)
-        case .topRight:
-            return (.northEast, -padding, padding)
-        case .bottomLeft:
-            return (.southWest, padding, -padding)
-        case .bottomRight:
-            return (.southEast, -padding, -padding)
-        default:
-            return (.center, 0, 0)
-        }
     }
 }

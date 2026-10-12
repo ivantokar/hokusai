@@ -7,7 +7,51 @@ extension HokusaiImage {
     /// Multiples of 90 use libvips' lossless orientation operation. Other
     /// angles use a similarity transform and may expose `background` at corners.
     public func rotate(angle: RotationAngle, background: [Double]? = nil) throws -> HokusaiImage {
-        let pointer = try ensureVipsBackend().getPointer()
+        HokusaiImage(native: try native().rotate(angle: angle, background: background))
+    }
+
+    /// Rotates the image 90 degrees clockwise.
+    public func rotate90() throws -> HokusaiImage {
+        return try rotate(angle: .degree90)
+    }
+
+    /// Rotates the image 180 degrees.
+    public func rotate180() throws -> HokusaiImage {
+        return try rotate(angle: .degree180)
+    }
+
+    /// Rotates the image 270 degrees clockwise, or 90 degrees counter-clockwise.
+    public func rotate270() throws -> HokusaiImage {
+        return try rotate(angle: .degree270)
+    }
+
+    /// Mirrors the image across one or both axes.
+    public func flip(direction: FlipDirection) throws -> HokusaiImage {
+        HokusaiImage(native: try native().flip(direction: direction))
+    }
+
+    /// Mirrors the image from left to right.
+    public func flipHorizontal() throws -> HokusaiImage {
+        return try flip(direction: .horizontal)
+    }
+
+    /// Mirrors the image from top to bottom.
+    public func flipVertical() throws -> HokusaiImage {
+        return try flip(direction: .vertical)
+    }
+
+    /// Applies the source EXIF orientation, if present.
+    public func autoRotate() throws -> HokusaiImage {
+        HokusaiImage(native: try native().autoRotate())
+    }
+}
+
+extension NativeImage {
+    /// Rotates this image by a right angle or arbitrary number of degrees.
+    ///
+    /// Multiples of 90 use libvips' lossless orientation operation. Other
+    /// angles use a similarity transform and may expose `background` at corners.
+    func rotate(angle: RotationAngle, background: [Double]?) throws -> NativeImage {
         let degrees = angle.degrees
 
         var output: UnsafeMutablePointer<CVips.VipsImage>?
@@ -35,7 +79,7 @@ extension HokusaiImage {
                 throw HokusaiError.vipsError(VipsBackend.getLastError())
             }
 
-            return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
+            return NativeImage(takingOwnership: out)
         } else {
             // Arbitrary rotations require interpolation through a similarity transform.
             if let bg = background {
@@ -56,7 +100,7 @@ extension HokusaiImage {
                     throw HokusaiError.vipsError(VipsBackend.getLastError())
                 }
 
-                return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
+                return NativeImage(takingOwnership: out)
             } else {
                 let result = swift_vips_similarity(pointer, &output, degrees)
 
@@ -65,29 +109,13 @@ extension HokusaiImage {
                     throw HokusaiError.vipsError(VipsBackend.getLastError())
                 }
 
-                return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
+                return NativeImage(takingOwnership: out)
             }
         }
     }
 
-    /// Rotates the image 90 degrees clockwise.
-    public func rotate90() throws -> HokusaiImage {
-        return try rotate(angle: .degree90)
-    }
-
-    /// Rotates the image 180 degrees.
-    public func rotate180() throws -> HokusaiImage {
-        return try rotate(angle: .degree180)
-    }
-
-    /// Rotates the image 270 degrees clockwise, or 90 degrees counter-clockwise.
-    public func rotate270() throws -> HokusaiImage {
-        return try rotate(angle: .degree270)
-    }
-
     /// Mirrors the image across one or both axes.
-    public func flip(direction: FlipDirection) throws -> HokusaiImage {
-        let pointer = try ensureVipsBackend().getPointer()
+    func flip(direction: FlipDirection) throws -> NativeImage {
 
         var output: UnsafeMutablePointer<CVips.VipsImage>?
 
@@ -100,7 +128,7 @@ extension HokusaiImage {
                 throw HokusaiError.vipsError(VipsBackend.getLastError())
             }
 
-            return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
+            return NativeImage(takingOwnership: out)
 
         case .vertical:
             let result = swift_vips_flip(pointer, &output, VIPS_DIRECTION_VERTICAL)
@@ -110,7 +138,7 @@ extension HokusaiImage {
                 throw HokusaiError.vipsError(VipsBackend.getLastError())
             }
 
-            return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
+            return NativeImage(takingOwnership: out)
 
         case .both:
             // Applying both single-axis operations keeps native behavior explicit.
@@ -119,19 +147,8 @@ extension HokusaiImage {
         }
     }
 
-    /// Mirrors the image from left to right.
-    public func flipHorizontal() throws -> HokusaiImage {
-        return try flip(direction: .horizontal)
-    }
-
-    /// Mirrors the image from top to bottom.
-    public func flipVertical() throws -> HokusaiImage {
-        return try flip(direction: .vertical)
-    }
-
     /// Applies the source EXIF orientation, if present.
-    public func autoRotate() throws -> HokusaiImage {
-        let pointer = try ensureVipsBackend().getPointer()
+    func autoRotate() throws -> NativeImage {
 
         var output: UnsafeMutablePointer<CVips.VipsImage>?
 
@@ -142,6 +159,6 @@ extension HokusaiImage {
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }
 
-        return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
+        return NativeImage(takingOwnership: out)
     }
 }

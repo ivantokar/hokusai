@@ -7,7 +7,34 @@ extension HokusaiImage {
     /// Coordinates are measured from the current top-left corner. The returned
     /// handle owns a new native image; this source handle is not mutated.
     public func crop(left: Int, top: Int, width: Int, height: Int) throws -> HokusaiImage {
-        let pointer = try ensureVipsBackend().getPointer()
+        HokusaiImage(native: try native().crop(left: left, top: top, width: width, height: height))
+    }
+
+    /// Extracts the rectangle described by ``CropOptions``.
+    public func crop(options: CropOptions) throws -> HokusaiImage {
+        return try crop(
+            left: options.left,
+            top: options.top,
+            width: options.width,
+            height: options.height
+        )
+    }
+
+    /// Trims border pixels similar to the image background.
+    ///
+    /// The compatibility `background` parameter is intentionally rejected:
+    /// libvips' implemented path uses its detected background instead.
+    public func trim(threshold: Double = 10.0, background: [Double]? = nil) throws -> HokusaiImage {
+        HokusaiImage(native: try native().trim(threshold: threshold, background: background))
+    }
+}
+
+extension NativeImage {
+    /// Extracts a rectangular region from this image.
+    ///
+    /// Coordinates are measured from the current top-left corner. The returned
+    /// image is new; the receiver is not mutated.
+    func crop(left: Int, top: Int, width: Int, height: Int) throws -> NativeImage {
 
         var output: UnsafeMutablePointer<CVips.VipsImage>?
 
@@ -25,24 +52,13 @@ extension HokusaiImage {
             throw HokusaiError.vipsError(VipsBackend.getLastError())
         }
 
-        return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
-    }
-
-    /// Extracts the rectangle described by ``CropOptions``.
-    public func crop(options: CropOptions) throws -> HokusaiImage {
-        return try crop(
-            left: options.left,
-            top: options.top,
-            width: options.width,
-            height: options.height
-        )
+        return NativeImage(takingOwnership: out)
     }
 
     /// Produces a target-sized crop using an anchor or libvips smart-crop mode.
-    func smartCrop(width: Int, height: Int, position: Position) throws -> HokusaiImage {
-        let pointer = try ensureVipsBackend().getPointer()
-        let currentWidth = try ensureVipsBackend().getWidth()
-        let currentHeight = try ensureVipsBackend().getHeight()
+    func smartCrop(width: Int, height: Int, position: Position) throws -> NativeImage {
+        let currentWidth = self.width
+        let currentHeight = self.height
 
         // Avoid native work when crop geometry already matches the image.
         if currentWidth == width && currentHeight == height {
@@ -67,7 +83,7 @@ extension HokusaiImage {
                 throw HokusaiError.vipsError(VipsBackend.getLastError())
             }
 
-            return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
+            return NativeImage(takingOwnership: out)
 
         case .entropy:
             // Ask libvips to retain the region with the most visual detail.
@@ -84,7 +100,7 @@ extension HokusaiImage {
                 throw HokusaiError.vipsError(VipsBackend.getLastError())
             }
 
-            return HokusaiImage(backend: .vips(VipsBackend(takingOwnership: out)))
+            return NativeImage(takingOwnership: out)
 
         default:
             // Fixed anchors resolve to deterministic top-left coordinates.
@@ -104,11 +120,10 @@ extension HokusaiImage {
     ///
     /// The compatibility `background` parameter is intentionally rejected:
     /// libvips' implemented path uses its detected background instead.
-    public func trim(threshold: Double = 10.0, background: [Double]? = nil) throws -> HokusaiImage {
+    func trim(threshold: Double, background: [Double]?) throws -> NativeImage {
         guard threshold.isFinite, threshold >= 0 else {
             throw HokusaiError.invalidOperation("Trim threshold must be finite and non-negative")
         }
-        let pointer = try ensureVipsBackend().getPointer()
         var left: Int32 = 0
         var top: Int32 = 0
         var width: Int32 = 0
