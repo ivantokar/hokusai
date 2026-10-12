@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - release/2.0
 
 concurrency:
   group: ci-${{ github.ref }}
