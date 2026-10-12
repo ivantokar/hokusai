@@ -10,7 +10,21 @@ All notable changes to this project are documented in this file.
   and `lossless`. File output no longer depends on the `.avif` suffix to pick
   AV1.
 
+### Added
+- `Hokusai.configure(_:)` with `RuntimeConfiguration`: process-wide
+  `maxConcurrentEvaluations`, `maxQueuedEvaluations`, and `vipsConcurrency`,
+  frozen at first runtime use.
+- `Hokusai.capabilities()` reports decodable/encodable formats, the libvips
+  version, and text rendering for the linked build; `hokusai info` prints it.
+- `Hokusai.runtimeStatus` reports queued/active evaluations and effective
+  limits without initializing libvips.
+- `HokusaiError.overloaded` when `maxQueuedEvaluations` is exceeded.
+
 ### Removed
+- **Breaking:** `Hokusai.vipsConcurrency`. Set
+  `RuntimeConfiguration.vipsConcurrency` via `configure(_:)` at startup.
+- **Breaking (CLI):** `hokusai benchmark pipeline --concurrency-sweep`. Run one
+  process per `--vips-concurrency` value instead.
 - **Breaking:** `HokusaiError.cancelled`. Cancelled terminals throw Swift's
   `CancellationError`.
 - **Breaking:** `Hokusai.shutdown()`. libvips is now process-scoped: it is

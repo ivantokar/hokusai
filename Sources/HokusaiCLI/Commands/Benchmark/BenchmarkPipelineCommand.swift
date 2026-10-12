@@ -27,11 +27,8 @@ struct BenchmarkPipelineCommand: AsyncParsableCommand {
     @Option(help: "Measured iterations per case.")
     var iterations: Int = 10
 
-    @Option(help: "Override libvips concurrency (0 = libvips default).")
+    @Option(help: "Override libvips concurrency (0 = libvips default). Applied at startup; run one process per value to compare settings.")
     var vipsConcurrency: Int = 0
-
-    @Flag(help: "Also sweep concurrency 1,2,4,8,cores for the blur-to-WebP case.")
-    var concurrencySweep: Bool = false
 
     @Option(help: "Output JSON file path.")
     var jsonOutput: String?
@@ -52,19 +49,16 @@ struct BenchmarkPipelineCommand: AsyncParsableCommand {
         }
     }
 
-    /// Measures equivalent WebP pipelines and optionally sweeps libvips concurrency.
+    /// Measures equivalent WebP pipelines.
     ///
-    /// The original runtime concurrency is restored on every exit path so the
-    /// command does not leak a benchmark-specific setting into later work.
+    /// Runtime configuration freezes at first use, so `--vips-concurrency` is
+    /// applied before initialization and holds for the whole process.
     mutating func run() async throws {
         let prompt = PromptService()
-        try Hokusai.initialize()
-
-        let savedConcurrency = Hokusai.vipsConcurrency
         if vipsConcurrency > 0 {
-            Hokusai.vipsConcurrency = vipsConcurrency
+            try Hokusai.configure(.init(vipsConcurrency: .fixed(vipsConcurrency)))
         }
-        defer { Hokusai.vipsConcurrency = savedConcurrency }
+        try Hokusai.initialize()
 
         let inputURL = URL(fileURLWithPath: input)
         let metadata = try Hokusai(url: inputURL).metadata()
@@ -72,7 +66,7 @@ struct BenchmarkPipelineCommand: AsyncParsableCommand {
         prompt.header("WebP Pipeline Benchmark")
         prompt.panel("Environment", items: [
             ("libvips", Hokusai.vipsVersion),
-            ("Concurrency", "\(Hokusai.vipsConcurrency)"),
+            ("Concurrency", Hokusai.runtimeStatus.vipsConcurrency.map(String.init) ?? "unknown"),
             ("Input", inputDescription),
             ("WebP", "Q\(quality), effort \(effort)"),
             ("Blur sigma", "\(sigma)"),
@@ -91,23 +85,6 @@ struct BenchmarkPipelineCommand: AsyncParsableCommand {
                 inputURL: inputURL,
                 prompt: prompt
             ))
-        }
-
-        if concurrencySweep {
-            let coreCount = ProcessInfo.processInfo.processorCount
-            let levels = [1, 2, 4, 8, coreCount].filter { $0 <= coreCount }.reduce(into: [Int]()) {
-                if !$0.contains($1) { $0.append($1) }
-            }.sorted()
-
-            for level in levels {
-                Hokusai.vipsConcurrency = level
-                results.append(try await measure(
-                    name: "load→blur:\(sigma)→webp:q\(quality):effort\(effort) (conc=\(level))",
-                    appliesBlur: true,
-                    inputURL: inputURL,
-                    prompt: prompt
-                ))
-            }
         }
 
         let rows = results.map { result in

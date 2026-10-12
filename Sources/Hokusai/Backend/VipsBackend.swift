@@ -151,10 +151,4 @@ final class VipsBackend: ImageBackend {
         }
         return String(cString: versionStr)
     }
-
-    /// Process-wide libvips worker concurrency exposed by the legacy runtime API.
-    static var concurrency: Int {
-        get { Int(swift_vips_concurrency_get()) }
-        set { swift_vips_concurrency_set(Int32(newValue)) }
-    }
 }

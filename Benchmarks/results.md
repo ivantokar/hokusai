@@ -34,5 +34,6 @@ the small incremental blur cost is consistent with libvips pipeline scheduling
 around that final encoder stage.
 
 These are measurements on one machine and two inputs, not universal performance
-claims. The command accepts `--concurrency-sweep` for a separate experiment on
-how global libvips concurrency affects the blur-to-WebP path.
+claims. To compare libvips concurrency settings, run one process per value with
+`--vips-concurrency N`; runtime configuration is fixed once a process starts
+using Hokusai.

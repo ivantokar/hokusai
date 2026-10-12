@@ -107,14 +107,13 @@ import ArgumentParser
     @Test func pipelineBenchmarkParsesConfiguredArguments() throws {
         let command = try BenchmarkPipelineCommand.parse([
             "--input", "in.jpg", "--sigma", "50", "--quality", "82", "--effort", "6",
-            "--vips-concurrency", "4", "--concurrency-sweep",
+            "--vips-concurrency", "4",
         ])
 
         #expect(command.sigma == 50)
         #expect(command.quality == 82)
         #expect(command.effort == 6)
         #expect(command.vipsConcurrency == 4)
-        #expect(command.concurrencySweep)
     }
 
     @Test func pipelineBenchmarkRejectsInvalidOptions() {
