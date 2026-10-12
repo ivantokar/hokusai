@@ -17,66 +17,51 @@ import CVips
 /// async let png = card.png().data()
 /// ```
 ///
-/// Pipeline construction can inspect image headers synchronously. Expensive
-/// encoding and file writes run only at terminal methods, on Hokusai's bounded
-/// executor rather than Swift's cooperative executor.
+/// Building a pipeline only records intent and validates options; it performs
+/// no native work. The source is opened, transformed, and encoded when a
+/// terminal method runs, on Hokusai's bounded executor rather than Swift's
+/// cooperative executor. Decode failures and pixel-dependent errors (such as
+/// extending to a smaller canvas) therefore surface from the terminal.
 public struct Hokusai: Sendable {
-    /// The immutable native pipeline backing this value.
-    ///
-    /// `HokusaiImage` is an internal legacy adapter handle. It is immutable
-    /// after construction and its ownership policy is covered by the pipeline
-    /// concurrency tests; callers never receive it from the 1.0 surface.
-    private let pipeline: HokusaiImage?
-    private let selectedOutput: OutputFormat?
-    private let preservesMetadata: Bool
+    let plan: ImagePlan
+    let terminal: TerminalConfig
 
-    private init() {
-        self.pipeline = nil
-        self.selectedOutput = nil
-        self.preservesMetadata = false
-    }
-
-    private init(pipeline: HokusaiImage, selectedOutput: OutputFormat? = nil, preservesMetadata: Bool = false) {
-        self.pipeline = pipeline
-        self.selectedOutput = selectedOutput
-        self.preservesMetadata = preservesMetadata
+    private init(plan: ImagePlan, terminal: TerminalConfig = TerminalConfig()) {
+        self.plan = plan
+        self.terminal = terminal
     }
 
     // MARK: - Pipeline input
 
     /// Creates a pipeline from encoded image bytes.
     ///
-    /// The input is copied by the native loader, so the caller may reuse or
-    /// release `data` after this initializer returns. Header decoding can occur
-    /// here; pixel evaluation and encoding occur at a terminal method.
+    /// The bytes are retained (copy-on-write) until evaluation, so the caller
+    /// may reuse or release its own `data` value. The content is not decoded
+    /// here; invalid image bytes are reported by the terminal method.
     ///
     /// ```swift
     /// let avatar = try Hokusai(data: upload)
     /// ```
     public init(data: Data, options: InputOptions = .init()) throws {
         try Self.validate(options: options)
-        do {
-            self.init(pipeline: try Self.image(from: data))
-        } catch {
-            throw Self.pipelineError(error, operation: "decode input data", category: .decode)
+        guard !data.isEmpty else {
+            throw HokusaiError.invalidInput("encoded data is empty or invalid")
         }
+        self.init(plan: .source(.data(data)))
     }
 
     /// Creates a pipeline from a local file URL.
     ///
     /// Remote URLs are intentionally rejected: networking, timeouts, and
     /// request-size policy belong to the calling server. Read remote content
-    /// into `Data` first when that is the desired application behavior.
+    /// into `Data` first when that is the desired application behavior. The
+    /// file is opened when a terminal method runs.
     public init(url: URL, options: InputOptions = .init()) throws {
         guard url.isFileURL else {
             throw HokusaiError.invalidInput("only file URLs are supported; use init(data:) for in-memory input")
         }
         try Self.validate(options: options)
-        do {
-            self.init(pipeline: try Self.image(from: url.path))
-        } catch {
-            throw Self.pipelineError(error, operation: "decode \(url.lastPathComponent)", category: .decode)
-        }
+        self.init(plan: .source(.file(url)))
     }
 
     /// Creates a pipeline from a path string.
@@ -101,7 +86,7 @@ public struct Hokusai: Sendable {
 
     /// Applies the source EXIF orientation before later transformations.
     public func autoOrient() throws -> Self {
-        try transforming("auto orient") { try $0.autoRotate() }
+        appending(.autoOrient)
     }
 
     /// Resizes the pipeline using familiar fit and position semantics.
@@ -131,15 +116,17 @@ public struct Hokusai: Sendable {
         }
         try Self.validate(dimension: width, name: "width")
         try Self.validate(dimension: height, name: "height")
-
-        var options = ResizeOptions()
-        options.fit = fit
-        options.position = position.legacyPosition
-        options.kernel = kernel.legacyKernel
-        options.withoutEnlargement = withoutEnlargement
-        options.withoutReduction = withoutReduction
-        options.background = try background.rgba8()
-        return try transforming("resize") { try $0.resize(width: width, height: height, options: options) }
+        _ = try background.rgba8()
+        return appending(.resize(ResizeStep(
+            width: width,
+            height: height,
+            fit: fit,
+            position: position,
+            kernel: kernel,
+            withoutEnlargement: withoutEnlargement,
+            withoutReduction: withoutReduction,
+            background: background
+        )))
     }
 
     /// Rotates the pipeline clockwise by a finite number of degrees.
@@ -150,14 +137,15 @@ public struct Hokusai: Sendable {
         guard degrees.isFinite else {
             throw HokusaiError.invalidOption(name: "degrees", reason: "must be finite")
         }
-        return try transforming("rotate") { try $0.rotate(angle: .custom(degrees), background: try background.rgba8()) }
+        _ = try background.rgba8()
+        return appending(.rotate(degrees: degrees, background: background))
     }
 
     /// Mirrors the image vertically using familiar image-processing terminology.
-    public func flip() throws -> Self { try transforming("flip") { try $0.flipVertical() } }
+    public func flip() throws -> Self { appending(.flip) }
 
     /// Mirrors the image horizontally using familiar image-processing terminology.
-    public func flop() throws -> Self { try transforming("flop") { try $0.flipHorizontal() } }
+    public func flop() throws -> Self { appending(.flop) }
 
     /// Extracts a rectangle from the current image.
     ///
@@ -166,36 +154,19 @@ public struct Hokusai: Sendable {
     public func extract(x: Int, y: Int, width: Int, height: Int) throws -> Self {
         try Self.validate(dimension: width, name: "width")
         try Self.validate(dimension: height, name: "height")
-        return try transforming("extract") { try $0.crop(left: x, top: y, width: width, height: height) }
+        return appending(.extract(x: x, y: y, width: width, height: height))
     }
 
     /// Extends the canvas to an exact size using an anchored background.
     ///
     /// This operation can only add canvas. Use `resize` or `extract` when a
-    /// requested size is smaller than the current image.
+    /// requested size is smaller than the current image; that is detected
+    /// when the pipeline is evaluated.
     public func extend(to size: ImageSize, anchor: CanvasAnchor = .center, background: Color = .transparent) throws -> Self {
         try Self.validate(dimension: size.width, name: "width")
         try Self.validate(dimension: size.height, name: "height")
-        let legacy = try image()
-        let imageWidth = try legacy.width
-        let imageHeight = try legacy.height
-        guard size.width >= imageWidth, size.height >= imageHeight else {
-            throw HokusaiError.invalidOption(name: "size", reason: "extend cannot reduce an image; use resize or extract")
-        }
-        let offset = anchor.offset(imageWidth: imageWidth, imageHeight: imageHeight, canvasWidth: size.width, canvasHeight: size.height)
-        let rgba = try background.rgba8()
-        let area = rgba.withUnsafeBufferPointer { swift_vips_array_double_new($0.baseAddress, Int32($0.count)) }
-        guard let area else {
-            throw HokusaiError.runtime(.init(operation: "extend", message: "could not allocate native background colour"))
-        }
-        defer { vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(area).assumingMemoryBound(to: VipsArea.self))) }
-        var output: UnsafeMutablePointer<CVips.VipsImage>?
-        let pointer = try legacy.ensureVipsBackend().getPointer()
-        guard swift_vips_embed(pointer, &output, Int32(offset.x), Int32(offset.y), Int32(size.width), Int32(size.height), area) == 0, let output else {
-            VipsBackend.discardPartialImage(output)
-            throw HokusaiError.transform(.init(operation: "extend", message: VipsBackend.getLastError()))
-        }
-        return Self(pipeline: HokusaiImage(backend: .vips(VipsBackend(takingOwnership: output))), selectedOutput: selectedOutput, preservesMetadata: preservesMetadata)
+        _ = try background.rgba8()
+        return appending(.extend(to: size, anchor: anchor, background: background))
     }
 
     /// Removes edges whose pixels are similar to the image background.
@@ -206,13 +177,7 @@ public struct Hokusai: Sendable {
         guard threshold.isFinite, threshold >= 0 else {
             throw HokusaiError.invalidOption(name: "threshold", reason: "must be a finite value greater than or equal to zero")
         }
-        let legacy = try image()
-        let pointer = try legacy.ensureVipsBackend().getPointer()
-        var left: Int32 = 0, top: Int32 = 0, width: Int32 = 0, height: Int32 = 0
-        guard swift_vips_find_trim(pointer, &left, &top, &width, &height, threshold) == 0 else {
-            throw HokusaiError.transform(.init(operation: "trim", message: VipsBackend.getLastError()))
-        }
-        return try extract(x: Int(left), y: Int(top), width: Int(width), height: Int(height))
+        return appending(.trim(threshold: threshold))
     }
 
     /// Applies a Gaussian blur with a positive pixel sigma.
@@ -222,9 +187,7 @@ public struct Hokusai: Sendable {
         guard sigma.isFinite, sigma > 0 else {
             throw HokusaiError.invalidOption(name: "sigma", reason: "must be a finite value greater than zero")
         }
-        return try nativeTransform("blur") { input, output in
-            swift_vips_gaussblur(input, output, sigma)
-        }
+        return appending(.blur(sigma: sigma))
     }
 
     /// Sharpens the pipeline using libvips' unsharp-mask operation.
@@ -232,70 +195,42 @@ public struct Hokusai: Sendable {
         guard sigma.isFinite, sigma > 0 else {
             throw HokusaiError.invalidOption(name: "sigma", reason: "must be a finite value greater than zero")
         }
-        return try nativeTransform("sharpen") { input, output in
-            swift_vips_sharpen(input, output, sigma)
-        }
+        return appending(.sharpen(sigma: sigma))
     }
 
     /// Converts the pipeline to a single-channel grayscale image.
     public func grayscale() throws -> Self {
-        try nativeTransform("grayscale") { input, output in
-            swift_vips_colourspace_bw(input, output)
-        }
+        appending(.grayscale)
     }
 
     /// Maps source luminance into the supplied sRGB colour.
     public func tint(_ color: Color) throws -> Self {
-        let rgba = try color.rgba8()
-        return try nativeTransform("tint") { input, output in
-            swift_vips_tint(input, output, rgba[0], rgba[1], rgba[2])
-        }
+        _ = try color.rgba8()
+        return appending(.tint(color))
     }
 
     /// Normalizes contrast using libvips histogram normalization.
     public func normalize() throws -> Self {
-        try nativeTransform("normalize") { input, output in
-            swift_vips_hist_norm(input, output)
-        }
+        appending(.normalize)
     }
 
     /// Converts the pipeline to a supported output colour space.
     public func convert(to colorSpace: ColorSpace) throws -> Self {
         switch colorSpace {
-        case .sRGB:
-            return try nativeTransform("convert to sRGB") { input, output in
-                swift_vips_colourspace_srgb(input, output)
-            }
-        case .grayscale:
-            return try grayscale()
+        case .sRGB: appending(.convertToSRGB)
+        case .grayscale: appending(.grayscale)
         }
     }
 
     /// Adds an opaque alpha band when the pipeline does not already have one.
     public func ensureAlpha() throws -> Self {
-        let legacy = try image()
-        if try legacy.hasAlpha { return self }
-        return try nativeTransform("ensure alpha") { input, output in
-            swift_vips_addalpha(input, output)
-        }
+        appending(.ensureAlpha)
     }
 
     /// Flattens alpha onto a solid background colour.
     public func flatten(background: Color = .white) throws -> Self {
-        let rgba = try background.rgba8()
-        let legacy = try image()
-        let pointer = try legacy.ensureVipsBackend().getPointer()
-        let area = rgba.withUnsafeBufferPointer { swift_vips_array_double_new($0.baseAddress, Int32($0.count)) }
-        guard let area else {
-            throw HokusaiError.runtime(.init(operation: "flatten", message: "could not allocate native background colour"))
-        }
-        defer { vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(area).assumingMemoryBound(to: VipsArea.self))) }
-        var output: UnsafeMutablePointer<CVips.VipsImage>?
-        guard swift_vips_flatten(pointer, &output, area) == 0, let output else {
-            VipsBackend.discardPartialImage(output)
-            throw HokusaiError.transform(.init(operation: "flatten", message: VipsBackend.getLastError()))
-        }
-        return Self(pipeline: HokusaiImage(backend: .vips(VipsBackend(takingOwnership: output))), selectedOutput: selectedOutput, preservesMetadata: preservesMetadata)
+        _ = try background.rgba8()
+        return appending(.flatten(background: background))
     }
 
     /// Removes alpha by compositing the image over the supplied background.
@@ -307,25 +242,16 @@ public struct Hokusai: Sendable {
     ///
     /// Later layers draw over earlier layers. Each layer may reuse another
     /// pipeline, allowing a logo or watermark to be prepared once and applied
-    /// to many base images.
+    /// to many base images. Only a layer's image transformations apply; its
+    /// encoder and metadata settings are ignored.
     public func composite(_ layers: [CompositeLayer]) throws -> Self {
-        var result = try image()
-        for layer in layers {
+        let steps = try layers.map { layer in
             guard layer.opacity.isFinite, (0...1).contains(layer.opacity) else {
                 throw HokusaiError.invalidOption(name: "opacity", reason: "must be a finite value from 0 through 1")
             }
-            do {
-                result = try result.composite(
-                    overlay: try layer.source.image(),
-                    x: layer.x,
-                    y: layer.y,
-                    options: CompositeOptions(mode: layer.blend, opacity: layer.opacity)
-                )
-            } catch {
-                throw Self.pipelineError(error, operation: "composite layer", category: .transform)
-            }
+            return LayerStep(plan: layer.source.plan, x: layer.x, y: layer.y, blend: layer.blend, opacity: layer.opacity)
         }
-        return Self(pipeline: result, selectedOutput: selectedOutput, preservesMetadata: preservesMetadata)
+        return appending(.composite(steps))
     }
 
     /// Draws text onto the pipeline using the existing libvips/Pango renderer.
@@ -334,7 +260,7 @@ public struct Hokusai: Sendable {
     /// dedicated typography redesign lands; the pipeline and output semantics
     /// are already the same as every other 1.0 transformation.
     public func drawText(_ text: String, x: Int, y: Int, options: TextOptions = .init()) throws -> Self {
-        try transforming("draw text") { try $0.drawText(text, x: x, y: y, options: options) }
+        appending(.drawText(text, x: x, y: y, options: options))
     }
 
     // MARK: - Output configuration
@@ -345,7 +271,9 @@ public struct Hokusai: Sendable {
     /// until ``data()`` or ``write(to:)`` is called.
     public func encode(as format: OutputFormat) throws -> Self {
         try Self.validate(output: format)
-        return Self(pipeline: try image(), selectedOutput: format, preservesMetadata: preservesMetadata)
+        var terminal = terminal
+        terminal.encoder = format
+        return Self(plan: plan, terminal: terminal)
     }
 
     /// Selects JPEG output with optional progressive encoding.
@@ -381,21 +309,27 @@ public struct Hokusai: Sendable {
 
     /// Preserves source metadata when the selected encoder supports it.
     public func preserveMetadata() throws -> Self {
-        Self(pipeline: try image(), selectedOutput: selectedOutput, preservesMetadata: true)
+        var terminal = terminal
+        terminal.preservesMetadata = true
+        return Self(plan: plan, terminal: terminal)
     }
 
     /// Removes non-essential source metadata from encoder output (the default).
     public func removeMetadata() throws -> Self {
-        Self(pipeline: try image(), selectedOutput: selectedOutput, preservesMetadata: false)
+        var terminal = terminal
+        terminal.preservesMetadata = false
+        return Self(plan: plan, terminal: terminal)
     }
 
-    /// Returns current pipeline metadata. This may load source headers but does
-    /// not promise to evaluate every output pixel.
+    /// Returns current pipeline metadata.
+    ///
+    /// This builds the native graph on the calling thread and may read source
+    /// headers, but does not promise to evaluate every output pixel.
     public func metadata() throws -> ImageMetadata {
         do {
-            return try image().metadata()
+            return try Evaluator.lower(plan).metadata()
         } catch {
-            throw Self.pipelineError(error, operation: "read metadata", category: .transform)
+            throw HokusaiError.pipeline(error, operation: "read metadata", category: .transform)
         }
     }
 
@@ -404,23 +338,12 @@ public struct Hokusai: Sendable {
     /// Call an encoder method first. The returned ``Output`` includes both the
     /// owned bytes and the actual encoded dimensions, format, and byte count.
     public func data() async throws -> Output {
-        let image = try self.image()
-        guard let format = selectedOutput else {
+        guard let format = terminal.encoder else {
             throw HokusaiError.invalidOption(name: "output format", reason: "call jpeg(), png(), webp(), avif(), pdf(), or encode(as:) before data()")
         }
+        let plan = plan, terminal = terminal
         return try await PipelineExecutor.run {
-            do {
-                var options = format.legacySaveOptions
-                options.stripMetadata = !preservesMetadata
-                let data: Data
-                switch format {
-                case .pdf(let pdfOptions): data = try image.toPDF(options: pdfOptions)
-                default: data = try image.toBuffer(options: options)
-                }
-                return Output(data: data, info: OutputInfo(format: format.imageFormat, width: try image.width, height: try image.height, size: data.count))
-            } catch {
-                throw Self.pipelineError(error, operation: "encode \(format.imageFormat.rawValue)", category: .encode)
-            }
+            try Evaluator.encode(plan, terminal, as: format)
         }
     }
 
@@ -433,62 +356,17 @@ public struct Hokusai: Sendable {
         guard url.isFileURL else {
             throw HokusaiError.invalidInput("write(to:) accepts only file URLs")
         }
-        let image = try self.image()
-        let format: OutputFormat
-        if let selectedOutput {
-            format = selectedOutput
-        } else {
-            format = try Self.outputFormat(from: url)
-        }
+        let format = try terminal.encoder ?? Self.outputFormat(from: url)
+        let plan = plan, terminal = terminal
         return try await PipelineExecutor.run {
-            do {
-                var options = format.legacySaveOptions
-                options.stripMetadata = !preservesMetadata
-                switch format {
-                case .pdf(let pdfOptions):
-                    try image.toPDF(options: pdfOptions).write(to: url)
-                default:
-                    try image.toFile(url.path, options: options)
-                }
-                let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-                return OutputInfo(format: format.imageFormat, width: try image.width, height: try image.height, size: size)
-            } catch {
-                throw Self.pipelineError(error, operation: "write \(format.imageFormat.rawValue)", category: .encode)
-            }
+            try Evaluator.write(plan, terminal, as: format, to: url)
         }
     }
 
     // MARK: - Pipeline helpers
 
-    private enum PipelineFailureCategory { case decode, transform, encode }
-
-    private func image() throws -> HokusaiImage {
-        guard let pipeline else {
-            throw HokusaiError.runtime(.init(operation: "pipeline", message: "static Hokusai APIs do not represent an image pipeline"))
-        }
-        return pipeline
-    }
-
-    private func transforming(_ operation: String, _ transform: (HokusaiImage) throws -> HokusaiImage) throws -> Self {
-        do {
-            return Self(pipeline: try transform(try image()), selectedOutput: selectedOutput, preservesMetadata: preservesMetadata)
-        } catch {
-            throw Self.pipelineError(error, operation: operation, category: .transform)
-        }
-    }
-
-    private func nativeTransform(
-        _ operation: String,
-        _ transform: (UnsafeMutablePointer<CVips.VipsImage>, UnsafeMutablePointer<UnsafeMutablePointer<CVips.VipsImage>?>) -> Int32
-    ) throws -> Self {
-        let legacy = try image()
-        let input = try legacy.ensureVipsBackend().getPointer()
-        var output: UnsafeMutablePointer<CVips.VipsImage>?
-        guard transform(input, &output) == 0, let output else {
-            VipsBackend.discardPartialImage(output)
-            throw HokusaiError.transform(.init(operation: operation, message: VipsBackend.getLastError()))
-        }
-        return Self(pipeline: HokusaiImage(backend: .vips(VipsBackend(takingOwnership: output))), selectedOutput: selectedOutput, preservesMetadata: preservesMetadata)
+    private func appending(_ operation: ImageOperation) -> Self {
+        Self(plan: plan.appending(operation), terminal: terminal)
     }
 
     private static func validate(options: InputOptions) throws {
@@ -530,24 +408,6 @@ public struct Hokusai: Sendable {
         case .avif: return .avif()
         case .pdf: return .pdf()
         default: throw HokusaiError.unsupported(feature: "writing \(format.rawValue)")
-        }
-    }
-
-    private static func pipelineError(_ error: Error, operation: String, category: PipelineFailureCategory) -> HokusaiError {
-        if let error = error as? HokusaiError {
-            switch error {
-            case .invalidInput, .invalidOption, .unsupported, .decode, .transform, .encode, .io, .cancelled, .runtime:
-                return error
-            case .fileNotFound(let path): return .io(url: URL(fileURLWithPath: path), operation: .read, reason: "file not found")
-            case .invalidImageData: return .invalidInput("encoded data is empty or invalid")
-            default: break
-            }
-        }
-        let context = FailureContext(operation: operation, message: error.localizedDescription)
-        switch category {
-        case .decode: return .decode(context)
-        case .transform: return .transform(context)
-        case .encode: return .encode(context)
         }
     }
 

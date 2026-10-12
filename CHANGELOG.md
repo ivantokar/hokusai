@@ -11,6 +11,14 @@ All notable changes to this project are documented in this file.
   at exit.
 
 ### Changed
+- **Breaking (behavior):** pipelines are lazy. `Hokusai(data:)`, `Hokusai(url:)`
+  and transforms only record intent; the source is opened and the libvips
+  graph built inside `data()`/`write(to:)`. Decode failures, missing files, and
+  pixel-dependent errors (e.g. `extend` to a smaller canvas) are now thrown by
+  the terminal (or `metadata()`). Option validation is still immediate, and
+  output pixels are unchanged.
+- Composite layers contribute only their image transformations; a layer's
+  encoder and metadata settings are ignored.
 - **Breaking:** the native baseline is now libvips 8.16+ and Cairo 1.16+.
   Older libraries are rejected at compile time instead of failing on missing
   symbols. The previously documented libvips 8.9 minimum was no longer true.
