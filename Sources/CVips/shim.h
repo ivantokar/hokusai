@@ -4,12 +4,22 @@
 #include <vips/vips.h>
 #include <cairo/cairo-pdf.h>
 
+// Hokusai's native baseline. Older libraries are rejected at compile time
+// rather than failing later with missing symbols or silently different output.
+#if VIPS_MAJOR_VERSION < 8 || (VIPS_MAJOR_VERSION == 8 && VIPS_MINOR_VERSION < 16)
+#error "Hokusai requires libvips 8.16 or later"
+#endif
+
+#if CAIRO_VERSION < CAIRO_VERSION_ENCODE(1, 16, 0)
+#error "Hokusai requires Cairo 1.16 or later"
+#endif
+
 /**
  * @brief Minimal C bridge that makes libvips APIs usable from Swift.
  *
- * Requires libvips 8.9 or later for source-backed loading, thumbnails, and
- * copied error buffers. Wrappers preserve libvips ownership and NULL semantics;
- * validation and product policy belong in the Swift layer.
+ * Requires libvips 8.16 or later (see the version guard above). Wrappers
+ * preserve libvips ownership and NULL semantics; validation and product policy
+ * belong in the Swift layer.
  */
 
 // Re-export commonly used libvips enums and types for Swift interop.
