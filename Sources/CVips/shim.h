@@ -154,6 +154,58 @@ static inline char *swift_vips_error_copy(void) {
     return vips_error_buffer_copy();
 }
 
+// MARK: - Runtime Capabilities
+
+/** @brief Whether libvips provides an operation with this nickname (e.g. "pdfload"). */
+static inline int swift_vips_operation_exists(const char *nickname) {
+    return vips_type_find("VipsOperation", nickname) != 0;
+}
+
+/** @brief Whether the linked Cairo was built with its PDF surface. */
+static inline int swift_vips_cairo_pdf_available(void) {
+#ifdef CAIRO_HAS_PDF_SURFACE
+    return 1;
+#else
+    return 0;
+#endif
+}
+
+/**
+ * @brief Encode and fully decode a tiny AV1 HEIF image.
+ *
+ * Returns 0 when both an AV1 encoder and decoder are usable. libheif plugins
+ * are optional, so the presence of heifsave/heifload is not enough.
+ */
+static inline int swift_vips_avif_roundtrip_probe(void) {
+    VipsImage *black = NULL;
+    VipsImage *probe = NULL;
+    VipsImage *decoded = NULL;
+    void *buffer = NULL;
+    size_t length = 0;
+    double mean = 0;
+    int result = -1;
+
+    // heifsave in libvips 8.16 rejects the multiband interpretation vips_black
+    // produces, so tag the probe as sRGB.
+    if (vips_black(&black, 16, 16, "bands", 3, NULL)) {
+        return -1;
+    }
+    int copied = vips_copy(black, &probe, "interpretation", VIPS_INTERPRETATION_sRGB, NULL);
+    g_object_unref(black);
+    if (copied) {
+        return -1;
+    }
+    if (!vips_heifsave_buffer(probe, &buffer, &length, "compression", VIPS_FOREIGN_HEIF_COMPRESSION_AV1, NULL) &&
+        !vips_heifload_buffer(buffer, length, &decoded, NULL) &&
+        !vips_avg(decoded, &mean, NULL)) {
+        result = 0;
+    }
+    if (decoded) g_object_unref(decoded);
+    if (buffer) g_free(buffer);
+    g_object_unref(probe);
+    return result;
+}
+
 // MARK: - Evaluation Cancellation
 
 static int swift_vips_passthrough_generate(VipsRegion *out_region, void *seq, void *a, void *b, gboolean *stop) {

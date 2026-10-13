@@ -15,6 +15,8 @@ public enum HokusaiError: Error, Sendable {
     case encode(FailureContext)
     case io(url: URL, operation: FileOperation, reason: String)
     case runtime(FailureContext)
+    /// The evaluation queue is full (`RuntimeConfiguration.maxQueuedEvaluations`).
+    case overloaded(FailureContext)
 
     // MARK: Legacy compatibility
 
@@ -73,6 +75,8 @@ extension HokusaiError: LocalizedError {
             return "Could not \(operation.rawValue) \(url.path): \(reason)"
         case .runtime(let context):
             return "Hokusai runtime failure during \(context.operation): \(context.message)"
+        case .overloaded(let context):
+            return "Hokusai is overloaded during \(context.operation): \(context.message)"
         case .initializationFailed(let message):
             return "Failed to initialize Hokusai: \(message)"
         case .loadFailed(let message):
@@ -116,7 +120,7 @@ extension HokusaiError {
     static func pipeline(_ error: Error, operation: String, category: PipelineFailureCategory) -> HokusaiError {
         if let error = error as? HokusaiError {
             switch error {
-            case .invalidInput, .invalidOption, .unsupported, .decode, .transform, .encode, .io, .runtime:
+            case .invalidInput, .invalidOption, .unsupported, .decode, .transform, .encode, .io, .runtime, .overloaded:
                 return error
             case .fileNotFound(let path): return .io(url: URL(fileURLWithPath: path), operation: .read, reason: "file not found")
             case .invalidImageData: return .invalidInput("encoded data is empty or invalid")

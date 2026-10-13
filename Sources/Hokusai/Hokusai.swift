@@ -557,13 +557,46 @@ public struct Hokusai: Sendable {
         return "Hokusai (libvips \(vipsVersion))"
     }
 
-    /// Gets or sets libvips' process-wide worker-thread concurrency.
+    // MARK: - Runtime configuration
+
+    /// Sets process-wide runtime configuration. Call once, at startup.
     ///
-    /// Setting `0` restores libvips' default. Changes affect every image in
-    /// the process, so configure this during application startup rather than
-    /// per request.
-    public static var vipsConcurrency: Int {
-        get { VipsBackend.concurrency }
-        set { VipsBackend.concurrency = newValue }
+    /// Configuration freezes at the first ``initialize()``, ``capabilities()``,
+    /// or terminal evaluation; building pipelines does not freeze it.
+    ///
+    /// - Throws: ``HokusaiError/invalidOption(name:reason:)`` for invalid
+    ///   values, or ``HokusaiError/runtime(_:)`` when the configuration is
+    ///   already frozen or was already set.
+    public static func configure(_ configuration: RuntimeConfiguration) throws {
+        try VipsRuntime.configure(configuration)
+    }
+
+    /// Reports which formats and features the linked native libraries support.
+    ///
+    /// Discovery initializes libvips (freezing configuration) and runs once;
+    /// the result is cached and safe to share.
+    ///
+    /// - Throws: ``HokusaiError/initializationFailed(_:)`` if libvips could
+    ///   not be initialized.
+    public static func capabilities() throws -> RuntimeCapabilities {
+        try VipsRuntime.capabilities()
+    }
+
+    /// A snapshot of the evaluation scheduler and effective settings.
+    ///
+    /// Reading it never initializes libvips or freezes configuration.
+    public static var runtimeStatus: RuntimeStatus {
+        let (configuration, isFrozen, isInitialized) = VipsRuntime.configurationSnapshot
+        let scheduler = isFrozen ? EvaluationScheduler.shared : nil
+        return RuntimeStatus(
+            configuration: configuration,
+            isConfigurationFrozen: isFrozen,
+            queuedEvaluations: scheduler?.queued ?? 0,
+            activeEvaluations: scheduler?.active ?? 0,
+            maxConcurrentEvaluations: scheduler?.limit
+                ?? configuration.maxConcurrentEvaluations.fixedValue
+                ?? EvaluationScheduler.automaticLimit,
+            vipsConcurrency: isInitialized ? VipsRuntime.vipsConcurrency : nil
+        )
     }
 }

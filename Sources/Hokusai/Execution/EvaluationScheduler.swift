@@ -18,11 +18,20 @@ import CVips
 final class EvaluationScheduler: @unchecked Sendable {
     /// Process-wide scheduler used by `data()` and `write(to:)`.
     ///
-    /// The default limit is provisional: #28 makes it configurable and #50
-    /// chooses the automatic value from benchmarks.
-    static let shared = EvaluationScheduler(limit: max(1, ProcessInfo.processInfo.activeProcessorCount))
+    /// Creating it freezes the runtime configuration. The automatic limit is
+    /// provisional until #50 chooses it from benchmarks.
+    static let shared: EvaluationScheduler = {
+        let configuration = VipsRuntime.frozenConfiguration()
+        return EvaluationScheduler(
+            limit: configuration.maxConcurrentEvaluations.fixedValue ?? automaticLimit,
+            maxQueued: configuration.maxQueuedEvaluations
+        )
+    }()
+
+    static var automaticLimit: Int { max(1, ProcessInfo.processInfo.activeProcessorCount) }
 
     let limit: Int
+    let maxQueued: Int?
 
     // Every field below is guarded by `lock`, which makes `@unchecked Sendable`
     // sound. Continuations are resumed only after the lock is released.
@@ -32,9 +41,10 @@ final class EvaluationScheduler: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "com.ivantokar.hokusai.evaluation", attributes: .concurrent)
 
-    init(limit: Int) {
+    init(limit: Int, maxQueued: Int? = nil) {
         precondition(limit > 0, "evaluation limit must be positive")
         self.limit = limit
+        self.maxQueued = maxQueued
     }
 
     /// Evaluations currently holding a slot.
@@ -87,21 +97,30 @@ final class EvaluationScheduler: @unchecked Sendable {
         let waiter = Waiter()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                let admitted: Bool? = lock.withLock {
-                    if case .cancelled = waiter.state { return false }
+                enum Admission { case admitted, cancelled, rejected(queued: Int), queued }
+                let admission: Admission = lock.withLock {
+                    if case .cancelled = waiter.state { return .cancelled }
                     if activeCount < limit && waiters.isEmpty {
                         activeCount += 1
                         waiter.state = .admitted
-                        return true
+                        return .admitted
+                    }
+                    if let maxQueued, waiters.count >= maxQueued {
+                        waiter.state = .cancelled
+                        return .rejected(queued: waiters.count)
                     }
                     waiter.state = .waiting(continuation)
                     waiters.append(waiter)
-                    return nil
+                    return .queued
                 }
-                switch admitted {
-                case true?: continuation.resume()
-                case false?: continuation.resume(throwing: CancellationError())
-                case nil: break
+                switch admission {
+                case .admitted: continuation.resume()
+                case .cancelled: continuation.resume(throwing: CancellationError())
+                case .rejected(let queued):
+                    continuation.resume(throwing: HokusaiError.overloaded(.init(
+                        operation: "admit evaluation",
+                        message: "\(queued) evaluations already queued (maxQueuedEvaluations)")))
+                case .queued: break
                 }
             }
         } onCancel: {

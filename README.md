@@ -107,11 +107,39 @@ let pdf = try await Hokusai(url: URL(fileURLWithPath: "photo.jpg"))
 
 PDF output is Cairo-backed and contains the evaluated raster pipeline on one page. It is suitable for generated image reports and layered compositions, but does not currently preserve selectable vector text. The planned Swift API for vector PDF scenes is tracked in [#13](https://github.com/ivantokar/hokusai/issues/13).
 
-## Runtime lifecycle
+## Runtime
 
-Loading a pipeline initializes the runtime automatically. Call `Hokusai.initialize()` at application startup only if you want startup failures surfaced explicitly.
+libvips is process-scoped: Hokusai initializes it at most once and it stays available until the process exits. There is no teardown API; the operating system reclaims native resources at exit. Loading a pipeline initializes the runtime automatically; call `Hokusai.initialize()` at startup only to surface initialization failures early.
 
-libvips is process-scoped: Hokusai initializes it at most once and it stays available until the process exits. There is no teardown API; the operating system reclaims native resources at exit.
+### Configuration
+
+Runtime settings are process-wide and belong in application startup:
+
+```swift
+try Hokusai.configure(.init(
+    maxConcurrentEvaluations: .fixed(4),  // pipelines evaluated at once
+    maxQueuedEvaluations: 64,             // waiting pipelines before .overloaded
+    vipsConcurrency: .fixed(2)            // libvips threads per image computation
+))
+```
+
+`configure(_:)` may be called once. Configuration freezes at the first `initialize()`, `capabilities()`, or `data()`/`write(to:)`; building pipelines does not freeze it. Later calls throw.
+
+The two concurrency settings are different resources. `maxConcurrentEvaluations` limits how many whole pipelines Hokusai runs at once, which bounds memory and latency; extra evaluations wait in FIFO order as suspended tasks. `vipsConcurrency` sets how many libvips worker threads one image computation may use. With both `.automatic`, Hokusai currently admits one evaluation per active processor and libvips uses its own default; these defaults will be tuned from benchmarks before the major release. `maxQueuedEvaluations` (unbounded by default) rejects new work with `HokusaiError.overloaded` instead of retaining more source bytes in memory.
+
+### Capabilities and status
+
+```swift
+let capabilities = try Hokusai.capabilities()
+guard capabilities.canEncode(.avif) else { /* offer WebP instead */ }
+
+let status = Hokusai.runtimeStatus
+print(status.queuedEvaluations, status.activeEvaluations)
+```
+
+Codec availability depends on how libvips was built, not on Hokusai's package dependencies. AVIF is verified by encoding and decoding a tiny image. PDF input (libvips `pdfload`) and PDF output (Cairo) are reported separately. `hokusai info` prints the same report.
+
+`runtimeStatus` never initializes libvips. Its counters describe Hokusai's evaluation scheduler; they do not measure libvips worker threads or memory allocated by codec libraries.
 
 ## CLI
 
