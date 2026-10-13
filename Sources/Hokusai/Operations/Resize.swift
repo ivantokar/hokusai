@@ -49,7 +49,7 @@ extension NativeImage {
         let targetHeight = height ?? options.height
 
         guard targetWidth != nil || targetHeight != nil else {
-            throw HokusaiError.invalidOperation("Must specify at least width or height")
+            throw HokusaiError.invalidOption(name: "resize", reason: "specify width, height, or both")
         }
 
         // Resolve the proportional intermediate image before crop or padding.
@@ -77,7 +77,7 @@ extension NativeImage {
 
         guard result == 0, let out = output else {
             VipsBackend.discardPartialImage(output)
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
+            throw HokusaiError.nativeTransform("resize")
         }
 
         let resized = NativeImage(takingOwnership: out)
@@ -151,7 +151,7 @@ extension NativeImage {
                 finalHeight = h
                 finalWidth = Int(Double(h) * aspectRatio)
             } else {
-                throw HokusaiError.invalidOperation("Must specify at least one dimension")
+                throw HokusaiError.invalidOption(name: "resize", reason: "specify width, height, or both")
             }
 
         case .outside, .cover:
@@ -174,7 +174,7 @@ extension NativeImage {
                 finalHeight = h
                 finalWidth = Int(Double(h) * aspectRatio)
             } else {
-                throw HokusaiError.invalidOperation("Must specify at least one dimension")
+                throw HokusaiError.invalidOption(name: "resize", reason: "specify width, height, or both")
             }
         }
 
@@ -230,7 +230,7 @@ extension NativeImage {
         }
 
         guard let bgArray = vipsBackground else {
-            throw HokusaiError.vipsError("Failed to create background array")
+            throw HokusaiError.allocationFailed("resize")
         }
 
         let result = swift_vips_embed(pointer, &output, Int32(x), Int32(y), Int32(width), Int32(height), bgArray)
@@ -238,7 +238,7 @@ extension NativeImage {
         guard result == 0, let out = output else {
             VipsBackend.discardPartialImage(output)
             vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
+            throw HokusaiError.nativeTransform("resize")
         }
 
         vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(bgArray).assumingMemoryBound(to: VipsArea.self)))

@@ -18,7 +18,7 @@ typed process-level surface.
 - `Hokusai.runtimeStatus`: configuration, frozen flag, queued/active
   evaluations, effective limits; never initializes libvips.
 - Scheduler queue bound: a full queue throws the new
-  `HokusaiError.overloaded`.
+  `HokusaiError.resource` (kind `.queuedEvaluations`).
 - **BREAKING** Remove `Hokusai.vipsConcurrency` and the CLI
   `--concurrency-sweep` flag (process-isolated sweeps belong to #50).
 - `hokusai info` prints capabilities and effective settings.
@@ -42,6 +42,6 @@ None.
 
 - Public API: new `configure`, `capabilities`, `runtimeStatus`,
   `RuntimeConfiguration`, `ConcurrencyLimit`, `RuntimeCapabilities`,
-  `RuntimeStatus`, `HokusaiError.overloaded`; `vipsConcurrency` removed.
+  `RuntimeStatus`, `HokusaiError.resource` (kind `.queuedEvaluations`); `vipsConcurrency` removed.
 - CLI: `info` output extended; benchmark `--concurrency-sweep` removed.
 - Output formats: unchanged.

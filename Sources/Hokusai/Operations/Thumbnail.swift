@@ -20,8 +20,8 @@ extension HokusaiImage {
     ///   - options: Cropping strategy and rotation behaviour. Crop strategies
     ///     other than ``ThumbnailCrop/none`` require `options.height`.
     /// - Returns: A new ``HokusaiImage`` at the requested dimensions.
-    /// - Throws: ``HokusaiError/invalidDimensions(_:)`` for invalid
-    ///   dimensions, or ``HokusaiError/vipsError(_:)`` when the libvips
+    /// - Throws: ``HokusaiError/invalidOption(name:reason:)`` for invalid
+    ///   dimensions, or ``HokusaiError/transform(_:)`` when the libvips
     ///   thumbnail transformation fails.
     public func thumbnail(width: Int, options: ThumbnailOptions = ThumbnailOptions()) throws -> HokusaiImage {
         HokusaiImage(native: try native().thumbnail(width: width, options: options))
@@ -32,9 +32,9 @@ extension NativeImage {
     /// Resizes with `vips_thumbnail_image()` on an already-opened image.
     func thumbnail(width: Int, options: ThumbnailOptions) throws -> NativeImage {
         let arguments = try ThumbnailArguments.validate(width: width, options: options)
-        return try applying({ input, output in
+        return try applying("thumbnail") { input, output in
             swift_vips_thumbnail_image(
                 input, output, arguments.width, arguments.height, arguments.crop, arguments.noRotate)
-        }, failure: { HokusaiError.vipsError("thumbnail transformation failed: \($0)") })
+        }
     }
 }

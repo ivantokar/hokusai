@@ -6,13 +6,16 @@ extension NativeImage {
     ///
     /// A `SaveOptions.format` overrides extension inference. The call is
     /// synchronous and does not create parent directories.
+    ///
+    /// libvips reports encoder and file failures alike from its file savers,
+    /// so failures are classified conservatively as `encode`; the native
+    /// diagnostic may say more.
     func write(to path: String, options: SaveOptions) throws {
-
         // Explicit format wins; otherwise use the destination extension.
         let format = options.format ?? ImageFormat.from(fileExtension: (path as NSString).pathExtension)
 
         guard let outputFormat = format else {
-            throw HokusaiError.unsupportedFormat("Could not determine format from path: \(path)")
+            throw HokusaiError.invalidOption(name: "format", reason: "could not infer an output format from \((path as NSString).lastPathComponent)")
         }
 
         switch outputFormat {
@@ -23,7 +26,7 @@ extension NativeImage {
 
             let result = swift_vips_jpegsave(pointer, path, quality, Int32(interlace), Int32(strip))
             guard result == 0 else {
-                throw HokusaiError.saveFailed(VipsBackend.getLastError())
+                throw HokusaiError.nativeEncode(outputFormat.rawValue)
             }
 
         case .png:
@@ -32,7 +35,7 @@ extension NativeImage {
 
             let result = swift_vips_pngsave(pointer, path, compression, Int32(interlace), options.stripMetadata ? 1 : 0)
             guard result == 0 else {
-                throw HokusaiError.saveFailed(VipsBackend.getLastError())
+                throw HokusaiError.nativeEncode(outputFormat.rawValue)
             }
 
         case .webp:
@@ -42,7 +45,7 @@ extension NativeImage {
 
             let result = swift_vips_webpsave(pointer, path, quality, Int32(lossless), effort, options.stripMetadata ? 1 : 0)
             guard result == 0 else {
-                throw HokusaiError.saveFailed(VipsBackend.getLastError())
+                throw HokusaiError.nativeEncode(outputFormat.rawValue)
             }
 
         case .tiff:
@@ -50,7 +53,7 @@ extension NativeImage {
 
             let result = swift_vips_tiffsave(pointer, path, compression)
             guard result == 0 else {
-                throw HokusaiError.saveFailed(VipsBackend.getLastError())
+                throw HokusaiError.nativeEncode(outputFormat.rawValue)
             }
 
         case .avif:
@@ -60,7 +63,7 @@ extension NativeImage {
 
             let result = swift_vips_heifsave(pointer, path, quality, Int32(lossless), effort, options.stripMetadata ? 1 : 0, 1)
             guard result == 0 else {
-                throw HokusaiError.saveFailed(VipsBackend.getLastError())
+                throw HokusaiError.nativeEncode(outputFormat.rawValue)
             }
 
         case .heif:
@@ -70,17 +73,17 @@ extension NativeImage {
 
             let result = swift_vips_heifsave(pointer, path, quality, Int32(lossless), effort, options.stripMetadata ? 1 : 0, 0)
             guard result == 0 else {
-                throw HokusaiError.saveFailed(VipsBackend.getLastError())
+                throw HokusaiError.nativeEncode(outputFormat.rawValue)
             }
 
         case .gif:
             let result = swift_vips_gifsave(pointer, path)
             guard result == 0 else {
-                throw HokusaiError.saveFailed(VipsBackend.getLastError())
+                throw HokusaiError.nativeEncode(outputFormat.rawValue)
             }
 
         default:
-            throw HokusaiError.unsupportedFormat("Saving to \(outputFormat.rawValue) is not yet implemented")
+            throw HokusaiError.unsupported(feature: "encoding \(outputFormat.rawValue)", reason: nil)
         }
     }
 
@@ -90,7 +93,7 @@ extension NativeImage {
     func encoded(options: SaveOptions) throws -> Data {
 
         guard let format = options.format else {
-            throw HokusaiError.invalidOperation("Must specify format when saving to buffer")
+            throw HokusaiError.invalidOption(name: "format", reason: "select a format when encoding to memory")
         }
 
         var buffer: UnsafeMutableRawPointer?
@@ -164,15 +167,12 @@ extension NativeImage {
             )
 
         default:
-            throw HokusaiError.unsupportedFormat("Saving to \(format.rawValue) buffer is not yet implemented")
+            throw HokusaiError.unsupported(feature: "encoding \(format.rawValue)", reason: nil)
         }
 
         guard result == 0, let buf = buffer else {
-            let errorMsg = VipsBackend.getLastError()
-            // Native encoders sometimes provide no diagnostic; retain the
-            // result code in that case so callers still receive actionable context.
-            let debugMsg = errorMsg.isEmpty ? "result code: \(result)" : errorMsg
-            throw HokusaiError.saveFailed(debugMsg)
+            if let buffer { g_free(buffer) }
+            throw HokusaiError.nativeEncode(format.rawValue)
         }
 
         let data = Data(bytes: buf, count: bufferSize)
@@ -193,7 +193,7 @@ extension NativeImage {
             geometry.imageWidth, geometry.imageHeight
         ) == 0, let buffer else {
             if let buffer { g_free(buffer) }
-            throw HokusaiError.saveFailed(VipsBackend.getLastError())
+            throw HokusaiError.nativeEncode("pdf")
         }
         defer { g_free(buffer) }
         return Data(bytes: buffer, count: length)

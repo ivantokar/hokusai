@@ -126,7 +126,7 @@ import Testing
         Issue.record("condition not reached")
     }
 
-    @Test func fullQueueRejectsWithOverloadedAndKeepsCountersExact() async throws {
+    @Test func fullQueueRejectsWithResourceFailureAndKeepsCountersExact() async throws {
         let scheduler = EvaluationScheduler(limit: 1, maxQueued: 2)
         let gate = Gate()
 
@@ -139,8 +139,10 @@ import Testing
         do {
             _ = try await scheduler.run { _ in 3 }
             Issue.record("expected the full queue to reject")
-        } catch HokusaiError.overloaded(let context) {
-            #expect(context.operation == "admit evaluation")
+        } catch HokusaiError.resource(let failure) {
+            #expect(failure.kind == .queuedEvaluations)
+            #expect(failure.limit == 2)
+            #expect(failure.actual == 2)
         }
         #expect(scheduler.queued == 2)
 

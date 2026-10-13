@@ -100,7 +100,7 @@ extension NativeImage {
 
         guard result == 0, let out = output else {
             VipsBackend.discardPartialImage(output)
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
+            throw HokusaiError.nativeTransform("composite")
         }
 
         return NativeImage(takingOwnership: out)
@@ -119,7 +119,7 @@ extension NativeImage {
         let rgbResult = swift_vips_extract_band(image, &rgbImage, 0, 3)
         guard rgbResult == 0, let rgb = rgbImage else {
             VipsBackend.discardPartialImage(rgbImage)
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
+            throw HokusaiError.nativeTransform("composite")
         }
 
         var alphaImage: UnsafeMutablePointer<CVips.VipsImage>?
@@ -127,7 +127,7 @@ extension NativeImage {
         guard alphaResult == 0, let alpha = alphaImage else {
             g_object_unref(rgb)
             VipsBackend.discardPartialImage(alphaImage)
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
+            throw HokusaiError.nativeTransform("composite")
         }
 
         var scaledAlphaImage: UnsafeMutablePointer<CVips.VipsImage>?
@@ -136,7 +136,7 @@ extension NativeImage {
             g_object_unref(rgb)
             g_object_unref(alpha)
             VipsBackend.discardPartialImage(scaledAlphaImage)
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
+            throw HokusaiError.nativeTransform("composite")
         }
 
         var output: UnsafeMutablePointer<CVips.VipsImage>?
@@ -154,7 +154,7 @@ extension NativeImage {
 
         guard joinResult == 0, let out = output else {
             VipsBackend.discardPartialImage(output)
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
+            throw HokusaiError.nativeTransform("composite")
         }
 
         return out
@@ -170,7 +170,7 @@ extension NativeImage {
             let result = swift_vips_copy(image, &output)
             guard result == 0, let out = output else {
                 VipsBackend.discardPartialImage(output)
-                throw HokusaiError.vipsError(VipsBackend.getLastError())
+                throw HokusaiError.nativeTransform("composite")
             }
             return out
         }
@@ -182,7 +182,7 @@ extension NativeImage {
             let convertResult = swift_vips_colourspace(image, &converted, VIPS_INTERPRETATION_sRGB)
             guard convertResult == 0, let conv = converted else {
                 VipsBackend.discardPartialImage(converted)
-                throw HokusaiError.vipsError(VipsBackend.getLastError())
+                throw HokusaiError.nativeTransform("composite")
             }
             rgbImage = conv
         }
@@ -197,7 +197,7 @@ extension NativeImage {
                     g_object_unref(rgbImage)
                 }
                 VipsBackend.discardPartialImage(output)
-                throw HokusaiError.vipsError(VipsBackend.getLastError())
+                throw HokusaiError.nativeTransform("composite")
             }
 
             if rgbImage != image {

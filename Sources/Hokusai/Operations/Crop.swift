@@ -49,7 +49,7 @@ extension NativeImage {
 
         guard result == 0, let out = output else {
             VipsBackend.discardPartialImage(output)
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
+            throw HokusaiError.nativeTransform("extract")
         }
 
         return NativeImage(takingOwnership: out)
@@ -80,7 +80,7 @@ extension NativeImage {
 
             guard result == 0, let out = output else {
                 VipsBackend.discardPartialImage(output)
-                throw HokusaiError.vipsError(VipsBackend.getLastError())
+                throw HokusaiError.nativeTransform("smart crop")
             }
 
             return NativeImage(takingOwnership: out)
@@ -97,7 +97,7 @@ extension NativeImage {
 
             guard result == 0, let out = output else {
                 VipsBackend.discardPartialImage(output)
-                throw HokusaiError.vipsError(VipsBackend.getLastError())
+                throw HokusaiError.nativeTransform("smart crop")
             }
 
             return NativeImage(takingOwnership: out)
@@ -122,7 +122,7 @@ extension NativeImage {
     /// libvips' implemented path uses its detected background instead.
     func trim(threshold: Double, background: [Double]?) throws -> NativeImage {
         guard threshold.isFinite, threshold >= 0 else {
-            throw HokusaiError.invalidOperation("Trim threshold must be finite and non-negative")
+            throw HokusaiError.invalidOption(name: "threshold", reason: "must be a finite value greater than or equal to zero")
         }
         var left: Int32 = 0
         var top: Int32 = 0
@@ -131,10 +131,10 @@ extension NativeImage {
         // The legacy background parameter was never implemented. Do not accept
         // it silently: callers should use the 1.0 `Hokusai.trim(threshold:)`.
         if background != nil {
-            throw HokusaiError.unsupportedFormat("trim background is not supported")
+            throw HokusaiError.unsupported(feature: "trim background", reason: "libvips detects the background itself")
         }
         guard swift_vips_find_trim(pointer, &left, &top, &width, &height, threshold) == 0 else {
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
+            throw HokusaiError.nativeTransform("trim")
         }
         return try crop(left: Int(left), top: Int(top), width: Int(width), height: Int(height))
     }

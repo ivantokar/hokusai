@@ -18,9 +18,26 @@ All notable changes to this project are documented in this file.
   version, and text rendering for the linked build; `hokusai info` prints it.
 - `Hokusai.runtimeStatus` reports queued/active evaluations and effective
   limits without initializing libvips.
-- `HokusaiError.overloaded` when `maxQueuedEvaluations` is exceeded.
+- `HokusaiError.resource(ResourceFailure)` for configured limits, starting
+  with `maxQueuedEvaluations` (kind `.queuedEvaluations`).
+
+### Changed (errors)
+- **Breaking:** `HokusaiError` is one taxonomy: `invalidInput(reason:)`,
+  `invalidOption`, `unsupported(feature:reason:)`, `decode`, `transform`,
+  `encode`, `io`, `resource`, `runtime`. Each boundary classifies its own
+  failures; nothing is inferred from native error text.
+- **Breaking:** `FailureContext.message` is split into a Hokusai-owned
+  `reason` and an optional, best-effort native `diagnostic`.
+- Composite layer failures are labelled with their layer, for example
+  `composite layer 2 / decode input data`.
+- Legacy `HokusaiImage` APIs throw the same modern cases.
 
 ### Removed
+- **Breaking:** legacy `HokusaiError` cases `initializationFailed`,
+  `loadFailed`, `saveFailed`, `invalidOperation`, `invalidDimensions`,
+  `unsupportedFormat`, `conversionFailed`, `textRenderingFailed`,
+  `vipsError`, `magickError`, `memoryAllocationFailed`, `fileNotFound`,
+  `invalidImageData`, and `notSupported`.
 - **Breaking:** `Hokusai.vipsConcurrency`. Set
   `RuntimeConfiguration.vipsConcurrency` via `configure(_:)` at startup.
 - **Breaking (CLI):** `hokusai benchmark pipeline --concurrency-sweep`. Run one
