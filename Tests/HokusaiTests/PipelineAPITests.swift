@@ -127,6 +127,33 @@ import NIOCore
         #expect(output.byteBuffer.readableBytesView.elementsEqual(output.data))
     }
 
+    /// The ISO-BMFF major brand at bytes 8..<12 identifies the codec family.
+    private func majorBrand(_ data: Data) -> String {
+        String(decoding: data.dropFirst(8).prefix(4), as: UTF8.self)
+    }
+
+    @Test func avifOutputIsAV1ForDataAndFileTerminals() async throws {
+        // Regression: the buffer encoder used libvips' HEVC default, so
+        // .avif().data() returned HEIC bytes labelled as AVIF.
+        let input = try loadFixtureData(named: "landscape-asym", ext: "jpg")
+        let pipeline = try Hokusai(data: input).avif(quality: 50)
+        let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("hokusai-avif-\(UUID().uuidString).img")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let output = try await pipeline.data()
+        try await pipeline.write(to: url)
+
+        #expect(majorBrand(output.data) == "avif")
+        #expect(majorBrand(try Data(contentsOf: url)) == "avif")
+    }
+
+    @Test func avifDataTerminalHonoursLossless() async throws {
+        let input = try loadFixtureData(named: "landscape-asym", ext: "jpg")
+        let lossy = try await Hokusai(data: input).avif(quality: 30).data()
+        let lossless = try await Hokusai(data: input).avif(lossless: true).data()
+        #expect(lossless.data.count > lossy.data.count)
+    }
+
     @Test func pdfOutputProducesAValidSinglePageDocument() async throws {
         let input = try loadFixtureData(named: "landscape-asym", ext: "jpg")
         let output = try await Hokusai(data: input)

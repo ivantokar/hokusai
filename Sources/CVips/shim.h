@@ -556,8 +556,10 @@ static inline int swift_vips_tiffsave(VipsImage *in, const char *filename, int c
     return vips_tiffsave(in, filename, "compression", compression, NULL);
 }
 
-static inline int swift_vips_heifsave(VipsImage *in, const char *filename, int quality, int lossless, int effort, int strip) {
-    return vips_heifsave(in, filename, "Q", quality, "lossless", lossless, "effort", effort, "strip", strip, NULL);
+/** @brief HEIF-container save with an explicit codec: AV1 (AVIF) when `av1` is nonzero, else HEVC (HEIC). */
+static inline int swift_vips_heifsave(VipsImage *in, const char *filename, int quality, int lossless, int effort, int strip, int av1) {
+    return vips_heifsave(in, filename, "Q", quality, "lossless", lossless, "effort", effort, "strip", strip,
+        "compression", av1 ? VIPS_FOREIGN_HEIF_COMPRESSION_AV1 : VIPS_FOREIGN_HEIF_COMPRESSION_HEVC, NULL);
 }
 
 static inline int swift_vips_gifsave(VipsImage *in, const char *filename) {
@@ -588,8 +590,13 @@ static inline int swift_vips_tiffsave_buffer(VipsImage *in, void **buf, size_t *
     return vips_tiffsave_buffer(in, buf, len, NULL);
 }
 
-static inline int swift_vips_heifsave_buffer(VipsImage *in, void **buf, size_t *len, int quality, int strip) {
-    return vips_heifsave_buffer(in, buf, len, "Q", quality, "strip", strip, NULL);
+/**
+ * @brief Buffer variant of swift_vips_heifsave. The codec must be explicit:
+ * a buffer has no filename suffix, and libvips otherwise defaults to HEVC.
+ */
+static inline int swift_vips_heifsave_buffer(VipsImage *in, void **buf, size_t *len, int quality, int lossless, int effort, int strip, int av1) {
+    return vips_heifsave_buffer(in, buf, len, "Q", quality, "lossless", lossless, "effort", effort, "strip", strip,
+        "compression", av1 ? VIPS_FOREIGN_HEIF_COMPRESSION_AV1 : VIPS_FOREIGN_HEIF_COMPRESSION_HEVC, NULL);
 }
 
 static inline int swift_vips_gifsave_buffer(VipsImage *in, void **buf, size_t *len) {
