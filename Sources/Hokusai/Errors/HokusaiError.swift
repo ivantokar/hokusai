@@ -1,56 +1,93 @@
 import Foundation
 
-/// A stable Swift-facing description of an image-processing failure.
+/// Hokusai's image-processing failures.
 ///
-/// The cases that name libvips directly remain deprecated compatibility cases.
-/// New pipeline APIs use the typed input, option, decode, transform, encode,
-/// I/O, and runtime categories below. Cancellation is reported as Swift's
-/// standard `CancellationError`.
+/// Branch on the case, not on message text. Each case is chosen where the
+/// failure happened (source, transform, encoder, sink, scheduler, runtime),
+/// never by parsing native diagnostics. Cancellation is not a case: async
+/// terminals throw Swift's `CancellationError`.
 public enum HokusaiError: Error, Sendable {
-    case invalidInput(String)
+    /// Caller-supplied source shape is invalid before any decoding, such as
+    /// empty data or a non-file URL.
+    case invalidInput(reason: String)
+
+    /// A public option or configuration value is invalid.
     case invalidOption(name: String, reason: String)
-    case unsupported(feature: String)
+
+    /// The request is valid but unavailable with this build or runtime.
+    case unsupported(feature: String, reason: String?)
+
+    /// A source could not be opened or decoded after validation.
     case decode(FailureContext)
+
+    /// An image operation failed after its options were validated.
     case transform(FailureContext)
+
+    /// An available encoder failed to produce output.
     case encode(FailureContext)
+
+    /// A known filesystem read or write failed.
     case io(url: URL, operation: FileOperation, reason: String)
+
+    /// A configured safety or admission limit rejected the work.
+    case resource(ResourceFailure)
+
+    /// libvips initialization or an internal Hokusai invariant failed.
     case runtime(FailureContext)
-    /// The evaluation queue is full (`RuntimeConfiguration.maxQueuedEvaluations`).
-    case overloaded(FailureContext)
-
-    // MARK: Legacy compatibility
-
-    case initializationFailed(String)
-    case loadFailed(String)
-    case saveFailed(String)
-    case invalidOperation(String)
-    case invalidDimensions(String)
-    case unsupportedFormat(String)
-    case conversionFailed(String)  // Backend conversion errors
-    case textRenderingFailed(String)
-    case vipsError(String)
-    @available(*, deprecated, message: "ImageMagick backend was removed.")
-    case magickError(String)
-    case memoryAllocationFailed
-    case fileNotFound(String)
-    case invalidImageData
-    case notSupported(String)
 }
 
-/// Context retained by typed errors while native details stay behind Hokusai's
-/// adapter boundary.
+/// Where a failure happened and why.
 public struct FailureContext: Sendable, Equatable {
+    /// Human-readable operation label such as `resize` or
+    /// `composite layer 2 / decode input data`. Not a stable identifier.
     public let operation: String
-    public let message: String
 
-    /// Creates context that identifies the failed operation and its explanation.
-    public init(operation: String, message: String) {
+    /// Hokusai's explanation of the failure.
+    public let reason: String
+
+    /// Best-effort native diagnostic text. libvips keeps one error log for the
+    /// whole process, so under concurrent failures this may include messages
+    /// from other evaluations, or be absent.
+    public let diagnostic: String?
+
+    public init(operation: String, reason: String, diagnostic: String? = nil) {
         self.operation = operation
-        self.message = message
+        self.reason = reason
+        self.diagnostic = diagnostic
     }
 }
 
-/// The filesystem action associated with an ``HokusaiError/io(url:operation:reason:)`` error.
+/// A limit that rejected work. See ``HokusaiError/resource(_:)``.
+public struct ResourceFailure: Sendable, Equatable {
+    public let kind: ResourceKind
+    /// The configured limit, when there is one.
+    public let limit: Int?
+    /// The observed value, when known.
+    public let actual: Int?
+    public let reason: String
+
+    public init(kind: ResourceKind, limit: Int?, actual: Int?, reason: String) {
+        self.kind = kind
+        self.limit = limit
+        self.actual = actual
+        self.reason = reason
+    }
+}
+
+/// The kind of limit in a ``ResourceFailure``.
+///
+/// A struct rather than an enum so new kinds can be added without breaking
+/// exhaustive switches.
+public struct ResourceKind: Sendable, Hashable, CustomStringConvertible {
+    public let name: String
+
+    /// `RuntimeConfiguration.maxQueuedEvaluations` was reached.
+    public static let queuedEvaluations = ResourceKind(name: "queuedEvaluations")
+
+    public var description: String { name }
+}
+
+/// The filesystem action in an ``HokusaiError/io(url:operation:reason:)`` error.
 public enum FileOperation: String, Sendable {
     case read
     case write
@@ -63,75 +100,62 @@ extension HokusaiError: LocalizedError {
             return "Invalid image input: \(reason)"
         case .invalidOption(let name, let reason):
             return "Invalid option '\(name)': \(reason)"
-        case .unsupported(let feature):
-            return "Unsupported feature: \(feature)"
+        case .unsupported(let feature, let reason):
+            return "Unsupported: \(feature)" + (reason.map { " (\($0))" } ?? "")
         case .decode(let context):
-            return "Could not decode image during \(context.operation): \(context.message)"
+            return "Could not decode image during \(context.operation): \(context.reason)"
         case .transform(let context):
-            return "Could not transform image during \(context.operation): \(context.message)"
+            return "Could not transform image during \(context.operation): \(context.reason)"
         case .encode(let context):
-            return "Could not encode image during \(context.operation): \(context.message)"
+            return "Could not encode image during \(context.operation): \(context.reason)"
         case .io(let url, let operation, let reason):
             return "Could not \(operation.rawValue) \(url.path): \(reason)"
+        case .resource(let failure):
+            return "Resource limit reached (\(failure.kind)): \(failure.reason)"
         case .runtime(let context):
-            return "Hokusai runtime failure during \(context.operation): \(context.message)"
-        case .overloaded(let context):
-            return "Hokusai is overloaded during \(context.operation): \(context.message)"
-        case .initializationFailed(let message):
-            return "Failed to initialize Hokusai: \(message)"
-        case .loadFailed(let message):
-            return "Failed to load image: \(message)"
-        case .saveFailed(let message):
-            return "Failed to save image: \(message)"
-        case .invalidOperation(let message):
-            return "Invalid operation: \(message)"
-        case .invalidDimensions(let message):
-            return "Invalid dimensions: \(message)"
-        case .unsupportedFormat(let format):
-            return "Unsupported image format: \(format)"
-        case .conversionFailed(let message):
-            return "Backend conversion failed: \(message)"
-        case .textRenderingFailed(let message):
-            return "Text rendering failed: \(message)"
-        case .vipsError(let message):
-            return "libvips error: \(message)"
-        case .magickError(let message):
-            return "Legacy ImageMagick error (compatibility only): \(message)"
-        case .memoryAllocationFailed:
-            return "Memory allocation failed"
-        case .fileNotFound(let path):
-            return "File not found: \(path)"
-        case .invalidImageData:
-            return "Invalid image data"
-        case .notSupported(let feature):
-            return "Feature not supported: \(feature)"
+            return "Hokusai runtime failure during \(context.operation): \(context.reason)"
         }
     }
 }
 
-/// Which stage of pipeline evaluation produced an untyped failure.
-enum PipelineFailureCategory { case decode, transform, encode }
+// MARK: - Internal construction
+
+extension FailureContext {
+    /// Context for a failed native call, with a best-effort libvips diagnostic.
+    static func native(_ operation: String, _ reason: String) -> FailureContext {
+        FailureContext(operation: operation, reason: reason, diagnostic: VipsDiagnostics.drain())
+    }
+
+    /// The same context labelled as happening inside `scope`.
+    func scoped(_ scope: String) -> FailureContext {
+        FailureContext(operation: "\(scope) / \(operation)", reason: reason, diagnostic: diagnostic)
+    }
+}
 
 extension HokusaiError {
-    /// Maps an evaluation failure to the stable pipeline error vocabulary.
-    ///
-    /// Already-typed pipeline errors pass through unchanged; legacy and native
-    /// errors are wrapped with the failing operation and stage.
-    static func pipeline(_ error: Error, operation: String, category: PipelineFailureCategory) -> HokusaiError {
-        if let error = error as? HokusaiError {
-            switch error {
-            case .invalidInput, .invalidOption, .unsupported, .decode, .transform, .encode, .io, .runtime, .overloaded:
-                return error
-            case .fileNotFound(let path): return .io(url: URL(fileURLWithPath: path), operation: .read, reason: "file not found")
-            case .invalidImageData: return .invalidInput("encoded data is empty or invalid")
-            default: break
-            }
-        }
-        let context = FailureContext(operation: operation, message: error.localizedDescription)
-        switch category {
-        case .decode: return .decode(context)
-        case .transform: return .transform(context)
-        case .encode: return .encode(context)
+    /// A native image operation failed.
+    static func nativeTransform(_ operation: String) -> HokusaiError {
+        .transform(.native(operation, "libvips could not complete \(operation)"))
+    }
+
+    /// A native encoder failed.
+    static func nativeEncode(_ format: String) -> HokusaiError {
+        .encode(.native("encode \(format)", "libvips could not encode \(format)"))
+    }
+
+    /// Native memory for an operation argument could not be allocated.
+    static func allocationFailed(_ operation: String) -> HokusaiError {
+        .runtime(FailureContext(operation: operation, reason: "could not allocate a native argument"))
+    }
+
+    /// Labels a failure as happening inside `scope`, such as a composite layer.
+    func scoped(_ scope: String) -> HokusaiError {
+        switch self {
+        case .decode(let context): .decode(context.scoped(scope))
+        case .transform(let context): .transform(context.scoped(scope))
+        case .encode(let context): .encode(context.scoped(scope))
+        case .runtime(let context): .runtime(context.scoped(scope))
+        default: self
         }
     }
 }

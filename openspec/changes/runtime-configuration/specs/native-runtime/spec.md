@@ -24,13 +24,13 @@ twice, or after the configuration froze, SHALL throw a typed
 
 The evaluation limit SHALL be independent of libvips worker concurrency. When
 `maxQueuedEvaluations` is set, an evaluation that would exceed it SHALL fail
-with `HokusaiError.overloaded` without starting native work.
+with `HokusaiError.resource` (kind `.queuedEvaluations`) without starting native work.
 
 #### Scenario: Reject work beyond the queue bound
 
 - **WHEN** all evaluation slots are busy and the queue holds
   `maxQueuedEvaluations` waiters
-- **THEN** a new evaluation throws `HokusaiError.overloaded`
+- **THEN** a new evaluation throws `HokusaiError.resource` (kind `.queuedEvaluations`)
 - **AND** queued and active counts are unchanged
 
 ### Requirement: Report native capabilities

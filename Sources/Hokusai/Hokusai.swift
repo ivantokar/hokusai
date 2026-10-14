@@ -47,7 +47,7 @@ public struct Hokusai: Sendable {
     public init(data: Data, options: InputOptions = .init()) throws {
         try Self.validate(options: options)
         guard !data.isEmpty else {
-            throw HokusaiError.invalidInput("encoded data is empty or invalid")
+            throw HokusaiError.invalidInput(reason: "encoded data is empty")
         }
         self.init(plan: .source(.data(data)))
     }
@@ -60,7 +60,7 @@ public struct Hokusai: Sendable {
     /// file is opened when a terminal method runs.
     public init(url: URL, options: InputOptions = .init()) throws {
         guard url.isFileURL else {
-            throw HokusaiError.invalidInput("only file URLs are supported; use init(data:) for in-memory input")
+            throw HokusaiError.invalidInput(reason: "only file URLs are supported; use init(data:) for in-memory input")
         }
         try Self.validate(options: options)
         self.init(plan: .source(.file(url)))
@@ -328,11 +328,7 @@ public struct Hokusai: Sendable {
     /// This builds the native graph on the calling thread and may read source
     /// headers, but does not promise to evaluate every output pixel.
     public func metadata() throws -> ImageMetadata {
-        do {
-            return try Evaluator.lower(plan, context: EvaluationContext()).metadata()
-        } catch {
-            throw HokusaiError.pipeline(error, operation: "read metadata", category: .transform)
-        }
+        try Evaluator.lower(plan, context: EvaluationContext()).metadata()
     }
 
     /// Evaluates and encodes the pipeline on Hokusai's evaluation scheduler.
@@ -356,7 +352,7 @@ public struct Hokusai: Sendable {
     @discardableResult
     public func write(to url: URL) async throws -> OutputInfo {
         guard url.isFileURL else {
-            throw HokusaiError.invalidInput("write(to:) accepts only file URLs")
+            throw HokusaiError.invalidOption(name: "url", reason: "write(to:) accepts only file URLs")
         }
         let format = try terminal.encoder ?? Self.outputFormat(from: url)
         let plan = plan, terminal = terminal
@@ -373,7 +369,7 @@ public struct Hokusai: Sendable {
 
     private static func validate(options: InputOptions) throws {
         if options.page != nil || options.pages != nil || options.failOn != .warning {
-            throw HokusaiError.unsupported(feature: "non-default InputOptions are not implemented yet")
+            throw HokusaiError.unsupported(feature: "non-default InputOptions", reason: "not implemented yet")
         }
     }
 
@@ -409,7 +405,7 @@ public struct Hokusai: Sendable {
         case .webp: return .webp()
         case .avif: return .avif()
         case .pdf: return .pdf()
-        default: throw HokusaiError.unsupported(feature: "writing \(format.rawValue)")
+        default: throw HokusaiError.unsupported(feature: "writing \(format.rawValue)", reason: "no typed encoder for this format")
         }
     }
 
@@ -423,7 +419,7 @@ public struct Hokusai: Sendable {
     /// so an explicit call is only needed to surface initialization failures
     /// at application startup.
     ///
-    /// - Throws: ``HokusaiError/initializationFailed(_:)`` if libvips could
+    /// - Throws: ``HokusaiError/runtime(_:)`` if libvips could
     ///   not be initialized. The failure is final for the process.
     public static func initialize() throws {
         try VipsRuntime.ensureInitialized()
@@ -508,9 +504,9 @@ public struct Hokusai: Sendable {
     ///     rotation behaviour). Crop strategies other than
     ///     ``ThumbnailCrop/none`` require `options.height`.
     /// - Returns: A new ``HokusaiImage`` at the requested dimensions.
-    /// - Throws: ``HokusaiError/invalidDimensions(_:)`` for non-positive or
-    ///   out-of-range dimensions, ``HokusaiError/fileNotFound(_:)``, or
-    ///   ``HokusaiError/loadFailed(_:)`` when libvips cannot decode or
+    /// - Throws: ``HokusaiError/invalidOption(name:reason:)`` for non-positive or
+    ///   out-of-range dimensions, ``HokusaiError/io(url:operation:reason:)``
+    ///   for a missing file, or ``HokusaiError/decode(_:)`` when libvips cannot decode or
     ///   transform the source.
     public static func thumbnail(from path: String, width: Int, options: ThumbnailOptions = ThumbnailOptions()) throws -> HokusaiImage {
         let backend = try VipsBackend.thumbnailFromFile(path, width: width, options: options)
@@ -530,9 +526,9 @@ public struct Hokusai: Sendable {
     ///   - options: Thumbnail options. Crop strategies other than
     ///     ``ThumbnailCrop/none`` require `options.height`.
     /// - Returns: A new ``HokusaiImage`` at the requested dimensions.
-    /// - Throws: ``HokusaiError/invalidDimensions(_:)``,
-    ///   ``HokusaiError/invalidImageData`` for empty input, or
-    ///   ``HokusaiError/loadFailed(_:)`` when libvips cannot decode or
+    /// - Throws: ``HokusaiError/invalidOption(name:reason:)``,
+    ///   ``HokusaiError/invalidInput(reason:)`` for empty input, or
+    ///   ``HokusaiError/decode(_:)`` when libvips cannot decode or
     ///   transform the source.
     public static func thumbnail(from data: Data, width: Int, options: ThumbnailOptions = ThumbnailOptions()) throws -> HokusaiImage {
         let backend = try VipsBackend.thumbnailFromBuffer(data, width: width, options: options)
@@ -576,7 +572,7 @@ public struct Hokusai: Sendable {
     /// Discovery initializes libvips (freezing configuration) and runs once;
     /// the result is cached and safe to share.
     ///
-    /// - Throws: ``HokusaiError/initializationFailed(_:)`` if libvips could
+    /// - Throws: ``HokusaiError/runtime(_:)`` if libvips could
     ///   not be initialized.
     public static func capabilities() throws -> RuntimeCapabilities {
         try VipsRuntime.capabilities()

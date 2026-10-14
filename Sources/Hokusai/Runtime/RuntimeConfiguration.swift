@@ -25,7 +25,7 @@ public struct RuntimeConfiguration: Sendable, Hashable {
     public var maxConcurrentEvaluations: ConcurrencyLimit
 
     /// How many evaluations may wait for a slot before new ones are rejected
-    /// with ``HokusaiError/overloaded(_:)``. `nil` queues without bound.
+    /// with ``HokusaiError/resource(_:)`` (kind `.queuedEvaluations`). `nil` queues without bound.
     ///
     /// Waiting evaluations retain their source bytes, so a bound protects
     /// memory under overload. Applications that apply backpressure upstream

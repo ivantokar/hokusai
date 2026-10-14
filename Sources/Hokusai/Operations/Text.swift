@@ -79,6 +79,9 @@ extension NativeImage {
     /// let labelled = try image.drawText("Hello", x: 24, y: 24)
     /// ```
     func drawText(_ text: String, x: Int, y: Int, options: TextOptions) throws -> NativeImage {
+        guard swift_vips_operation_exists("text") != 0 else {
+            throw HokusaiError.unsupported(feature: "text rendering", reason: "libvips was built without Pango")
+        }
         let baseWidth = width
         let baseHeight = height
 
@@ -227,7 +230,7 @@ extension NativeImage {
 
         guard result == 0, let renderedText else {
             VipsBackend.discardPartialImage(renderedText)
-            throw HokusaiError.textRenderingFailed(VipsBackend.getLastError())
+            throw HokusaiError.nativeTransform("render text")
         }
 
         return NativeImage(takingOwnership: renderedText)
@@ -253,7 +256,7 @@ extension NativeImage {
         let result = swift_vips_gaussblur(pointer, &output, sigma)
         guard result == 0, let out = output else {
             VipsBackend.discardPartialImage(output)
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
+            throw HokusaiError.nativeTransform("blur text shadow")
         }
 
         return NativeImage(takingOwnership: out)

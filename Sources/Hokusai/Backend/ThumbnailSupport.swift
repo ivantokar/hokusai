@@ -49,8 +49,8 @@ enum ThumbnailArguments {
             validHeight = try validateDimension(height, name: "height")
         } else {
             if options.crop != .none {
-                throw HokusaiError.invalidDimensions(
-                    "thumbnail crop strategies require an explicit height; set ThumbnailOptions.height")
+                throw HokusaiError.invalidOption(
+                    name: "height", reason: "thumbnail crop strategies require an explicit height; set ThumbnailOptions.height")
             }
             validHeight = 0
         }
@@ -66,10 +66,10 @@ enum ThumbnailArguments {
     /// Ensures a positive Swift integer can be represented by libvips.
     private static func validateDimension(_ value: Int, name: String) throws -> Int32 {
         guard value > 0 else {
-            throw HokusaiError.invalidDimensions("thumbnail \(name) must be greater than zero, got \(value)")
+            throw HokusaiError.invalidOption(name: name, reason: "thumbnail \(name) must be greater than zero, got \(value)")
         }
         guard let converted = Int32(exactly: value) else {
-            throw HokusaiError.invalidDimensions("thumbnail \(name) must be at most \(Int32.max), got \(value)")
+            throw HokusaiError.invalidOption(name: name, reason: "thumbnail \(name) must be at most \(Int32.max), got \(value)")
         }
         return converted
     }

@@ -118,14 +118,14 @@ Runtime settings are process-wide and belong in application startup:
 ```swift
 try Hokusai.configure(.init(
     maxConcurrentEvaluations: .fixed(4),  // pipelines evaluated at once
-    maxQueuedEvaluations: 64,             // waiting pipelines before .overloaded
+    maxQueuedEvaluations: 64,             // waiting pipelines before .resource
     vipsConcurrency: .fixed(2)            // libvips threads per image computation
 ))
 ```
 
 `configure(_:)` may be called once. Configuration freezes at the first `initialize()`, `capabilities()`, or `data()`/`write(to:)`; building pipelines does not freeze it. Later calls throw.
 
-The two concurrency settings are different resources. `maxConcurrentEvaluations` limits how many whole pipelines Hokusai runs at once, which bounds memory and latency; extra evaluations wait in FIFO order as suspended tasks. `vipsConcurrency` sets how many libvips worker threads one image computation may use. With both `.automatic`, Hokusai currently admits one evaluation per active processor and libvips uses its own default; these defaults will be tuned from benchmarks before the major release. `maxQueuedEvaluations` (unbounded by default) rejects new work with `HokusaiError.overloaded` instead of retaining more source bytes in memory.
+The two concurrency settings are different resources. `maxConcurrentEvaluations` limits how many whole pipelines Hokusai runs at once, which bounds memory and latency; extra evaluations wait in FIFO order as suspended tasks. `vipsConcurrency` sets how many libvips worker threads one image computation may use. With both `.automatic`, Hokusai currently admits one evaluation per active processor and libvips uses its own default; these defaults will be tuned from benchmarks before the major release. `maxQueuedEvaluations` (unbounded by default) rejects new work with `HokusaiError.resource` (kind `.queuedEvaluations`) instead of retaining more source bytes in memory.
 
 ### Capabilities and status
 
@@ -140,6 +140,29 @@ print(status.queuedEvaluations, status.activeEvaluations)
 Codec availability depends on how libvips was built, not on Hokusai's package dependencies. AVIF is verified by encoding and decoding a tiny image. PDF input (libvips `pdfload`) and PDF output (Cairo) are reported separately. `hokusai info` prints the same report.
 
 `runtimeStatus` never initializes libvips. Its counters describe Hokusai's evaluation scheduler; they do not measure libvips worker threads or memory allocated by codec libraries.
+
+## Errors
+
+Terminals throw `HokusaiError` for processing failures and Swift's `CancellationError` when the calling task is cancelled:
+
+```swift
+do {
+    _ = try await image.webp().data()
+} catch is CancellationError {
+    // expected task cancellation
+} catch let error as HokusaiError {
+    switch error {
+    case .invalidInput, .invalidOption: break   // caller mistake, fix the request
+    case .unsupported: break                    // not available in this libvips build
+    case .decode, .transform, .encode: break    // processing failed
+    case .io: break                             // known file read/write failure
+    case .resource: break                       // a configured limit rejected the work
+    case .runtime: break                        // libvips initialization or internal failure
+    }
+}
+```
+
+Branch on the case, not on message text. `FailureContext` carries a Hokusai-owned `operation` label and `reason`, plus an optional native `diagnostic`. libvips keeps one error log for the whole process, so under concurrent failures the diagnostic may include other evaluations' messages; use it for logs only.
 
 ## CLI
 

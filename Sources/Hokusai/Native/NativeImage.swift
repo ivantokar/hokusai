@@ -36,26 +36,26 @@ final class NativeImage {
 
     /// Runs a native call that produces one owned output image.
     ///
-    /// On failure any partial output is released and the libvips diagnostic is
-    /// passed to `failure` so callers keep their existing error categories.
+    /// On failure any partial output is released and `failure` builds the
+    /// error for the boundary that called it.
     static func producing(
         _ body: (UnsafeMutablePointer<Pointer?>) -> Int32,
-        failure: (String) -> HokusaiError
+        failure: () -> HokusaiError
     ) throws -> NativeImage {
         var output: Pointer?
         guard body(&output) == 0, let output else {
             VipsBackend.discardPartialImage(output)
-            throw failure(VipsBackend.getLastError())
+            throw failure()
         }
         return NativeImage(takingOwnership: output)
     }
 
-    /// Applies a single-input native operation to this image.
+    /// Applies a single-input native transform named `operation`.
     func applying(
-        _ body: (Pointer, UnsafeMutablePointer<Pointer?>) -> Int32,
-        failure: (String) -> HokusaiError = HokusaiError.vipsError
+        _ operation: String,
+        _ body: (Pointer, UnsafeMutablePointer<Pointer?>) -> Int32
     ) throws -> NativeImage {
-        try Self.producing({ body(pointer, $0) }, failure: failure)
+        try Self.producing({ body(pointer, $0) }, failure: { .nativeTransform(operation) })
     }
 }
 
@@ -66,9 +66,7 @@ extension NativeImage {
     static func open(path: String, options: LoadOptions = LoadOptions()) throws -> NativeImage {
         try VipsRuntime.ensureInitialized()
 
-        guard FileManager.default.fileExists(atPath: path) else {
-            throw HokusaiError.fileNotFound(path)
-        }
+        try requireReadableFile(path)
 
         let output: Pointer?
         switch options.access {
@@ -79,7 +77,7 @@ extension NativeImage {
         }
 
         guard let img = output else {
-            throw HokusaiError.loadFailed("\(path): \(VipsBackend.getLastError())")
+            throw HokusaiError.decode(.native("decode \(URL(fileURLWithPath: path).lastPathComponent)", "could not decode the image file"))
         }
         return NativeImage(takingOwnership: img)
     }
@@ -89,7 +87,7 @@ extension NativeImage {
         try VipsRuntime.ensureInitialized()
 
         guard !data.isEmpty else {
-            throw HokusaiError.invalidImageData
+            throw HokusaiError.invalidInput(reason: "encoded data is empty")
         }
 
         // The shim copies bytes into libvips-owned storage before this closure
@@ -104,7 +102,7 @@ extension NativeImage {
         }
 
         guard let img = output else {
-            throw HokusaiError.loadFailed(VipsBackend.getLastError())
+            throw HokusaiError.decode(.native("decode input data", "could not decode the image data"))
         }
         return NativeImage(takingOwnership: img)
     }
@@ -114,13 +112,11 @@ extension NativeImage {
         try VipsRuntime.ensureInitialized()
         let arguments = try ThumbnailArguments.validate(width: width, options: options)
 
-        guard FileManager.default.fileExists(atPath: path) else {
-            throw HokusaiError.fileNotFound(path)
-        }
+        try requireReadableFile(path)
 
         return try producing({
             swift_vips_thumbnail(path, $0, arguments.width, arguments.height, arguments.crop, arguments.noRotate)
-        }, failure: { HokusaiError.loadFailed("thumbnail of \(path): \($0)") })
+        }, failure: { .decode(.native("thumbnail \(URL(fileURLWithPath: path).lastPathComponent)", "could not decode and resize the image file")) })
     }
 
     /// Creates a shrink-on-load thumbnail from copied encoded bytes.
@@ -129,7 +125,7 @@ extension NativeImage {
         let arguments = try ThumbnailArguments.validate(width: width, options: options)
 
         guard !data.isEmpty else {
-            throw HokusaiError.invalidImageData
+            throw HokusaiError.invalidInput(reason: "encoded data is empty")
         }
 
         // As with normal buffer loading, the shim copies bytes before lazy
@@ -140,7 +136,16 @@ extension NativeImage {
                     bytes.baseAddress, data.count, output,
                     arguments.width, arguments.height, arguments.crop, arguments.noRotate)
             }
-        }, failure: { HokusaiError.loadFailed("thumbnail from buffer: \($0)") })
+        }, failure: { .decode(.native("thumbnail input data", "could not decode and resize the image data")) })
+    }
+
+    /// Classifies a missing source as I/O before libvips reports it as a
+    /// generic load failure.
+    private static func requireReadableFile(_ path: String) throws {
+        guard FileManager.default.isReadableFile(atPath: path) else {
+            let exists = FileManager.default.fileExists(atPath: path)
+            throw HokusaiError.io(url: URL(fileURLWithPath: path), operation: .read, reason: exists ? "file is not readable" : "file not found")
+        }
     }
 }
 

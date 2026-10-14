@@ -117,9 +117,11 @@ final class EvaluationScheduler: @unchecked Sendable {
                 case .admitted: continuation.resume()
                 case .cancelled: continuation.resume(throwing: CancellationError())
                 case .rejected(let queued):
-                    continuation.resume(throwing: HokusaiError.overloaded(.init(
-                        operation: "admit evaluation",
-                        message: "\(queued) evaluations already queued (maxQueuedEvaluations)")))
+                    continuation.resume(throwing: HokusaiError.resource(ResourceFailure(
+                        kind: .queuedEvaluations,
+                        limit: maxQueued,
+                        actual: queued,
+                        reason: "the evaluation queue is full")))
                 case .queued: break
                 }
             }
@@ -195,7 +197,7 @@ final class EvaluationContext: @unchecked Sendable {
             guard let wrapped = swift_vips_evaluation_image(image.pointer) else { return -1 }
             output.pointee = wrapped
             return 0
-        }, failure: { HokusaiError.runtime(.init(operation: "prepare evaluation", message: $0)) })
+        }, failure: { .runtime(.native("prepare evaluation", "could not create the evaluation sink")) })
         try lock.withLock {
             if cancelled { throw CancellationError() }
             registeredSink = wrapper

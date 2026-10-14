@@ -63,11 +63,11 @@ final class VipsBackend: ImageBackend {
         case "gif":
             result = swift_vips_gifsave(pointer, path)
         default:
-            throw HokusaiError.unsupportedFormat(detectedFormat)
+            throw HokusaiError.unsupported(feature: "encoding \(detectedFormat)", reason: nil)
         }
 
         guard result == 0 else {
-            throw HokusaiError.saveFailed(Self.getLastError())
+            throw HokusaiError.nativeEncode(detectedFormat)
         }
     }
 
@@ -96,12 +96,12 @@ final class VipsBackend: ImageBackend {
         case "gif":
             result = swift_vips_gifsave_buffer(pointer, &buffer, &length)
         default:
-            throw HokusaiError.unsupportedFormat(targetFormat)
+            throw HokusaiError.unsupported(feature: "encoding \(targetFormat)", reason: nil)
         }
 
         guard result == 0, let buf = buffer else {
             if let buffer { g_free(buffer) }
-            throw HokusaiError.saveFailed(Self.getLastError())
+            throw HokusaiError.nativeEncode(targetFormat)
         }
 
         defer { g_free(buffer) }
@@ -128,20 +128,6 @@ final class VipsBackend: ImageBackend {
     /// normally leaves output null on failure, but adapters must not assume it.
     static func discardPartialImage(_ image: UnsafeMutablePointer<CVips.VipsImage>?) {
         if let image { g_object_unref(image) }
-    }
-
-    /// Copies and clears libvips' process-global error buffer.
-    ///
-    /// The buffer is shared by every thread, so under concurrent failures the
-    /// text may include diagnostics from other evaluations. Treat it as detail;
-    /// the typed Hokusai operation and category identify the failure.
-    static func getLastError() -> String {
-        guard let buffer = swift_vips_error_copy() else {
-            return "Unknown vips error"
-        }
-        defer { g_free(buffer) }
-        let message = String(cString: buffer).trimmingCharacters(in: .whitespacesAndNewlines)
-        return message.isEmpty ? "Unknown vips error" : message
     }
 
     /// The linked libvips version string.

@@ -26,7 +26,7 @@ import Testing
 
 func fixtureURL(named name: String, ext: String) throws -> URL {
     guard let url = Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Fixtures") else {
-        throw HokusaiError.fileNotFound("Fixture \(name).\(ext) not found")
+        throw HokusaiError.io(url: URL(fileURLWithPath: "\(name).\(ext)"), operation: .read, reason: "fixture not found")
     }
     return url
 }
@@ -56,23 +56,23 @@ func expectHokusaiError<T>(
 }
 
 extension HokusaiError {
-    var isInvalidDimensions: Bool {
-        if case .invalidDimensions = self { return true }
+    var isInvalidOption: Bool {
+        if case .invalidOption = self { return true }
         return false
     }
 
-    var isFileNotFound: Bool {
-        if case .fileNotFound = self { return true }
+    var isInvalidInput: Bool {
+        if case .invalidInput = self { return true }
         return false
     }
 
-    var isInvalidImageData: Bool {
-        if case .invalidImageData = self { return true }
+    var isReadFailure: Bool {
+        if case .io(_, .read, _) = self { return true }
         return false
     }
 
-    var isLoadFailed: Bool {
-        if case .loadFailed = self { return true }
+    var isDecode: Bool {
+        if case .decode = self { return true }
         return false
     }
 }

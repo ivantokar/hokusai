@@ -76,7 +76,7 @@ extension NativeImage {
 
             guard result == 0, let out = output else {
                 VipsBackend.discardPartialImage(output)
-                throw HokusaiError.vipsError(VipsBackend.getLastError())
+                throw HokusaiError.nativeTransform("rotate")
             }
 
             return NativeImage(takingOwnership: out)
@@ -88,7 +88,7 @@ extension NativeImage {
                 }
 
                 guard let bgPtr = bgArray else {
-                    throw HokusaiError.vipsError("Failed to create background array")
+                    throw HokusaiError.allocationFailed("rotate")
                 }
 
                 let result = swift_vips_similarity_background(pointer, &output, degrees, bgPtr)
@@ -97,7 +97,7 @@ extension NativeImage {
 
                 guard result == 0, let out = output else {
                     VipsBackend.discardPartialImage(output)
-                    throw HokusaiError.vipsError(VipsBackend.getLastError())
+                    throw HokusaiError.nativeTransform("rotate")
                 }
 
                 return NativeImage(takingOwnership: out)
@@ -106,7 +106,7 @@ extension NativeImage {
 
                 guard result == 0, let out = output else {
                     VipsBackend.discardPartialImage(output)
-                    throw HokusaiError.vipsError(VipsBackend.getLastError())
+                    throw HokusaiError.nativeTransform("rotate")
                 }
 
                 return NativeImage(takingOwnership: out)
@@ -125,7 +125,7 @@ extension NativeImage {
 
             guard result == 0, let out = output else {
                 VipsBackend.discardPartialImage(output)
-                throw HokusaiError.vipsError(VipsBackend.getLastError())
+                throw HokusaiError.nativeTransform("flip")
             }
 
             return NativeImage(takingOwnership: out)
@@ -135,7 +135,7 @@ extension NativeImage {
 
             guard result == 0, let out = output else {
                 VipsBackend.discardPartialImage(output)
-                throw HokusaiError.vipsError(VipsBackend.getLastError())
+                throw HokusaiError.nativeTransform("flip")
             }
 
             return NativeImage(takingOwnership: out)
@@ -156,7 +156,7 @@ extension NativeImage {
 
         guard result == 0, let out = output else {
             VipsBackend.discardPartialImage(output)
-            throw HokusaiError.vipsError(VipsBackend.getLastError())
+            throw HokusaiError.nativeTransform("auto orient")
         }
 
         return NativeImage(takingOwnership: out)

@@ -38,7 +38,7 @@ enum VipsRuntime {
     private static let initialization: Result<Void, HokusaiError> = {
         let configuration = frozenConfiguration()
         guard vips_init("Hokusai") == 0 else {
-            return .failure(.initializationFailed(VipsBackend.getLastError()))
+            return .failure(.runtime(.native("initialize libvips", "libvips could not be initialized")))
         }
         if let threads = configuration.vipsConcurrency.fixedValue {
             swift_vips_concurrency_set(Int32(threads))
@@ -65,7 +65,7 @@ enum VipsRuntime {
         } catch let error as HokusaiError {
             return .failure(error)
         } catch {
-            return .failure(.initializationFailed(error.localizedDescription))
+            return .failure(.runtime(FailureContext(operation: "initialize libvips", reason: error.localizedDescription)))
         }
         return .success(discoverCapabilities())
     }()
@@ -98,7 +98,7 @@ enum VipsRuntime {
         }
         // A failed probe leaves libvips diagnostics behind; do not leak them
         // into the next unrelated error.
-        _ = VipsBackend.getLastError()
+        _ = VipsDiagnostics.drain()
 
         return RuntimeCapabilities(
             libvipsVersion: VipsBackend.version,
@@ -124,12 +124,12 @@ struct ConfigurationState {
         guard frozen == nil else {
             throw HokusaiError.runtime(.init(
                 operation: "configure",
-                message: "runtime configuration is frozen; call configure(_:) before the first Hokusai evaluation, initialize(), or capabilities()"))
+                reason: "runtime configuration is frozen; call configure(_:) before the first Hokusai evaluation, initialize(), or capabilities()"))
         }
         guard requested == nil else {
             throw HokusaiError.runtime(.init(
                 operation: "configure",
-                message: "configure(_:) may be called only once per process"))
+                reason: "configure(_:) may be called only once per process"))
         }
         requested = configuration
     }
