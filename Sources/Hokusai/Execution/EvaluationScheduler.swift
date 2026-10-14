@@ -168,8 +168,20 @@ final class EvaluationScheduler: @unchecked Sendable {
 /// touches a released `VipsImage`. This is execution state, never part of an
 /// immutable `Hokusai` value.
 final class EvaluationContext: @unchecked Sendable {
+    /// Planner switches; only tests and benchmarks use anything but the default.
+    let planner: PlannerOptions
+
+    /// Receives planning and lowering decisions when a test or benchmark asks.
+    let trace: PlanTrace?
+
+    init(planner: PlannerOptions = .default, trace: PlanTrace? = nil) {
+        self.planner = planner
+        self.trace = trace
+    }
+
     // Guarded by `lock`.
     private let lock = NSLock()
+    private var memo: [ObjectIdentifier: NativeImage] = [:]
     private var cancelled = false
     private var registeredSink: NativeImage?
     private var watchedSources: [WatchedSource] = []
@@ -192,6 +204,16 @@ final class EvaluationContext: @unchecked Sendable {
             cancelled = true
             if let registeredSink { swift_vips_image_kill(registeredSink.pointer) }
         }
+    }
+
+    /// The native image already built for a plan node in this evaluation.
+    func memoised(_ node: ObjectIdentifier) -> NativeImage? {
+        lock.withLock { memo[node] }
+    }
+
+    /// Remembers the image built for a plan node until this evaluation ends.
+    func remember(_ image: NativeImage, for node: ObjectIdentifier) {
+        lock.withLock { memo[node] = image }
     }
 
     /// Wraps a freshly opened source so a later failure to produce its pixels

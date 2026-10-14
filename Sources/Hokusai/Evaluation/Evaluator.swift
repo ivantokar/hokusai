@@ -28,6 +28,7 @@ enum Evaluator {
         try requireEncoder(format)
         return try classifyingSourceFailures(in: context) {
             let image = try context.sink(for: build(plan, context: context, scope: nil))
+            context.trace?.record(.sinkSelected("memory \(format.imageFormat.rawValue)"))
             let data: Data
             switch format {
             case .pdf(let options):
@@ -44,6 +45,13 @@ enum Evaluator {
         try requireEncoder(format)
         return try classifyingSourceFailures(in: context) {
             let image = try context.sink(for: build(plan, context: context, scope: nil))
+            // Everything but PDF encodes straight to the file; PDF builds the
+            // document in memory because Cairo has no file sink here yet.
+            if case .pdf = format {
+                context.trace?.record(.sinkSelected("memory pdf"))
+            } else {
+                context.trace?.record(.sinkSelected("file \(format.imageFormat.rawValue)"))
+            }
             switch format {
             case .pdf(let options):
                 let document = try image.pdf(options: options)
@@ -85,18 +93,61 @@ enum Evaluator {
     }
 
     /// Lowers one plan; `scope` labels sources of composite layers.
+    ///
+    /// Operations are lowered one-to-one and in written order. The planner may
+    /// mark a step as a proven identity, and a node already built in this
+    /// evaluation is reused instead of rebuilt (see ``PlannerRule``).
     private static func build(_ plan: ImagePlan, context: EvaluationContext, scope: String?) throws -> NativeImage {
-        let (source, operations) = plan.linearized
+        let chain = plan.chain
+        let steps = Planner.plan(chain.steps.map(\.operation), options: context.planner)
+        let label = scope.map { "\($0) / \(chain.source.decodeLabel)" } ?? chain.source.decodeLabel
+        // A forward-only stream cannot serve two readers, so sequential
+        // sources are never shared.
+        let shareable = context.planner.isEnabled(.subplanMemoisation) && chain.source.options.access != .sequential
+
         try context.checkCancellation()
-        var image = try open(source, context: context, scope: scope)
-        for operation in operations {
-            try context.checkCancellation()
-            image = try apply(operation, to: image, context: context)
+
+        // Start from the most advanced node of this chain that is already built.
+        var image: NativeImage?
+        var next = 0
+        if shareable {
+            for index in stride(from: chain.steps.count - 1, through: 0, by: -1) {
+                if let hit = context.memoised(chain.steps[index].id) {
+                    image = hit
+                    next = index + 1
+                    context.trace?.record(.memoisationHit(chain.steps[index].operation.name))
+                    break
+                }
+            }
+            if image == nil, let hit = context.memoised(chain.sourceID) {
+                image = hit
+                context.trace?.record(.memoisationHit(label))
+            }
         }
-        return image
+
+        var current: NativeImage
+        if let image {
+            current = image
+        } else {
+            current = try open(chain.source, context: context, label: label)
+            if shareable { context.remember(current, for: chain.sourceID) }
+        }
+
+        for index in next..<steps.count {
+            try context.checkCancellation()
+            let step = steps[index]
+            if let rule = step.skippedBy {
+                context.trace?.record(.operationSkipped(step.operation.name, rule))
+            } else {
+                current = try apply(step.operation, to: current, context: context)
+                context.trace?.record(.operationLowered(step.operation.name))
+            }
+            if shareable { context.remember(current, for: chain.steps[index].id) }
+        }
+        return current
     }
 
-    private static func open(_ source: ImageSource, context: EvaluationContext, scope: String?) throws -> NativeImage {
+    private static func open(_ source: ImageSource, context: EvaluationContext, label: String) throws -> NativeImage {
         let native: NativeImage
         switch source {
         case .file(let url, let options):
@@ -104,7 +155,7 @@ enum Evaluator {
         case .data(let data, let options):
             native = try NativeImage.open(data: data, options: options)
         }
-        let label = scope.map { "\($0) / \(source.decodeLabel)" } ?? source.decodeLabel
+        context.trace?.record(.sourceOpened(label))
         return try context.watch(native, label: label, sequential: source.options.access == .sequential)
     }
 

@@ -77,6 +77,10 @@ let info = try await fromFile.write(to: URL(fileURLWithPath: "output.webp"))
 
 `data()` and `write(to:)` run the blocking native work off Swift's cooperative executor. Concurrent evaluations beyond the scheduler's limit wait as suspended tasks in FIFO order. Cancelling the calling task removes a waiting evaluation or asks libvips to stop a running one; either way the terminal throws `CancellationError`, and the pipeline can be evaluated again. Pipelines are immutable and safe to branch across tasks.
 
+### Evaluation order
+
+A pipeline means exactly the operations you wrote, in the order you wrote them. Hokusai may change *how* it runs them but never *what* they produce, so it only applies a short whitelist of equivalence-preserving rules: it skips operations that are provably the identity (a rotation by whole turns, compositing no layers), and within one `data()` or `write(to:)` it builds a source or layer that several parts of the pipeline share only once. It never reorders operations (a `trim` or smart crop stays where you put it), fuses resizes, selects `.sequential` access for you, or keeps results between evaluations; libvips' own operation cache is the only cache. Output metadata and encoder choices are not image operations: the last `.png()`/`.webp()`/`preserveMetadata()` wins, and a composite layer contributes only its image operations.
+
 ### Input options
 
 `InputOptions` is the one policy for opening an encoded image, from `Data` or a local file URL:
