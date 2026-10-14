@@ -309,8 +309,17 @@ public struct Hokusai: Sendable {
     ///
     /// The resulting PDF contains rasterized pipeline output. It is suitable
     /// for image reports but does not preserve selectable vector text.
-    public func pdf(pageSize: PDFPageSize = .image, dpi: Double = 72) throws -> Self {
-        try encode(as: .pdf(.init(pageSize: pageSize, dpi: dpi)))
+    public func pdf(
+        pageSize: PDFPageSize = .image(),
+        margins: PDFMargins = .none,
+        anchor: CanvasAnchor = .center,
+        background: Color? = nil,
+        maxEffectiveDPI: Double? = nil,
+        metadata: PDFDocumentMetadata? = nil
+    ) throws -> Self {
+        try encode(as: .pdf(PDFOptions(
+            pageSize: pageSize, margins: margins, anchor: anchor,
+            background: background, maxEffectiveDPI: maxEffectiveDPI, metadata: metadata)))
     }
 
     /// Preserves source metadata when the selected encoder supports it.
@@ -404,9 +413,7 @@ public struct Hokusai: Sendable {
         case .webp(let options): try quality(options.quality); try effort(options.effort)
         case .avif(let options): try quality(options.quality); try effort(options.effort)
         case .pdf(let options):
-            guard options.dpi.isFinite, options.dpi > 0 else {
-                throw HokusaiError.invalidOption(name: "dpi", reason: "must be a finite value greater than zero")
-            }
+            try PDFLayout.validate(options)
         }
     }
 

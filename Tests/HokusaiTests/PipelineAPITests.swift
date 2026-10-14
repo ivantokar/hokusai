@@ -158,7 +158,7 @@ import NIOCore
     @Test func pdfOutputProducesAValidSinglePageDocument() async throws {
         let input = try loadFixtureData(named: "landscape-asym", ext: "jpg")
         let output = try await Hokusai(data: input)
-            .pdf(pageSize: .a4)
+            .pdf(pageSize: .a4())
             .data()
 
         #expect(output.info.format == .pdf)
@@ -176,7 +176,7 @@ import NIOCore
         #expect(info.format == .pdf)
         #expect(try Data(contentsOf: outputURL).starts(with: Data("%PDF-".utf8)))
         #expect(throws: HokusaiError.self) {
-            try Hokusai(data: input).pdf(dpi: 0)
+            try Hokusai(data: input).pdf(pageSize: .image(dpi: 0))
         }
     }
 }

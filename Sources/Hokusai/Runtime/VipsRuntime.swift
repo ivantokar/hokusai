@@ -1,5 +1,6 @@
 import Foundation
 import CVips
+import CCairo
 
 /// Process-scoped libvips runtime and its frozen configuration.
 ///
@@ -88,7 +89,7 @@ enum VipsRuntime {
         if exists("jpegsave") { outputs.insert(.jpeg) }
         if exists("pngsave") { outputs.insert(.png) }
         if exists("webpsave") { outputs.insert(.webp) }
-        if swift_vips_cairo_pdf_available() != 0 { outputs.insert(.pdf) }
+        if hokusai_cairo_pdf_available() != 0 { outputs.insert(.pdf) }
 
         // A HEIF saver may lack an AV1 encoder, and a HEIF loader may lack an
         // AV1 decoder, so AVIF is verified by a round trip of a tiny image.

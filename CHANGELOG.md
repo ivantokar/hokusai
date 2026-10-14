@@ -21,6 +21,27 @@ All notable changes to this project are documented in this file.
 - `HokusaiError.resource(ResourceFailure)` for configured limits, starting
   with `maxQueuedEvaluations` (kind `.queuedEvaluations`).
 
+### Changed (PDF)
+- **Breaking:** `PDFPageSize` is `.image(dpi:)`, `.a4(_:)`, `.letter(_:)`,
+  `.points(width:height:)`. The global `dpi` argument of `pdf(pageSize:dpi:)`
+  is gone: it only ever affected `.image`, and was silently ignored for A4,
+  Letter, and custom pages. `PDFOptions` gains `margins`, `anchor`,
+  `background`, `maxEffectiveDPI`, and `metadata`; `pdf(...)` takes them
+  directly.
+- **Breaking:** `OutputInfo` has a `pdf` property (page count and first-page
+  size in points). For PDF, `width` and `height` are the embedded raster pixels.
+- PDF is written through Cairo's stream surface into the same sink semantics
+  as the other formats: `write(to:)` no longer builds the whole document as
+  `Data`, write failures are `io(.write)`, a cancelled or failed write removes
+  the partial file, and cancellation throws `CancellationError`.
+- The raster is converted into a single buffer (libvips to 8-bit sRGB RGBA,
+  then premultiplied in place) instead of two, lowering peak memory by one
+  raster. Encoded bytes are no longer copied three times.
+- Cairo failures carry Cairo's own status text as the diagnostic and no longer
+  go through libvips' global error log. The Cairo bridge lives in `CCairo`, not
+  `CVips`.
+- Transparency is kept unless a `background` is given.
+
 ### Changed (metadata)
 - **Breaking:** `Hokusai.metadata()` is `async` and describes the **root source**
   only, never the transformed pipeline. Composite pipelines report their base

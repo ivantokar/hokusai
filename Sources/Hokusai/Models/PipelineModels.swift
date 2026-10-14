@@ -113,39 +113,33 @@ public struct AVIFOptions: Sendable {
     public init(quality: Int = 50, effort: Int = 4, lossless: Bool = false) { self.quality = quality; self.effort = effort; self.lossless = lossless }
 }
 
-/// Page geometry for Cairo-backed PDF output, expressed in PostScript points.
-public enum PDFPageSize: Sendable, Equatable {
-    /// Size the page from the raster dimensions at the configured DPI.
-    case image
-    case a4
-    case letter
-    case points(width: Double, height: Double)
-}
-
-/// Options for rendering the current pipeline as a one-page PDF document.
-public struct PDFOptions: Sendable, Equatable {
-    public var pageSize: PDFPageSize
-    /// Raster resolution used only when `pageSize` is `.image`.
-    public var dpi: Double
-
-    /// Creates one-page PDF rendering options.
-    public init(pageSize: PDFPageSize = .image, dpi: Double = 72) {
-        self.pageSize = pageSize
-        self.dpi = dpi
-    }
-}
-
 /// Encoded bytes and the stable facts measured from the evaluated output.
 public struct Output: Sendable {
     public let data: Data
     public let info: OutputInfo
 }
 
+/// Facts about an evaluated output.
+///
+/// `width` and `height` are the pixel dimensions of the encoded image. For PDF
+/// they are the pixels of the embedded raster (after any downsampling), and
+/// ``pdf`` carries the physical page geometry.
 public struct OutputInfo: Sendable, Equatable {
     public let format: ImageFormat
     public let width: Int
     public let height: Int
     public let size: Int
+
+    /// Page facts when `format` is PDF; `nil` for every other format.
+    public let pdf: PDFOutputDetails?
+
+    init(format: ImageFormat, width: Int, height: Int, size: Int, pdf: PDFOutputDetails? = nil) {
+        self.format = format
+        self.width = width
+        self.height = height
+        self.size = size
+        self.pdf = pdf
+    }
 }
 
 /// A layer composited over a pipeline in the supplied order.
