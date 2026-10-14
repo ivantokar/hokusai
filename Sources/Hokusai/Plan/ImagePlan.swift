@@ -3,33 +3,79 @@ import Foundation
 /// Immutable description of the image a pipeline produces.
 ///
 /// A plan is a source followed by ordered operations. Composite layers hold
-/// their own plans, so the structure is a DAG. Indirect payloads are shared
-/// immutable boxes: branching a pipeline shares its prefix without copying,
-/// and encoded `Data` sources are shared copy-on-write. Nothing here touches
-/// libvips; ``Evaluator`` lowers a plan to a native graph at terminal time.
-indirect enum ImagePlan: Sendable {
-    case source(ImageSource)
-    case apply(ImageOperation, to: ImagePlan)
+/// their own plans, so the structure is a DAG. Every step is an immutable
+/// node, and branching a pipeline shares its prefix nodes without copying;
+/// encoded `Data` sources are shared copy-on-write. Node identity is what
+/// lets one evaluation build a shared subplan once (see ``Evaluator``).
+/// Nothing here touches libvips.
+struct ImagePlan: Sendable {
+    private let node: Node
+
+    private init(node: Node) {
+        self.node = node
+    }
+
+    /// A plan that is just `source`.
+    static func source(_ source: ImageSource) -> ImagePlan {
+        ImagePlan(node: Node(source: source))
+    }
 
     /// Returns a plan that applies `operation` after this one.
     func appending(_ operation: ImageOperation) -> ImagePlan {
-        .apply(operation, to: self)
+        ImagePlan(node: Node(operation: operation, input: node))
     }
 
     /// The source and operations in evaluation order.
+    var linearized: (source: ImageSource, operations: [ImageOperation]) {
+        let chain = self.chain
+        return (chain.source, chain.steps.map(\.operation))
+    }
+
+    /// The source and each step with the identity of the node it produces.
     ///
     /// Walking iteratively keeps long chains from growing the call stack.
-    var linearized: (source: ImageSource, operations: [ImageOperation]) {
-        var operations: [ImageOperation] = []
-        var current = self
+    var chain: Chain {
+        var steps: [Chain.Step] = []
+        var current = node
         while true {
-            switch current {
+            switch current.kind {
             case .source(let source):
-                return (source, operations.reversed())
+                return Chain(source: source, sourceID: ObjectIdentifier(current), steps: steps.reversed())
             case .apply(let operation, let input):
-                operations.append(operation)
+                steps.append(Chain.Step(id: ObjectIdentifier(current), operation: operation))
                 current = input
             }
+        }
+    }
+
+    /// A plan flattened from source to result.
+    struct Chain {
+        struct Step {
+            /// Identifies the node whose result is the image after `operation`.
+            let id: ObjectIdentifier
+            let operation: ImageOperation
+        }
+
+        let source: ImageSource
+        /// Identifies the source node, shared by every plan derived from it.
+        let sourceID: ObjectIdentifier
+        let steps: [Step]
+    }
+
+    private final class Node: Sendable {
+        enum Kind: Sendable {
+            case source(ImageSource)
+            case apply(ImageOperation, input: Node)
+        }
+
+        let kind: Kind
+
+        init(source: ImageSource) {
+            kind = .source(source)
+        }
+
+        init(operation: ImageOperation, input: Node) {
+            kind = .apply(operation, input: input)
         }
     }
 }

@@ -21,6 +21,15 @@ All notable changes to this project are documented in this file.
 - `HokusaiError.resource(ResourceFailure)` for configured limits, starting
   with `maxQueuedEvaluations` (kind `.queuedEvaluations`).
 
+### Changed (planning)
+- Pipelines are lowered by a small planner that keeps every written operation
+  in written order. Rotations by whole turns and empty composites are skipped
+  as proven identities, and within one evaluation a source or composite layer
+  shared by several consumers (a logo used twice, or a layer derived from the
+  base image) is opened and built once. Sources opened with `.sequential`
+  access are never shared. Output is unchanged; nothing is cached between
+  evaluations.
+
 ### Changed (input)
 - **Breaking:** `InputOptions` is the single encoded-input policy and is now
   applied: `access` (from the former `LoadOptions`), `failOn` (now with
