@@ -359,6 +359,29 @@ public struct Hokusai: Sendable {
         }
     }
 
+    /// Measures the pixels of the **current pipeline**.
+    ///
+    /// Unlike ``metadata()``, which reports what the source said, `stats()`
+    /// evaluates the pipeline: `image.extract(x: 20, y: 20, width: 400, height: 300).stats()`
+    /// describes the crop, not the source. It returns per-channel statistics,
+    /// entropy, sharpness, and the dominant colour as an ``ImageStatistics``;
+    /// see that type for exactly how each is defined. Analysis costs a full
+    /// evaluation, runs on Hokusai's evaluation scheduler like an encoding
+    /// terminal, and is cancelled with the calling task.
+    ///
+    /// The pipeline is not consumed: the same value can be encoded afterwards,
+    /// and nothing is encoded to produce the statistics.
+    ///
+    /// - Throws: the same typed errors as a terminal, including
+    ///   ``HokusaiError/decode(_:)`` for a source that cannot be decoded and
+    ///   `CancellationError` when the task is cancelled.
+    public func stats() async throws -> ImageStatistics {
+        let plan = plan
+        return try await EvaluationScheduler.shared.run { context in
+            try Evaluator.statistics(plan, context: context)
+        }
+    }
+
     /// Evaluates and encodes the pipeline on Hokusai's evaluation scheduler.
     ///
     /// Call an encoder method first. The returned ``Output`` includes both the
