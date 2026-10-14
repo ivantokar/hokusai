@@ -62,6 +62,21 @@ enum Evaluator {
         }
     }
 
+    // MARK: - Pixel analysis
+
+    /// Evaluates the current pipeline and measures its pixels.
+    ///
+    /// The pipeline is lowered exactly as for encoding and its final image is
+    /// registered for cancellation, but nothing is encoded. A source that
+    /// cannot produce pixels is reported as a decode failure, as it would be
+    /// by a terminal.
+    static func statistics(_ plan: ImagePlan, context: EvaluationContext) throws -> ImageStatistics {
+        try classifyingSourceFailures(in: context) {
+            let image = try context.sink(for: build(plan, context: context, scope: nil))
+            return try image.statistics(context: context)
+        }
+    }
+
     // MARK: - Source inspection
 
     /// Opens `source` under its options and reads its header.

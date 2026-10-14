@@ -21,6 +21,13 @@ All notable changes to this project are documented in this file.
 - `HokusaiError.resource(ResourceFailure)` for configured limits, starting
   with `maxQueuedEvaluations` (kind `.queuedEvaluations`).
 
+### Added (statistics)
+- `Hokusai.stats()` measures the pixels of the current pipeline and returns an
+  `ImageStatistics`: per-channel minimum and maximum with locations, sum, sum
+  of squares, mean, and standard deviation; `isOpaque`; luminance `entropy`;
+  Laplacian `sharpness`; and a `dominantColor`. It runs on the evaluation
+  scheduler, does not consume the pipeline, and is cancelled with its task.
+
 ### Changed (output metadata)
 - **Breaking:** `preserveMetadata()` and `removeMetadata()` are replaced by
   `metadataPolicy(_:)` with a typed `MetadataPolicy` (`exif`, `icc`, `xmp`,

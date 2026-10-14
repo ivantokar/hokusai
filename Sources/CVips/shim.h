@@ -622,6 +622,51 @@ static inline int swift_vips_gifsave_buffer(VipsImage *in, void **buf, size_t *l
     return vips_gifsave_buffer(in, buf, len, NULL);
 }
 
+// MARK: - Pixel Analysis
+
+/** @brief Per-band statistics matrix: 10 doubles per row, row 0 for all bands, then one row per band. */
+static inline int swift_vips_stats(VipsImage *in, VipsImage **out) {
+    return vips_stats(in, out, NULL);
+}
+
+/** @brief 256-bin histogram of an 8-bit single-band image. */
+static inline int swift_vips_hist_find(VipsImage *in, VipsImage **out) {
+    return vips_hist_find(in, out, NULL);
+}
+
+/** @brief Shannon entropy in bits of a histogram. */
+static inline int swift_vips_hist_entropy(VipsImage *in, double *out) {
+    return vips_hist_entropy(in, out, NULL);
+}
+
+/** @brief 16 × 16 × 16 colour histogram of a three-band 8-bit image. */
+static inline int swift_vips_hist_find_ndim16(VipsImage *in, VipsImage **out) {
+    return vips_hist_find_ndim(in, out, "bins", 16, NULL);
+}
+
+/**
+ * @brief Standard deviation of the 3 × 3 Laplacian response of a single-band image.
+ *
+ * The response is computed in floating point so negative values are not clipped.
+ */
+static inline int swift_vips_laplacian_deviation(VipsImage *in, double *out) {
+    static const double kernel[9] = { 0, 1, 0, 1, -4, 1, 0, 1, 0 };
+    VipsImage *mask = vips_image_new_matrix_from_array(3, 3, kernel, 9);
+    VipsImage *response = NULL;
+    int result = -1;
+    if (mask != NULL && vips_convf(in, &response, mask, NULL) == 0) {
+        result = vips_deviate(response, out, NULL);
+    }
+    if (response != NULL) g_object_unref(response);
+    if (mask != NULL) g_object_unref(mask);
+    return result;
+}
+
+/** @brief Evaluate once into memory; later passes read the result. Returns NULL on failure. */
+static inline VipsImage *swift_vips_copy_memory(VipsImage *in) {
+    return vips_image_copy_memory(in);
+}
+
 // MARK: - Output Metadata
 
 /** @brief Whether the image carries a metadata field with this name. */

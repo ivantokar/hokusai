@@ -109,6 +109,26 @@ What each format can carry (a family a format cannot carry is simply absent from
 
 AVIF is the exception for orientation. The format stores it as a rotation of the image container rather than as a tag, and a reader applies that rotation and reports no tag, so the decoded side lengths are the rotated ones. Whether libvips writes that rotation depends on the build: with libvips 8.18 it does, while on the 8.16 baseline (libheif 1.12) the orientation survives only as an EXIF tag, which AVIF viewers ignore. If you encode AVIF for such a build, call `autoOrient()` first so the pixels are upright.
 
+### Pixel statistics
+
+```swift
+let stats = try await image.extract(x: 20, y: 20, width: 400, height: 300).stats()
+
+stats.channel(.red)?.mean       // 0...255
+stats.entropy                   // bits, 0...8
+stats.sharpness                 // Laplacian deviation, higher = more detail
+stats.dominantColor             // Color
+stats.isOpaque
+```
+
+`stats()` answers a third question, separate from `metadata()` (what the source said) and from the output metadata policy: **what are the pixels of the current pipeline?** It evaluates the pipeline, so the example above describes the crop, not the source, and the cost is a full evaluation on the same scheduler as `data()`. It encodes nothing and does not consume the pipeline.
+
+- Values are measured on 8-bit pixels (0...255) after conversion to sRGB, or to grey for greyscale images, so they compare across source formats and bit depths.
+- `channels` has one entry per band: minimum and maximum with a location, sum, sum of squares, mean, and the **sample** standard deviation (n − 1, as libvips reports it). When several pixels tie for an extreme, which one the location names can differ between runs.
+- `entropy` is the Shannon entropy of the 8-bit luminance, in bits: 0 for one flat tone, 1 for two equally common levels, up to 8. `sharpness` is the standard deviation of the 3 × 3 Laplacian of that luminance. It compares images of similar content and size and is not a quality score; noise and texture raise it too. Both ignore alpha. `sharpness` is a parallel floating-point sum and can differ in the last digits between runs.
+- `dominantColor` groups colours into 16 levels per channel and reports the centre of the fullest group, so it is accurate to about 8 of 255. Alpha is ignored.
+- The image is evaluated into memory once (about its 8-bit size) and every measurement reads that copy, rather than re-running the pipeline for each one.
+
 ### Source metadata
 
 ```swift
