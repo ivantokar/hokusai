@@ -177,5 +177,5 @@ struct LayerStep: Sendable {
 /// Output configuration applied only by a terminal method.
 struct TerminalConfig: Sendable {
     var encoder: OutputFormat?
-    var preservesMetadata = false
+    var metadataPolicy = MetadataPolicy.default
 }

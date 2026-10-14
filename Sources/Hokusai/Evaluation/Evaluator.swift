@@ -305,7 +305,7 @@ enum Evaluator {
         if case .pdf(let options) = format {
             return .pdf(options)
         }
-        guard let encoder = NativeEncoder(format: format, preservesMetadata: terminal.preservesMetadata) else {
+        guard let encoder = NativeEncoder(format: format, metadata: terminal.metadataPolicy) else {
             throw HokusaiError.unsupported(feature: "encoding \(format.imageFormat.rawValue)", reason: "no raster encoder for this format")
         }
         return .raster(encoder)

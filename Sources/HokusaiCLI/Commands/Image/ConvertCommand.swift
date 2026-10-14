@@ -27,7 +27,7 @@ struct ConvertCommand: AsyncParsableCommand {
     @Flag(help: "Use progressive/interlaced output when supported.")
     var progressive = false
 
-    @Flag(help: "Strip metadata where supported.")
+    @Flag(help: "Remove all metadata, including the ICC profile, orientation, and density. By default EXIF, XMP, and IPTC are removed and those three are kept.")
     var stripMetadata = false
 
     @Flag(help: "Use lossless mode where supported.")

@@ -67,7 +67,9 @@ enum CLIParser {
         case .gif, .tiff, .heif, .svg:
             throw ValidationError("The 1.0 pipeline CLI does not support output format: \(format.rawValue)")
         }
-        return try stripMetadata ? configured.removeMetadata() : configured.preserveMetadata()
+        // Without the flag the library's default policy applies unchanged;
+        // the flag asks for the strict policy explicitly.
+        return stripMetadata ? configured.metadataPolicy(.removeAll) : configured
     }
 
     /// Parses the three text-alignment names accepted by the CLI.

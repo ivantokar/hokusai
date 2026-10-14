@@ -50,9 +50,11 @@ import Testing
     /// PNG interlace method, byte 12 of the IHDR chunk body.
     private func pngInterlace(_ data: Data) -> UInt8 { data[28] }
 
-    /// The first WebP chunk's FourCC: "VP8 " lossy, "VP8L" lossless.
+    /// The WebP bitstream chunk: "VP8 " lossy or "VP8L" lossless. A file that
+    /// carries an ICC profile starts with a "VP8X" header chunk, so the
+    /// bitstream is found by its tag rather than by position.
     private func webpChunk(_ data: Data) -> String {
-        String(decoding: data[12..<16], as: UTF8.self)
+        contains(data, "VP8L") ? "VP8L" : (contains(data, "VP8 ") ? "VP8 " : "?")
     }
 
     // MARK: - Parity
@@ -188,11 +190,12 @@ import Testing
 
     @Test func metadataPolicyAgreesAcrossSinks() async throws {
         let source = try Hokusai(data: loadFixtureData(named: "orientation-6", ext: "jpg"))
-        let stripped = try await bothSinks(source.jpeg())
-        let preserved = try await bothSinks(source.preserveMetadata().jpeg())
+        let removed = try await bothSinks(source.jpeg().metadataPolicy(.removeAll))
+        let preserved = try await bothSinks(source.jpeg().metadataPolicy(.preserveAll))
 
-        #expect(!contains(stripped.memory.data, "Exif") && !contains(stripped.file, "Exif"))
+        #expect(!contains(removed.memory.data, "Exif") && !contains(removed.file, "Exif"))
         #expect(contains(preserved.memory.data, "Exif") && contains(preserved.file, "Exif"))
+        #expect(removed.memory.data == removed.file)
         #expect(preserved.memory.data == preserved.file)
     }
 
