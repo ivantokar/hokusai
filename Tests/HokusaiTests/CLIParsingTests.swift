@@ -161,12 +161,13 @@ import ArgumentParser
         #expect(throws: (any Error).self) { try CLIParser.parseFormat(nil, fallbackPath: "noextension") }
     }
 
-    @Test func pipelineOutputSupportsPDF() throws {
+    @Test func pipelineOutputSupportsPDF() async throws {
         let input = try loadFixtureData(named: "pixel", ext: "png")
         let pipeline = try CLIParser.configurePipelineOutput(
             Hokusai(data: input), format: .pdf, quality: nil, compression: nil,
             progressive: false, stripMetadata: true, lossless: false, effort: nil
         )
-        #expect(try pipeline.metadata().width == 1)
+        let metadata = try await pipeline.metadata()
+        #expect(metadata.width == 1)
     }
 }

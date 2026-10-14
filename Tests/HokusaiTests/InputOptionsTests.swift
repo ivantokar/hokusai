@@ -236,7 +236,7 @@ import CVips
         let data = try loadFixtureData(named: "landscape-asym", ext: "jpg")
         let pipeline = try Hokusai(data: data, options: InputOptions(limits: InputLimits(maxPixels: 1000)))
 
-        for check in [{ _ = try pipeline.metadata() }, { _ = try await pipeline.png().data() }] as [() async throws -> Void] {
+        for check in [{ _ = try await pipeline.metadata() }, { _ = try await pipeline.png().data() }] as [() async throws -> Void] {
             do {
                 try await check()
                 Issue.record("expected the pixel limit to reject the image")
@@ -283,15 +283,17 @@ import CVips
 
     // MARK: - File freshness
 
-    @Test func revalidateSeesAFileReplacedAtTheSamePath() throws {
+    @Test func revalidateSeesAFileReplacedAtTheSamePath() async throws {
         let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("hokusai-revalidate-\(UUID().uuidString).img")
         defer { try? FileManager.default.removeItem(at: url) }
 
         try loadFixtureData(named: "pixel", ext: "png").write(to: url)
-        #expect(try Hokusai(url: url).metadata().width == 1)
+        let before = try await Hokusai(url: url).metadata()
+        #expect(before.width == 1)
 
         try loadFixtureData(named: "landscape-asym", ext: "jpg").write(to: url)
-        #expect(try Hokusai(url: url, options: InputOptions(revalidate: true)).metadata().width == 320)
+        let after = try await Hokusai(url: url, options: InputOptions(revalidate: true)).metadata()
+        #expect(after.width == 320)
     }
 
     // MARK: - Ownership and concurrency

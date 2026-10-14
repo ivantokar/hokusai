@@ -554,6 +554,30 @@ static inline int swift_vips_image_get_double_field(VipsImage *in, const char *n
     return vips_image_get_double(in, name, out);
 }
 
+/**
+ * @brief Copy an integer-array metadata field (for example animation `delay`) into `out`.
+ *
+ * Returns the number of elements the field holds, or -1 when it is absent or
+ * not an integer array. At most `capacity` elements are copied, so callers
+ * compare the result with `capacity` to detect truncation.
+ */
+static inline int swift_vips_image_get_int_array_field(VipsImage *in, const char *name, int *out, int capacity) {
+    int count = 0;
+    int *values = NULL;
+    if (vips_image_get_typeof(in, name) == 0 || vips_image_get_array_int(in, name, &values, &count) != 0) {
+        return -1;
+    }
+    for (int index = 0; index < count && index < capacity; index++) {
+        out[index] = values[index];
+    }
+    return count;
+}
+
+/** @brief Bits in one sample of a VipsBandFormat. */
+static inline int swift_vips_format_bits(int format) {
+    return (int) vips_format_sizeof((VipsBandFormat) format) * 8;
+}
+
 static inline const char *swift_vips_image_get_string_field(VipsImage *in, const char *name) {
     const char *value = NULL;
     if (vips_image_get_typeof(in, name) == 0) {

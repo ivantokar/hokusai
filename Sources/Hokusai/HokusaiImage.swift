@@ -90,18 +90,19 @@ public final class HokusaiImage: @unchecked Sendable {
         }
     }
 
-    /// Returns normalized metadata available from the current libvips image.
+    /// Returns typed header metadata for the current libvips image.
     ///
-    /// Optional fields remain `nil` when the loader did not expose them. This
-    /// call may inspect headers but does not encode an output image.
+    /// A legacy handle has no encoded source, so ``ImageMetadata/sourceByteSize``
+    /// is `nil`. Prefer the pipeline's ``Hokusai/metadata()``.
     public func metadata() throws -> ImageMetadata {
-        try native().metadata()
+        try native().sourceMetadata(sourceByteSize: nil)
     }
 
     /// Returns a best-effort view of libvips metadata fields.
     ///
-    /// Prefer ``metadata()`` for stable application code. This compatibility
-    /// API exposes loader-specific keys and normalized convenience aliases.
+    /// Legacy compatibility only, removed with `HokusaiImage` (#32): it leaks
+    /// loader-specific field names and stringifies typed values. Use the typed
+    /// ``metadata()`` instead.
     public func extendedMetadata() throws -> [String: String] {
         try native().extendedMetadata()
     }

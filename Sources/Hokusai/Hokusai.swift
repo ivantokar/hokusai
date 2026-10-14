@@ -327,12 +327,29 @@ public struct Hokusai: Sendable {
         return Self(plan: plan, terminal: terminal)
     }
 
-    /// Returns current pipeline metadata.
+    /// Inspects the root source of this pipeline and returns what it reported.
     ///
-    /// This builds the native graph on the calling thread and may read source
-    /// headers, but does not promise to evaluate every output pixel.
-    public func metadata() throws -> ImageMetadata {
-        try Evaluator.lower(plan, context: EvaluationContext()).metadata()
+    /// The result describes the **source**, not the transformed pipeline:
+    /// `image.metadata()` and `image.resize(width: 400).metadata()` are equal,
+    /// and a composite pipeline reports only its base source. No operation is
+    /// lowered and no pixels are decoded; opening reads the header, so
+    /// problems that only appear while decoding pixels are not reported here.
+    /// Use ``OutputInfo`` for what a pipeline produces.
+    ///
+    /// `options` given when the pipeline was created apply: the selected
+    /// `page`, the input limits, and the access mode. Inspection runs on
+    /// Hokusai's evaluation scheduler, off Swift's cooperative executor, and
+    /// is cancelled with the calling task.
+    ///
+    /// - Throws: ``HokusaiError/io(url:operation:reason:)`` for a missing or
+    ///   unreadable file, ``HokusaiError/decode(_:)`` for a source libvips
+    ///   cannot open, and ``HokusaiError/resource(_:)`` when an input limit is
+    ///   exceeded.
+    public func metadata() async throws -> ImageMetadata {
+        let source = plan.chain.source
+        return try await EvaluationScheduler.shared.run { context in
+            try Evaluator.inspect(source, context: context)
+        }
     }
 
     /// Evaluates and encodes the pipeline on Hokusai's evaluation scheduler.
