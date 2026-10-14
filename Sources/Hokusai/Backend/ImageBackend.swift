@@ -6,10 +6,10 @@ import Foundation
 /// this narrow surface so public code never depends on a native backend type.
 protocol ImageBackend {
     /// Decodes an image from a local path using the supplied loading options.
-    static func loadFromFile(_ path: String, options: LoadOptions) throws -> Self
+    static func loadFromFile(_ path: String, options: InputOptions) throws -> Self
 
     /// Decodes an image from an owned data buffer using the supplied options.
-    static func loadFromBuffer(_ data: Data, options: LoadOptions) throws -> Self
+    static func loadFromBuffer(_ data: Data, options: InputOptions) throws -> Self
 
     /// Encodes the image and writes it to a local file.
     func saveToFile(_ path: String, format: String?, quality: Int?) throws

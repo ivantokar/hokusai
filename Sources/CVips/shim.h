@@ -238,6 +238,51 @@ static inline VipsImage *swift_vips_evaluation_image(VipsImage *in) {
     return out;
 }
 
+typedef struct {
+    volatile gint failed;
+} SwiftVipsSourceProbe;
+
+static int swift_vips_source_probe_generate(VipsRegion *out_region, void *seq, void *a, void *b, gboolean *stop) {
+    VipsRegion *input_region = (VipsRegion *) seq;
+    SwiftVipsSourceProbe *probe = (SwiftVipsSourceProbe *) b;
+    VipsRect *rect = &out_region->valid;
+    if (vips_region_prepare(input_region, rect)) {
+        g_atomic_int_set(&probe->failed, 1);
+        return -1;
+    }
+    return vips_region_region(out_region, input_region, rect, rect->left, rect->top);
+}
+
+/**
+ * @brief Wrap a freshly opened source in a pass-through image that records
+ * whether the source itself failed to produce pixels.
+ *
+ * Decoder failures (truncated or corrupt data under the chosen `fail_on`
+ * policy) surface only when pixels are first read, deep inside a later
+ * transform or encoder. Failures raised while preparing the wrapped source's
+ * regions can only be source failures, so this lets Hokusai classify them as
+ * decode errors without reading libvips' error text. The wrapper adds no
+ * pixel work and keeps the input alive.
+ */
+static inline VipsImage *swift_vips_source_probe_image(VipsImage *in) {
+    VipsImage *out = vips_image_new();
+    SwiftVipsSourceProbe *probe = g_new0(SwiftVipsSourceProbe, 1);
+    g_object_set_data_full(G_OBJECT(out), "hokusai-source-probe", probe, g_free);
+    g_object_set_data_full(G_OBJECT(out), "hokusai-input", g_object_ref(in), g_object_unref);
+    if (vips_image_pipelinev(out, VIPS_DEMAND_STYLE_ANY, in, NULL) ||
+        vips_image_generate(out, vips_start_one, swift_vips_source_probe_generate, vips_stop_one, in, probe)) {
+        g_object_unref(out);
+        return NULL;
+    }
+    return out;
+}
+
+/** @brief Whether the source behind `probe_image` failed to produce pixels. */
+static inline int swift_vips_source_probe_failed(VipsImage *probe_image) {
+    SwiftVipsSourceProbe *probe = g_object_get_data(G_OBJECT(probe_image), "hokusai-source-probe");
+    return probe != NULL && g_atomic_int_get(&probe->failed) != 0;
+}
+
 /** @brief Ask libvips workers evaluating `image` to stop as soon as possible. */
 static inline void swift_vips_image_kill(VipsImage *image) {
     vips_image_set_kill(image, TRUE);
@@ -245,23 +290,36 @@ static inline void swift_vips_image_kill(VipsImage *image) {
 
 // MARK: - Image Loading
 
-/** @brief Load image from path and return owned VipsImage pointer. */
-static inline VipsImage *swift_vips_image_new_from_file(const char *path) {
-    return vips_image_new_from_file(path, NULL);
-}
-
-/** @brief Load image from path with sequential (streaming) access. */
-static inline VipsImage *swift_vips_image_new_from_file_sequential(const char *path) {
-    return vips_image_new_from_file(path, "access", VIPS_ACCESS_SEQUENTIAL, NULL);
+/**
+ * @brief Open a local image with explicit decoding policy.
+ *
+ * `fail_on` is a VipsFailOn value. `page` selects one page when nonnegative;
+ * pass -1 to omit it, because loaders without pages reject the argument.
+ * `revalidate` bypasses libvips' operation cache for this open.
+ */
+static inline VipsImage *swift_vips_open_file(const char *path, int sequential, int fail_on, int page, int revalidate) {
+    const VipsAccess access = sequential ? VIPS_ACCESS_SEQUENTIAL : VIPS_ACCESS_RANDOM;
+    if (page >= 0 && revalidate) {
+        return vips_image_new_from_file(path, "access", access, "fail_on", fail_on, "page", page, "revalidate", TRUE, NULL);
+    }
+    if (page >= 0) {
+        return vips_image_new_from_file(path, "access", access, "fail_on", fail_on, "page", page, NULL);
+    }
+    if (revalidate) {
+        return vips_image_new_from_file(path, "access", access, "fail_on", fail_on, "revalidate", TRUE, NULL);
+    }
+    return vips_image_new_from_file(path, "access", access, "fail_on", fail_on, NULL);
 }
 
 /* vips_image_new_from_buffer() does not copy the bytes it is given; the caller
  * would have to keep them alive until the image and its whole pipeline are
  * closed. Swift callers pass pointers that are only valid inside
- * Data.withUnsafeBytes, so the buffer wrappers below copy the bytes into a
- * VipsBlob (freed by libvips when the last pipeline reference drops) and load
- * through a VipsSource. */
-static inline VipsImage *swift_vips_image_new_from_buffer_with_access(const void *buf, size_t size, VipsAccess access) {
+ * Data.withUnsafeBytes, so this wrapper copies the bytes into a VipsBlob
+ * (freed by libvips when the last pipeline reference drops) and loads through
+ * a VipsSource. */
+
+/** @brief Open encoded bytes (copied) with explicit decoding policy; `page` as in swift_vips_open_file. */
+static inline VipsImage *swift_vips_open_buffer(const void *buf, size_t size, int sequential, int fail_on, int page) {
     VipsBlob *blob = vips_blob_copy(buf, size);
     if (blob == NULL) {
         return NULL;
@@ -271,19 +329,17 @@ static inline VipsImage *swift_vips_image_new_from_buffer_with_access(const void
     if (source == NULL) {
         return NULL;
     }
-    VipsImage *image = vips_image_new_from_source(source, "", "access", access, NULL);
+    const VipsAccess access = sequential ? VIPS_ACCESS_SEQUENTIAL : VIPS_ACCESS_RANDOM;
+    VipsImage *image = page >= 0
+        ? vips_image_new_from_source(source, "", "access", access, "fail_on", fail_on, "page", page, NULL)
+        : vips_image_new_from_source(source, "", "access", access, "fail_on", fail_on, NULL);
     g_object_unref(source); /* the image holds its own reference */
     return image;
 }
 
-/** @brief Load image from encoded bytes (copied) and return owned VipsImage pointer. */
-static inline VipsImage *swift_vips_image_new_from_buffer(const void *buf, size_t size) {
-    return swift_vips_image_new_from_buffer_with_access(buf, size, VIPS_ACCESS_RANDOM);
-}
-
-/** @brief Load image from encoded bytes (copied) with sequential (streaming) access. */
-static inline VipsImage *swift_vips_image_new_from_buffer_sequential(const void *buf, size_t size) {
-    return swift_vips_image_new_from_buffer_with_access(buf, size, VIPS_ACCESS_SEQUENTIAL);
+/** @brief The number of pages libvips reports for an image (1 when the loader has no pages). */
+static inline int swift_vips_image_n_pages(VipsImage *image) {
+    return vips_image_get_n_pages(image);
 }
 
 static inline int swift_vips_copy(VipsImage *in, VipsImage **out) {

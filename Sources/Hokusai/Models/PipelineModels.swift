@@ -1,32 +1,5 @@
 import Foundation
 
-/// Options controlling how an encoded source is opened.
-public struct InputOptions: Sendable {
-    /// The point at which decoder warnings become errors.
-    public var failOn: DecodeFailureLevel
-    /// Optional zero-based page to load from a multi-page input.
-    public var page: Int?
-    /// Optional page count to load from a multi-page input.
-    public var pages: Int?
-
-    /// Creates source-decoding preferences. Unsupported non-default values fail at load time.
-    public init(failOn: DecodeFailureLevel = .warning, page: Int? = nil, pages: Int? = nil) {
-        self.failOn = failOn
-        self.page = page
-        self.pages = pages
-    }
-}
-
-/// Decoder failure policy. Loader-specific support is reported as unsupported.
-public enum DecodeFailureLevel: Sendable, Equatable {
-    /// Continue through decoder warnings.
-    case none
-    /// Treat decoder warnings as failures when the source loader supports it.
-    case warning
-    /// Treat decoder errors as failures when the source loader supports it.
-    case error
-}
-
 /// Portable RGBA colour used by resize, canvas, and compositing operations.
 public struct Color: Hashable, Sendable {
     public let red: Double

@@ -21,6 +21,21 @@ All notable changes to this project are documented in this file.
 - `HokusaiError.resource(ResourceFailure)` for configured limits, starting
   with `maxQueuedEvaluations` (kind `.queuedEvaluations`).
 
+### Changed (input)
+- **Breaking:** `InputOptions` is the single encoded-input policy and is now
+  applied: `access` (from the former `LoadOptions`), `failOn` (now with
+  `.truncated`, passed to libvips and defaulting to `.warning`), `page`
+  (one page), `limits` (`maxBytes`, `maxPixels`, `maxChannels`), and
+  `revalidate`. Previously every non-default value was rejected.
+- **Breaking:** `LoadOptions` is removed; the legacy static loaders take
+  `InputOptions`. `InputOptions.pages` and `Hokusai(path:)` are removed.
+- **Breaking (behavior):** the `.warning` default is now enforced, so inputs
+  with decoder warnings (for example a PNG with a bad chunk checksum) fail
+  with `HokusaiError.decode`. Use `failOn: .none` to restore the old leniency.
+- `HokusaiError.resource` kinds `encodedBytes`, `decodedPixels`, `channels`.
+- Decoder failures that only appear while pixels are read (truncated files)
+  are reported as `decode`, labelled with the source, instead of `encode`.
+
 ### Changed (errors)
 - **Breaking:** `HokusaiError` is one taxonomy: `invalidInput(reason:)`,
   `invalidOption`, `unsupported(feature:reason:)`, `decode`, `transform`,

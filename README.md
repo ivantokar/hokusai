@@ -77,6 +77,28 @@ let info = try await fromFile.write(to: URL(fileURLWithPath: "output.webp"))
 
 `data()` and `write(to:)` run the blocking native work off Swift's cooperative executor. Concurrent evaluations beyond the scheduler's limit wait as suspended tasks in FIFO order. Cancelling the calling task removes a waiting evaluation or asks libvips to stop a running one; either way the terminal throws `CancellationError`, and the pipeline can be evaluated again. Pipelines are immutable and safe to branch across tasks.
 
+### Input options
+
+`InputOptions` is the one policy for opening an encoded image, from `Data` or a local file URL:
+
+```swift
+let image = try Hokusai(
+    data: upload,
+    options: .init(
+        failOn: .truncated,                                  // when decoder problems become errors
+        page: 1,                                             // one page of a multi-page file
+        limits: .init(maxBytes: 20_000_000, maxPixels: 50_000_000)
+    )
+)
+```
+
+- **When bytes are copied.** `Hokusai(data:)` keeps your `Data` (copy-on-write) and does no native work; mutating or releasing your own value afterwards is safe. The bytes are copied into libvips-owned storage when the terminal opens the source. Opening reads only the image header and builds a lazy source; pixels are decoded as the pipeline needs them. A missing file, corrupt data, or an exceeded limit is reported by the terminal.
+- **Decoder failure level** (`failOn`): `.none` decodes whatever it can; `.truncated` fails on truncated files; `.error` also fails on decoder errors; `.warning` (the default, as in Sharp) also fails on decoder warnings, so it rejects slightly malformed but viewable images. Failures are `HokusaiError.decode`. Choose the level that matches how strict your application must be.
+- **Access** (`access`): `.random` (default) allows any pixel order. `.sequential` streams top to bottom with lower peak memory for single-pass pipelines; operations that read out of order may fail with a decode error. Measure before using it: for heavily downscaled JPEGs it was slower in our benchmarks.
+- **Pages** (`page`): selects exactly one zero-based page (TIFF, PDF, GIF, WebP, ...). Without it you get the first page. A page beyond the file's page count is an `invalidOption`; selecting a page other than 0 in a single-page format is `unsupported`. Page ranges, all-page loading, and animation are not supported yet.
+- **Limits** (`limits`): `maxBytes` (default 512 MiB) is checked before `Data` is copied and against a file's size; `maxPixels` (default 268,402,689, i.e. 16383 × 16383) and `maxChannels` (default 8) are checked from the header before any pixels are decoded. Exceeding one throws `HokusaiError.resource`. Tighten them to your upload policy; native codec safety limits always remain in force.
+- **Freshness** (`revalidate`): libvips caches recent file opens, so a file replaced at the same path may be served from cache. `revalidate: true` bypasses the cache for that open. It has no effect on `Data`, and Hokusai keeps no cache of its own.
+
 ## Transformations
 
 ```swift

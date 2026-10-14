@@ -16,7 +16,12 @@ import Testing
 /// library's thread-safety policy.
 ///
 /// Fixture inventory:
-/// - `pixel.png` — 1×1 RGBA pixel.
+/// - `pixel.png` — 1×1 grey+alpha pixel with valid chunk checksums.
+/// - `corrupt-crc.png` — `pixel.png` with a wrong IDAT checksum: loads under
+///   `DecodeFailureLevel.none`/`.truncated`, fails under `.error`/`.warning`.
+/// - `truncated.jpg` — first 60% of `landscape-asym.jpg`: loads only under
+///   `DecodeFailureLevel.none`.
+/// - `multipage.tif` — three 16×16 grey RGB pages with levels 30, 120, 210.
 /// - `landscape-asym.jpg` — 320×200 JPEG, flat black background with a
 ///   high-detail noise block near the left edge (x 10..110, y 50..150), so
 ///   content-aware crops are distinguishable from centre crops.

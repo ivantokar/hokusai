@@ -18,9 +18,77 @@ enum Evaluator {
     /// Cancellation is checked between steps; a cancelled evaluation throws
     /// `CancellationError` before starting the next native operation.
     static func lower(_ plan: ImagePlan, context: EvaluationContext) throws -> NativeImage {
+        try classifyingSourceFailures(in: context) {
+            try build(plan, context: context, scope: nil)
+        }
+    }
+
+    /// Evaluates `plan` and returns encoded bytes.
+    static func encode(_ plan: ImagePlan, _ terminal: TerminalConfig, as format: OutputFormat, context: EvaluationContext) throws -> Output {
+        try requireEncoder(format)
+        return try classifyingSourceFailures(in: context) {
+            let image = try context.sink(for: build(plan, context: context, scope: nil))
+            let data: Data
+            switch format {
+            case .pdf(let options):
+                data = try image.pdf(options: options)
+            default:
+                data = try image.encoded(options: saveOptions(format, terminal))
+            }
+            return Output(data: data, info: OutputInfo(format: format.imageFormat, width: image.width, height: image.height, size: data.count))
+        }
+    }
+
+    /// Evaluates `plan` and writes it to a local file.
+    static func write(_ plan: ImagePlan, _ terminal: TerminalConfig, as format: OutputFormat, to url: URL, context: EvaluationContext) throws -> OutputInfo {
+        try requireEncoder(format)
+        return try classifyingSourceFailures(in: context) {
+            let image = try context.sink(for: build(plan, context: context, scope: nil))
+            switch format {
+            case .pdf(let options):
+                let document = try image.pdf(options: options)
+                do {
+                    try document.write(to: url)
+                } catch {
+                    throw HokusaiError.io(url: url, operation: .write, reason: error.localizedDescription)
+                }
+            default:
+                try image.write(to: url.path, options: saveOptions(format, terminal))
+            }
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            return OutputInfo(format: format.imageFormat, width: image.width, height: image.height, size: size)
+        }
+    }
+
+    // MARK: - Lowering
+
+    /// Reclassifies a transform or encode failure as a decode failure when a
+    /// source reported that it could not produce pixels.
+    ///
+    /// Decoders surface truncation and corruption only while pixels are read,
+    /// deep inside whatever operation pulled them. The source probe records
+    /// the failure where it happened, so no native error text is consulted.
+    private static func classifyingSourceFailures<T>(in context: EvaluationContext, _ body: () throws -> T) throws -> T {
+        do {
+            return try body()
+        } catch let error as HokusaiError {
+            switch error {
+            case .transform, .encode:
+                if let failure = context.sourceFailure() {
+                    throw HokusaiError.decode(.native(failure.label, failure.reason))
+                }
+            default:
+                break
+            }
+            throw error
+        }
+    }
+
+    /// Lowers one plan; `scope` labels sources of composite layers.
+    private static func build(_ plan: ImagePlan, context: EvaluationContext, scope: String?) throws -> NativeImage {
         let (source, operations) = plan.linearized
         try context.checkCancellation()
-        var image = try open(source)
+        var image = try open(source, context: context, scope: scope)
         for operation in operations {
             try context.checkCancellation()
             image = try apply(operation, to: image, context: context)
@@ -28,48 +96,16 @@ enum Evaluator {
         return image
     }
 
-    /// Evaluates `plan` and returns encoded bytes.
-    static func encode(_ plan: ImagePlan, _ terminal: TerminalConfig, as format: OutputFormat, context: EvaluationContext) throws -> Output {
-        try requireEncoder(format)
-        let image = try context.sink(for: lower(plan, context: context))
-        let data: Data
-        switch format {
-        case .pdf(let options):
-            data = try image.pdf(options: options)
-        default:
-            data = try image.encoded(options: saveOptions(format, terminal))
-        }
-        return Output(data: data, info: OutputInfo(format: format.imageFormat, width: image.width, height: image.height, size: data.count))
-    }
-
-    /// Evaluates `plan` and writes it to a local file.
-    static func write(_ plan: ImagePlan, _ terminal: TerminalConfig, as format: OutputFormat, to url: URL, context: EvaluationContext) throws -> OutputInfo {
-        try requireEncoder(format)
-        let image = try context.sink(for: lower(plan, context: context))
-        switch format {
-        case .pdf(let options):
-            let document = try image.pdf(options: options)
-            do {
-                try document.write(to: url)
-            } catch {
-                throw HokusaiError.io(url: url, operation: .write, reason: error.localizedDescription)
-            }
-        default:
-            try image.write(to: url.path, options: saveOptions(format, terminal))
-        }
-        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        return OutputInfo(format: format.imageFormat, width: image.width, height: image.height, size: size)
-    }
-
-    // MARK: - Lowering
-
-    private static func open(_ source: ImageSource) throws -> NativeImage {
+    private static func open(_ source: ImageSource, context: EvaluationContext, scope: String?) throws -> NativeImage {
+        let native: NativeImage
         switch source {
-        case .file(let url):
-            return try NativeImage.open(path: url.path)
-        case .data(let data):
-            return try NativeImage.open(data: data)
+        case .file(let url, let options):
+            native = try NativeImage.open(path: url.path, options: options)
+        case .data(let data, let options):
+            native = try NativeImage.open(data: data, options: options)
         }
+        let label = scope.map { "\($0) / \(source.decodeLabel)" } ?? source.decodeLabel
+        return try context.watch(native, label: label, sequential: source.options.access == .sequential)
     }
 
     private static func apply(_ operation: ImageOperation, to image: NativeImage, context: EvaluationContext) throws -> NativeImage {
@@ -146,11 +182,12 @@ enum Evaluator {
         case .composite(let layers):
             var result = image
             for (index, layer) in layers.enumerated() {
+                let scope = "composite layer \(index + 1)"
                 let overlay: NativeImage
                 do {
-                    overlay = try lower(layer.plan, context: context)
+                    overlay = try build(layer.plan, context: context, scope: scope)
                 } catch let error as HokusaiError {
-                    throw error.scoped("composite layer \(index + 1)")
+                    throw error.scoped(scope)
                 }
                 result = try result.composite(
                     overlay: overlay,
