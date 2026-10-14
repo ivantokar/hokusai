@@ -81,6 +81,15 @@ let info = try await fromFile.write(to: URL(fileURLWithPath: "output.webp"))
 
 A pipeline means exactly the operations you wrote, in the order you wrote them. Hokusai may change *how* it runs them but never *what* they produce, so it only applies a short whitelist of equivalence-preserving rules: it skips operations that are provably the identity (a rotation by whole turns, compositing no layers), and within one `data()` or `write(to:)` it builds a source or layer that several parts of the pipeline share only once. It never reorders operations (a `trim` or smart crop stays where you put it), fuses resizes, selects `.sequential` access for you, or keeps results between evaluations; libvips' own operation cache is the only cache. Output metadata and encoder choices are not image operations: the last `.png()`/`.webp()`/`preserveMetadata()` wins, and a composite layer contributes only its image operations.
 
+### Output
+
+One encoder configuration means the same thing wherever it is written: `data()` and `write(to:)` apply identical codec options, so `png(progressive: true)`, `jpeg(progressive: true)`, `webp(lossless: true)` and `avif(...)` produce the same bytes in memory and on disk. `.avif()` always encodes AV1, never the HEVC that libvips picks by default, and `OutputInfo.format` names the format that was actually encoded.
+
+- `data()` needs an explicit encoder (`.jpeg()`, `.png()`, `.webp()`, `.avif()`, `.pdf()`), because a pipeline can originate from several sources and "same as the input" has no meaning.
+- `write(to:)` infers the encoder from the file extension only when you did not select one. An explicit encoder always wins, so choose a matching extension yourself: `.png().write(to: "a.jpg")` writes PNG data.
+- Raster formats are encoded straight into the memory buffer or file; nothing is staged as a second copy. PDF is the exception for now and is built in memory first.
+- The file is created when the first bytes are written, so a pipeline that fails before producing output never touches the destination. If a write fails after output began, Hokusai removes the regular file it was writing instead of leaving a partial image, which also means an existing file at that path may be replaced or removed. A destination that cannot be opened or written (missing folder, permissions, full disk) throws `HokusaiError.io` with a `.write` operation and the system's reason.
+
 ### Input options
 
 `InputOptions` is the one policy for opening an encoded image, from `Data` or a local file URL:
