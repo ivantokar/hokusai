@@ -84,6 +84,15 @@ public struct ResourceKind: Sendable, Hashable, CustomStringConvertible {
     /// `RuntimeConfiguration.maxQueuedEvaluations` was reached.
     public static let queuedEvaluations = ResourceKind(name: "queuedEvaluations")
 
+    /// `InputLimits.maxBytes`: the encoded source is too large.
+    public static let encodedBytes = ResourceKind(name: "encodedBytes")
+
+    /// `InputLimits.maxPixels`: the decoded image has too many pixels.
+    public static let decodedPixels = ResourceKind(name: "decodedPixels")
+
+    /// `InputLimits.maxChannels`: the decoded image has too many bands.
+    public static let channels = ResourceKind(name: "channels")
+
     public var description: String { name }
 }
 

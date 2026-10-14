@@ -172,6 +172,13 @@ final class EvaluationContext: @unchecked Sendable {
     private let lock = NSLock()
     private var cancelled = false
     private var registeredSink: NativeImage?
+    private var watchedSources: [WatchedSource] = []
+
+    private struct WatchedSource {
+        let label: String
+        let sequential: Bool
+        let probe: NativeImage
+    }
 
     var isCancelled: Bool { lock.withLock { cancelled } }
 
@@ -184,6 +191,24 @@ final class EvaluationContext: @unchecked Sendable {
         lock.withLock {
             cancelled = true
             if let registeredSink { swift_vips_image_kill(registeredSink.pointer) }
+        }
+    }
+
+    /// Wraps a freshly opened source so a later failure to produce its pixels
+    /// can be recognised as a decode failure. Returns the image to build on.
+    func watch(_ source: NativeImage, label: String, sequential: Bool) throws -> NativeImage {
+        let probe = try source.probingSource()
+        lock.withLock { watchedSources.append(WatchedSource(label: label, sequential: sequential, probe: probe)) }
+        return probe
+    }
+
+    /// The first watched source that failed to produce pixels, if any.
+    func sourceFailure() -> (label: String, reason: String)? {
+        let failed = lock.withLock { watchedSources.first { $0.probe.sourceProbeFailed } }
+        return failed.map {
+            ($0.label, $0.sequential
+                ? "the source could not be read; with sequential access this also happens when an operation reads pixels out of order"
+                : "the image data could not be decoded")
         }
     }
 

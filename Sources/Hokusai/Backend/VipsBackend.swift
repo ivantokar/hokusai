@@ -25,11 +25,11 @@ final class VipsBackend: ImageBackend {
 
     // MARK: - ImageBackend Protocol Implementation
 
-    static func loadFromFile(_ path: String, options: LoadOptions = LoadOptions()) throws -> VipsBackend {
+    static func loadFromFile(_ path: String, options: InputOptions = InputOptions()) throws -> VipsBackend {
         VipsBackend(native: try NativeImage.open(path: path, options: options))
     }
 
-    static func loadFromBuffer(_ data: Data, options: LoadOptions = LoadOptions()) throws -> VipsBackend {
+    static func loadFromBuffer(_ data: Data, options: InputOptions = InputOptions()) throws -> VipsBackend {
         VipsBackend(native: try NativeImage.open(data: data, options: options))
     }
 

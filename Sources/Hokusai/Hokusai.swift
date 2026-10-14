@@ -38,18 +38,27 @@ public struct Hokusai: Sendable {
     /// Creates a pipeline from encoded image bytes.
     ///
     /// The bytes are retained (copy-on-write) until evaluation, so the caller
-    /// may reuse or release its own `data` value. The content is not decoded
-    /// here; invalid image bytes are reported by the terminal method.
+    /// may reuse or release its own `data` value. They are copied into native
+    /// storage when the terminal method opens the source, and the content is
+    /// not decoded here: invalid image bytes are reported by the terminal.
+    /// Opening reads only the header and builds a lazy source; pixels are
+    /// decoded as the pipeline needs them.
+    ///
+    /// - Throws: ``HokusaiError/invalidInput(reason:)`` for empty data,
+    ///   ``HokusaiError/invalidOption(name:reason:)`` for invalid `options`,
+    ///   and ``HokusaiError/resource(_:)`` when `data` exceeds
+    ///   `options.limits.maxBytes`.
     ///
     /// ```swift
     /// let avatar = try Hokusai(data: upload)
     /// ```
     public init(data: Data, options: InputOptions = .init()) throws {
-        try Self.validate(options: options)
+        try options.validate()
         guard !data.isEmpty else {
             throw HokusaiError.invalidInput(reason: "encoded data is empty")
         }
-        self.init(plan: .source(.data(data)))
+        try options.limits.checkEncodedBytes(data.count)
+        self.init(plan: .source(.data(data, options)))
     }
 
     /// Creates a pipeline from a local file URL.
@@ -57,22 +66,17 @@ public struct Hokusai: Sendable {
     /// Remote URLs are intentionally rejected: networking, timeouts, and
     /// request-size policy belong to the calling server. Read remote content
     /// into `Data` first when that is the desired application behavior. The
-    /// file is opened when a terminal method runs.
+    /// file is opened when a terminal method runs, so a missing file or a file
+    /// larger than `options.limits.maxBytes` is reported there.
+    ///
+    /// - Throws: ``HokusaiError/invalidInput(reason:)`` for a non-file URL and
+    ///   ``HokusaiError/invalidOption(name:reason:)`` for invalid `options`.
     public init(url: URL, options: InputOptions = .init()) throws {
         guard url.isFileURL else {
             throw HokusaiError.invalidInput(reason: "only file URLs are supported; use init(data:) for in-memory input")
         }
-        try Self.validate(options: options)
-        self.init(plan: .source(.file(url)))
-    }
-
-    /// Creates a pipeline from a path string.
-    ///
-    /// This compatibility initializer is deprecated because `URL` makes the
-    /// local-file requirement explicit.
-    @available(*, deprecated, message: "Use init(url:) with a file URL.")
-    public init(path: String, options: InputOptions = .init()) throws {
-        try self.init(url: URL(fileURLWithPath: path), options: options)
+        try options.validate()
+        self.init(plan: .source(.file(url, options)))
     }
 
     /// Converts conventional 8-bit RGBA components into Hokusai's unit-range
@@ -367,12 +371,6 @@ public struct Hokusai: Sendable {
         Self(plan: plan.appending(operation), terminal: terminal)
     }
 
-    private static func validate(options: InputOptions) throws {
-        if options.page != nil || options.pages != nil || options.failOn != .warning {
-            throw HokusaiError.unsupported(feature: "non-default InputOptions", reason: "not implemented yet")
-        }
-    }
-
     private static func validate(dimension: Int?, name: String) throws {
         guard let dimension else { return }
         guard dimension > 0, Int32(exactly: dimension) != nil else {
@@ -438,9 +436,9 @@ public struct Hokusai: Sendable {
     ///
     /// - Parameters:
     ///   - path: Path to a readable image file.
-    ///   - options: Load options, including the libvips access-pattern hint.
-    ///     Defaults to random access. See ``AccessMode`` for the trade-offs.
-    public static func image(from path: String, options: LoadOptions = LoadOptions()) throws -> HokusaiImage {
+    ///   - options: Input options, including the access pattern, decoder
+    ///     failure level, and input limits. See ``InputOptions``.
+    public static func image(from path: String, options: InputOptions = InputOptions()) throws -> HokusaiImage {
         return try loadFromFile(path, options: options)
     }
 
@@ -452,8 +450,8 @@ public struct Hokusai: Sendable {
     ///
     /// - Parameters:
     ///   - data: Encoded image bytes (JPEG, PNG, WebP, etc.).
-    ///   - options: Load options, including the libvips access-pattern hint.
-    public static func image(from data: Data, options: LoadOptions = LoadOptions()) throws -> HokusaiImage {
+    ///   - options: Input options. See ``InputOptions``.
+    public static func image(from data: Data, options: InputOptions = InputOptions()) throws -> HokusaiImage {
         return try loadFromBuffer(data, options: options)
     }
 
@@ -461,8 +459,8 @@ public struct Hokusai: Sendable {
     ///
     /// - Parameters:
     ///   - path: Path to a readable image file.
-    ///   - options: Load options. Defaults to random access.
-    public static func loadFromFile(_ path: String, options: LoadOptions = LoadOptions()) throws -> HokusaiImage {
+    ///   - options: Input options. See ``InputOptions``.
+    public static func loadFromFile(_ path: String, options: InputOptions = InputOptions()) throws -> HokusaiImage {
         let vipsBackend = try VipsBackend.loadFromFile(path, options: options)
         return HokusaiImage(backend: .vips(vipsBackend))
     }
@@ -471,8 +469,8 @@ public struct Hokusai: Sendable {
     ///
     /// - Parameters:
     ///   - data: Encoded image bytes.
-    ///   - options: Load options. Defaults to random access.
-    public static func loadFromBuffer(_ data: Data, options: LoadOptions = LoadOptions()) throws -> HokusaiImage {
+    ///   - options: Input options. See ``InputOptions``.
+    public static func loadFromBuffer(_ data: Data, options: InputOptions = InputOptions()) throws -> HokusaiImage {
         let vipsBackend = try VipsBackend.loadFromBuffer(data, options: options)
         return HokusaiImage(backend: .vips(vipsBackend))
     }

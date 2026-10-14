@@ -78,7 +78,7 @@ import Testing
         let data = try loadFixtureData(named: "pixel", ext: "png")
 
         // Sequential load must produce the same image as random load.
-        let sequential = try Hokusai.image(from: data, options: LoadOptions(access: .sequential))
+        let sequential = try Hokusai.image(from: data, options: InputOptions(access: .sequential))
         let metadata = try sequential.metadata()
 
         #expect(metadata.width == 1)
@@ -116,11 +116,11 @@ import Testing
         #expect(!jpeg.isEmpty)
     }
 
-    @Test func defaultLoadOptionsMatchPriorBehavior() throws {
+    @Test func defaultInputOptionsMatchPriorBehavior() throws {
         let data = try loadFixtureData(named: "pixel", ext: "png")
 
-        // Default LoadOptions() must load identically to the pre-options API.
-        let explicit = try Hokusai.image(from: data, options: LoadOptions())
+        // Default InputOptions() must load the supported fixtures unchanged.
+        let explicit = try Hokusai.image(from: data, options: InputOptions())
         let meta = try explicit.metadata()
 
         #expect(meta.width == 1)

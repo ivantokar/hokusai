@@ -37,9 +37,23 @@ indirect enum ImagePlan: Sendable {
 /// Where a plan's pixels come from. The source stays unopened until lowering.
 enum ImageSource: Sendable {
     /// A local file, opened at evaluation time.
-    case file(URL)
+    case file(URL, InputOptions)
     /// Owned encoded bytes, shared copy-on-write between branches.
-    case data(Data)
+    case data(Data, InputOptions)
+
+    var options: InputOptions {
+        switch self {
+        case .file(_, let options), .data(_, let options): options
+        }
+    }
+
+    /// The operation label for decoding this source.
+    var decodeLabel: String {
+        switch self {
+        case .file(let url, _): "decode \(url.lastPathComponent)"
+        case .data: "decode input data"
+        }
+    }
 }
 
 /// One image-producing step of a plan.
