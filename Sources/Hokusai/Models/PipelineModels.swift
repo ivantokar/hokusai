@@ -222,21 +222,3 @@ internal extension ResizeKernel {
         }
     }
 }
-
-internal extension OutputFormat {
-    /// Adapts typed pipeline encoder settings to the existing backend save model.
-    var legacySaveOptions: SaveOptions {
-        switch self {
-        case .jpeg(let options):
-            return SaveOptions(format: .jpeg, quality: options.quality, progressive: options.progressive)
-        case .png(let options):
-            return SaveOptions(format: .png, compression: options.compressionLevel, progressive: options.progressive)
-        case .webp(let options):
-            return SaveOptions(format: .webp, quality: options.quality, lossless: options.lossless, effort: options.effort)
-        case .avif(let options):
-            return SaveOptions(format: .avif, quality: options.quality, lossless: options.lossless, effort: options.effort)
-        case .pdf:
-            return SaveOptions(format: .pdf)
-        }
-    }
-}

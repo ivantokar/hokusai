@@ -3,6 +3,10 @@
 
 #include <vips/vips.h>
 #include <cairo/cairo-pdf.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 // Hokusai's native baseline. Older libraries are rejected at compile time
 // rather than failing later with missing symbols or silently different output.
@@ -709,6 +713,161 @@ static inline int swift_vips_heifsave_buffer(VipsImage *in, void **buf, size_t *
 
 static inline int swift_vips_gifsave_buffer(VipsImage *in, void **buf, size_t *len) {
     return vips_gifsave_buffer(in, buf, len, NULL);
+}
+
+// MARK: - Encoder Targets
+
+/*
+ * Every modern encoder writes through a VipsTarget, so one option mapping
+ * serves the memory and file sinks (and future streams) identically. A target
+ * has no filename, so codec choices that libvips would otherwise infer from a
+ * suffix (AVIF versus HEIC) are always passed explicitly.
+ */
+
+/** @brief Encode as JPEG into `target`. */
+static inline int swift_vips_jpegsave_target(VipsImage *in, VipsTarget *target, int quality, int interlace, int strip) {
+    return vips_jpegsave_target(in, target, "Q", quality, "interlace", interlace, "strip", strip, NULL);
+}
+
+/** @brief Encode as PNG into `target`; `interlace` selects Adam7 interlacing. */
+static inline int swift_vips_pngsave_target(VipsImage *in, VipsTarget *target, int compression, int interlace, int strip) {
+    return vips_pngsave_target(in, target, "compression", compression, "interlace", interlace, "strip", strip, NULL);
+}
+
+/** @brief Encode as WebP into `target`. */
+static inline int swift_vips_webpsave_target(VipsImage *in, VipsTarget *target, int quality, int lossless, int effort, int strip) {
+    return vips_webpsave_target(in, target, "Q", quality, "lossless", lossless, "effort", effort, "strip", strip, NULL);
+}
+
+/** @brief Encode into a HEIF container with an explicit codec: AV1 (AVIF) when `av1` is nonzero, else HEVC (HEIC). */
+static inline int swift_vips_heifsave_target(VipsImage *in, VipsTarget *target, int quality, int lossless, int effort, int strip, int av1) {
+    return vips_heifsave_target(in, target, "Q", quality, "lossless", lossless, "effort", effort, "strip", strip,
+        "compression", av1 ? VIPS_FOREIGN_HEIF_COMPRESSION_AV1 : VIPS_FOREIGN_HEIF_COMPRESSION_HEVC, NULL);
+}
+
+/** @brief A target that collects encoded bytes in memory. */
+static inline VipsTarget *swift_vips_memory_target_new(void) {
+    return vips_target_new_to_memory();
+}
+
+/**
+ * @brief Take ownership of the bytes an ended memory target collected; free with g_free().
+ *
+ * Savers end their target, after which the bytes live in its `blob` property.
+ * This takes them exactly as libvips' own *save_buffer functions do, by
+ * detaching the blob's free function, so no copy is made. Returns NULL when
+ * the target holds no data.
+ */
+static inline unsigned char *swift_vips_memory_target_steal(VipsTarget *target, size_t *length) {
+    VipsBlob *blob = NULL;
+    *length = 0;
+    g_object_get(target, "blob", &blob, NULL);
+    if (blob == NULL) {
+        return NULL;
+    }
+    VipsArea *area = VIPS_AREA(blob);
+    unsigned char *data = (unsigned char *) area->data;
+    *length = area->length;
+    area->free_fn = NULL; /* the caller now owns the bytes */
+    vips_area_unref(area);
+    return data;
+}
+
+/**
+ * State for a Hokusai-owned file target.
+ *
+ * The file is opened by the first write, so a pipeline that fails before
+ * producing any output never touches the destination. Write failures record
+ * their errno here, which is how Hokusai tells a destination I/O failure from
+ * an encoder failure without reading libvips' error text.
+ */
+typedef struct {
+    char *path;
+    int fd;          /* -1 until the first write opens the file */
+    int error;       /* errno of the first failure, else 0 */
+    int is_regular;  /* the opened file is a regular file, safe to unlink on failure */
+    gint64 written;
+} SwiftVipsFileSink;
+
+static inline SwiftVipsFileSink *swift_vips_file_sink_new(const char *path) {
+    SwiftVipsFileSink *sink = g_new0(SwiftVipsFileSink, 1);
+    sink->path = g_strdup(path);
+    sink->fd = -1;
+    return sink;
+}
+
+static inline gint64 swift_vips_file_sink_written(const SwiftVipsFileSink *sink) {
+    return sink->written;
+}
+
+static inline int swift_vips_file_sink_error(const SwiftVipsFileSink *sink) {
+    return sink->error;
+}
+
+static gint64 swift_vips_file_sink_write(VipsTargetCustom *target, const void *data, gint64 length, void *user_data) {
+    SwiftVipsFileSink *sink = (SwiftVipsFileSink *) user_data;
+    if (sink->error != 0) {
+        return -1;
+    }
+    if (sink->fd < 0) {
+        int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef O_CLOEXEC
+        flags |= O_CLOEXEC;
+#endif
+        sink->fd = open(sink->path, flags, 0666);
+        if (sink->fd < 0) {
+            sink->error = errno;
+            return -1;
+        }
+        struct stat info;
+        sink->is_regular = fstat(sink->fd, &info) == 0 && S_ISREG(info.st_mode);
+    }
+    const char *cursor = (const char *) data;
+    gint64 remaining = length;
+    while (remaining > 0) {
+        ssize_t count = write(sink->fd, cursor, (size_t) remaining);
+        if (count < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            sink->error = errno;
+            return -1;
+        }
+        cursor += count;
+        remaining -= count;
+        sink->written += count;
+    }
+    return length;
+}
+
+/** @brief A target that writes to `sink`. The caller keeps `sink` alive until the target is released. */
+static inline VipsTarget *swift_vips_file_target_new(SwiftVipsFileSink *sink) {
+    VipsTargetCustom *target = vips_target_custom_new();
+    g_signal_connect(target, "write", G_CALLBACK(swift_vips_file_sink_write), sink);
+    return VIPS_TARGET(target);
+}
+
+/**
+ * @brief Finish a file sink and release it.
+ *
+ * On success the file is closed, and a failing close is reported. On failure
+ * a regular file this sink opened is closed and removed so no partial image
+ * is left behind; other kinds of file (devices, pipes) are only closed.
+ * Returns the errno of the first failure, or 0.
+ */
+static inline int swift_vips_file_sink_finish(SwiftVipsFileSink *sink, int succeeded) {
+    if (sink->fd >= 0) {
+        if (close(sink->fd) != 0 && sink->error == 0) {
+            sink->error = errno;
+        }
+        if ((!succeeded || sink->error != 0) && sink->is_regular) {
+            unlink(sink->path);
+        }
+    }
+    int error = sink->error;
+    g_free(sink->path);
+    g_free(sink);
+    return error;
 }
 
 // MARK: - Composite Operations

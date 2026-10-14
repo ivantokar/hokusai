@@ -25,16 +25,14 @@ enum Evaluator {
 
     /// Evaluates `plan` and returns encoded bytes.
     static func encode(_ plan: ImagePlan, _ terminal: TerminalConfig, as format: OutputFormat, context: EvaluationContext) throws -> Output {
-        try requireEncoder(format)
+        let encoder = try selectEncoder(format, terminal)
         return try classifyingSourceFailures(in: context) {
             let image = try context.sink(for: build(plan, context: context, scope: nil))
             context.trace?.record(.sinkSelected("memory \(format.imageFormat.rawValue)"))
             let data: Data
-            switch format {
-            case .pdf(let options):
-                data = try image.pdf(options: options)
-            default:
-                data = try image.encoded(options: saveOptions(format, terminal))
+            switch encoder {
+            case .pdf(let options): data = try image.pdf(options: options)
+            case .raster(let encoder): data = try image.encoded(encoder)
             }
             return Output(data: data, info: OutputInfo(format: format.imageFormat, width: image.width, height: image.height, size: data.count))
         }
@@ -42,28 +40,26 @@ enum Evaluator {
 
     /// Evaluates `plan` and writes it to a local file.
     static func write(_ plan: ImagePlan, _ terminal: TerminalConfig, as format: OutputFormat, to url: URL, context: EvaluationContext) throws -> OutputInfo {
-        try requireEncoder(format)
+        let encoder = try selectEncoder(format, terminal)
         return try classifyingSourceFailures(in: context) {
             let image = try context.sink(for: build(plan, context: context, scope: nil))
-            // Everything but PDF encodes straight to the file; PDF builds the
-            // document in memory because Cairo has no file sink here yet.
-            if case .pdf = format {
-                context.trace?.record(.sinkSelected("memory pdf"))
-            } else {
-                context.trace?.record(.sinkSelected("file \(format.imageFormat.rawValue)"))
-            }
-            switch format {
+            let size: Int
+            switch encoder {
             case .pdf(let options):
+                // PDF builds its document in memory until the Cairo stream
+                // sink (#44) replaces this.
+                context.trace?.record(.sinkSelected("memory pdf"))
                 let document = try image.pdf(options: options)
                 do {
                     try document.write(to: url)
                 } catch {
                     throw HokusaiError.io(url: url, operation: .write, reason: error.localizedDescription)
                 }
-            default:
-                try image.write(to: url.path, options: saveOptions(format, terminal))
+                size = document.count
+            case .raster(let encoder):
+                context.trace?.record(.sinkSelected("file \(format.imageFormat.rawValue)"))
+                size = try image.write(encoder, to: url)
             }
-            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             return OutputInfo(format: format.imageFormat, width: image.width, height: image.height, size: size)
         }
     }
@@ -271,16 +267,30 @@ enum Evaluator {
         return try body(area)
     }
 
-    /// Rejects encoders this libvips build lacks before doing any work.
-    private static func requireEncoder(_ format: OutputFormat) throws {
-        guard try VipsRuntime.capabilities().canEncode(format.imageFormat) else {
-            throw HokusaiError.unsupported(feature: "encoding \(format.imageFormat.rawValue)", reason: "not available in this libvips build")
-        }
+    /// An encoder ready to run against any sink.
+    enum SelectedEncoder {
+        case raster(NativeEncoder)
+        case pdf(PDFOptions)
     }
 
-    private static func saveOptions(_ format: OutputFormat, _ terminal: TerminalConfig) -> SaveOptions {
-        var options = format.legacySaveOptions
-        options.stripMetadata = !terminal.preservesMetadata
-        return options
+    /// Checks that this libvips build can encode `format` and lowers it once.
+    ///
+    /// Both terminals call this before any work, so a missing encoder gives
+    /// the same typed error whether the destination is memory or a file.
+    static func selectEncoder(
+        _ format: OutputFormat,
+        _ terminal: TerminalConfig,
+        capabilities: @autoclosure () throws -> RuntimeCapabilities = try VipsRuntime.capabilities()
+    ) throws -> SelectedEncoder {
+        guard try capabilities().canEncode(format.imageFormat) else {
+            throw HokusaiError.unsupported(feature: "encoding \(format.imageFormat.rawValue)", reason: "not available in this libvips build")
+        }
+        if case .pdf(let options) = format {
+            return .pdf(options)
+        }
+        guard let encoder = NativeEncoder(format: format, preservesMetadata: terminal.preservesMetadata) else {
+            throw HokusaiError.unsupported(feature: "encoding \(format.imageFormat.rawValue)", reason: "no raster encoder for this format")
+        }
+        return .raster(encoder)
     }
 }

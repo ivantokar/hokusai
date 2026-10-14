@@ -21,6 +21,25 @@ All notable changes to this project are documented in this file.
 - `HokusaiError.resource(ResourceFailure)` for configured limits, starting
   with `maxQueuedEvaluations` (kind `.queuedEvaluations`).
 
+### Fixed (output)
+- `data()` ignored `progressive` for JPEG and PNG, so the same configuration
+  produced a baseline JPEG in memory but a progressive one in a file (and
+  likewise a non-interlaced versus an interlaced PNG). Modern output no longer
+  goes through the legacy save options: each encoder has one native lowering
+  that serves the memory and file sinks, so options cannot reach one and miss
+  the other.
+
+### Changed (output)
+- Raster formats are encoded through libvips targets: `data()` takes the
+  encoded buffer without copying it, and `write(to:)` writes straight to the
+  file.
+- A failed `write(to:)` for JPEG, PNG, WebP, and AVIF now reports
+  `HokusaiError.io` with a write operation and the system error when the
+  destination cannot be opened or written, instead of a generic `encode`
+  error. The file is created on the first write, and a regular file that was
+  being written is removed if the write fails.
+- `OutputInfo.size` for `write(to:)` is the number of bytes written.
+
 ### Changed (planning)
 - Pipelines are lowered by a small planner that keeps every written operation
   in written order. Rotations by whole turns and empty composites are skipped
