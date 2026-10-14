@@ -14,8 +14,8 @@ import Testing
 
         #expect(metadata.width == 1)
         #expect(metadata.height == 1)
-        #expect(metadata.channels >= 2)
-        #expect(metadata.hasAlpha)
+        #expect(metadata.pixel.channels >= 2)
+        #expect(metadata.pixel.hasAlpha)
     }
 
     @Test func loadImageFromFilePath() throws {
@@ -83,7 +83,7 @@ import Testing
 
         #expect(metadata.width == 1)
         #expect(metadata.height == 1)
-        #expect(metadata.hasAlpha)
+        #expect(metadata.pixel.hasAlpha)
     }
 
     @Test func sequentialLoadPresetConvenience() throws {

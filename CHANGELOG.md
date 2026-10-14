@@ -21,6 +21,26 @@ All notable changes to this project are documented in this file.
 - `HokusaiError.resource(ResourceFailure)` for configured limits, starting
   with `maxQueuedEvaluations` (kind `.queuedEvaluations`).
 
+### Changed (metadata)
+- **Breaking:** `Hokusai.metadata()` is `async` and describes the **root source**
+  only, never the transformed pipeline. Composite pipelines report their base
+  source. Inspection reads the header on Hokusai's evaluation scheduler and
+  honours `InputOptions` (page, limits, access).
+- **Breaking:** `ImageMetadata` is reshaped. Typed `ImageOrientation` (1...8)
+  replaces the raw integer, with `orientedSize`; `PixelMetadata`
+  (`channels`, `hasAlpha`, `interpretation`, `sampleFormat`, `bitsPerSample`,
+  `isPalette`) replaces `channels`, `hasAlpha`, `space`, and `colorSpace`;
+  one `density` in DPI with `densityUnit` replaces `density` and `densityXY`;
+  `PageMetadata` and `AnimationMetadata` replace `pages`, `pageHeight`, and the
+  page-count-based `isAnimated`; `sourceByteSize` replaces `size`; and `iptc`,
+  `isProgressive`, and `chromaSubsampling` are new.
+- Fixed: `isAnimated` was true for any multi-page source (TIFF, PDF); it now
+  requires frame delays. `size` read libvips' `sizeof_header`, which is not the
+  source's byte size. Format detection no longer strips `load` from the loader
+  name, so AVIF is no longer reported as HEIF.
+- `HokusaiImage.extendedMetadata()` stays only for the legacy handle and is
+  removed with it (#32).
+
 ### Fixed (output)
 - `data()` ignored `progressive` for JPEG and PNG, so the same configuration
   produced a baseline JPEG in memory but a progressive one in a file (and

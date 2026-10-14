@@ -61,8 +61,8 @@ struct BenchmarkPipelineCommand: AsyncParsableCommand {
         try Hokusai.initialize()
 
         let inputURL = URL(fileURLWithPath: input)
-        let metadata = try Hokusai(url: inputURL).metadata()
-        let inputDescription = "\(metadata.width)x\(metadata.height) \(metadata.hasAlpha ? "RGBA" : "RGB") (\(metadata.format?.rawValue ?? "unknown"))"
+        let metadata = try await Hokusai(url: inputURL).metadata()
+        let inputDescription = "\(metadata.width)x\(metadata.height) \(metadata.pixel.hasAlpha ? "RGBA" : "RGB") (\(metadata.format?.rawValue ?? "unknown"))"
         prompt.header("WebP Pipeline Benchmark")
         prompt.panel("Environment", items: [
             ("libvips", Hokusai.vipsVersion),

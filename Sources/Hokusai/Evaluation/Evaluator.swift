@@ -64,6 +64,25 @@ enum Evaluator {
         }
     }
 
+    // MARK: - Source inspection
+
+    /// Opens `source` under its options and reads its header.
+    ///
+    /// This is the whole of metadata inspection: it lowers no operations and
+    /// reads no pixels, so it describes only what the source reported.
+    static func inspect(_ source: ImageSource, context: EvaluationContext) throws -> ImageMetadata {
+        try context.checkCancellation()
+        switch source {
+        case .file(let url, let options):
+            let image = try NativeImage.open(path: url.path, options: options)
+            let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
+            return image.sourceMetadata(sourceByteSize: size)
+        case .data(let data, let options):
+            let image = try NativeImage.open(data: data, options: options)
+            return image.sourceMetadata(sourceByteSize: data.count)
+        }
+    }
+
     // MARK: - Lowering
 
     /// Reclassifies a transform or encode failure as a decode failure when a

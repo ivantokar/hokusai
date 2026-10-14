@@ -258,54 +258,6 @@ extension NativeImage {
         defer { g_free(copied) }
         return Data(bytes: copied, count: length)
     }
-
-    /// Returns normalized metadata available from this image.
-    ///
-    /// Optional fields remain `nil` when the loader did not expose them. This
-    /// may inspect headers but does not encode an output image.
-    func metadata() -> ImageMetadata {
-        let metadata = extendedMetadata()
-        let format = metadata["vips-loader"].flatMap { loader in
-            ImageFormat.from(fileExtension: loader.replacingOccurrences(of: "load", with: ""))
-        }
-        return ImageMetadata(
-            width: width,
-            height: height,
-            channels: bands,
-            format: format,
-            space: metadata["interpretationNick"],
-            hasAlpha: hasAlpha,
-            orientation: metadata["orientation"].flatMap(Int.init),
-            density: metadata["xresDpi"].flatMap(Double.init),
-            pages: metadata["n-pages"].flatMap(Int.init),
-            size: metadata["sizeof_header"].flatMap(Int.init),
-            colorSpace: Self.colorSpace(from: metadata["interpretationNick"]),
-            densityXY: Self.density(from: metadata),
-            pageHeight: metadata["page-height"].flatMap(Int.init),
-            isAnimated: (metadata["n-pages"].flatMap(Int.init) ?? 1) > 1,
-            exif: metadataBlob(named: "exif-data"),
-            iccProfile: metadataBlob(named: "icc-profile-data"),
-            xmp: metadataBlob(named: "xmp-data")
-        )
-    }
-
-    /// Normalizes recognised libvips interpretation names to the public enum.
-    private static func colorSpace(from interpretation: String?) -> ColorSpace? {
-        switch interpretation?.lowercased() {
-        case "srgb", "rgb16": .sRGB
-        case "b-w", "grey16": .grayscale
-        default: nil
-        }
-    }
-
-    /// Builds a density value only when both libvips resolutions are present.
-    private static func density(from metadata: [String: String]) -> ImageDensity? {
-        guard let horizontal = metadata["xresDpi"].flatMap(Double.init),
-              let vertical = metadata["yresDpi"].flatMap(Double.init) else {
-            return nil
-        }
-        return ImageDensity(horizontal: horizontal, vertical: vertical)
-    }
 }
 
 extension DecodeFailureLevel {

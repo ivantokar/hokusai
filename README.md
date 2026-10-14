@@ -81,6 +81,26 @@ let info = try await fromFile.write(to: URL(fileURLWithPath: "output.webp"))
 
 A pipeline means exactly the operations you wrote, in the order you wrote them. Hokusai may change *how* it runs them but never *what* they produce, so it only applies a short whitelist of equivalence-preserving rules: it skips operations that are provably the identity (a rotation by whole turns, compositing no layers), and within one `data()` or `write(to:)` it builds a source or layer that several parts of the pipeline share only once. It never reorders operations (a `trim` or smart crop stays where you put it), fuses resizes, selects `.sequential` access for you, or keeps results between evaluations; libvips' own operation cache is the only cache. Output metadata and encoder choices are not image operations: the last `.png()`/`.webp()`/`preserveMetadata()` wins, and a composite layer contributes only its image operations.
 
+### Source metadata
+
+```swift
+let metadata = try await Hokusai(url: photoURL).metadata()
+
+metadata.format             // .jpeg, .avif, ... or nil when it cannot be identified
+metadata.orientedSize       // the displayed size after EXIF orientation
+metadata.pixel.interpretation // .sRGB, .cmyk, ... (not colour management)
+metadata.sourceByteSize     // exact for Data, the file size for a file
+```
+
+`metadata()` has one meaning: **what the root source reported when it was opened.** It never describes the transformed pipeline, so `image.metadata()` and `image.resize(width: 400).metadata()` are equal, and a composite pipeline reports only its base source (call `metadata()` on an overlay's own value to inspect it). What a pipeline produces is described by `OutputInfo`. It is `async` because it opens the source off Swift's cooperative executor on Hokusai's evaluation scheduler; it reads only the header, so a truncated file with an intact header inspects successfully even though decoding its pixels would fail. `InputOptions` apply: the selected `page`, the input limits, and the access mode.
+
+- **Dimensions** are the stored size of the selected page. EXIF orientation is a separate typed `orientation` (values 1...8, `nil` when absent or invalid) and `orientedSize` swaps width and height only for quarter-turn orientations.
+- **Pixel model** (`pixel`): channels, alpha, a curated interpretation, sample format, bits per sample, and, for PNG, whether it is palette-based. An interpretation such as `.sRGB` says how the stored values are read; it does not mean an embedded ICC profile was applied.
+- **Pages versus animation.** `pages.count > 1` means multi-page. `animation` (loop count and per-frame delays) exists only when the source carries frame delays, so a multi-page TIFF is not reported as animated.
+- **Format** comes from the loader libvips used, not from a file name. AVIF and HEIC share one loader and are told apart by their HEIF compression. Loaders Hokusai does not name (for example JPEG XL) give `nil`.
+- **Density** is one value in DPI, plus the source's preferred unit when it records one. libvips reports 1 pixel/mm for a file that recorded no resolution; that default is treated as "none" rather than as 25.4 DPI.
+- **Embedded blocks** (`exif`, `iccProfile`, `xmp`, `iptc`) are owned raw `Data`. The IPTC block is the Photoshop image-resource block that carries the IPTC records, exactly as libvips exposes it. `xmpString` decodes XMP only when it is valid UTF-8.
+
 ### Output
 
 One encoder configuration means the same thing wherever it is written: `data()` and `write(to:)` apply identical codec options, so `png(progressive: true)`, `jpeg(progressive: true)`, `webp(lossless: true)` and `avif(...)` produce the same bytes in memory and on disk. `.avif()` always encodes AV1, never the HEVC that libvips picks by default, and `OutputInfo.format` names the format that was actually encoded.

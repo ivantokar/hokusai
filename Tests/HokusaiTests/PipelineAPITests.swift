@@ -93,14 +93,15 @@ import NIOCore
         #expect(!output.data.isEmpty)
     }
 
-    @Test func metadataDescribesThePipelineHeader() throws {
+    @Test func metadataDescribesTheSourceHeader() async throws {
         let input = try loadFixtureData(named: "landscape-asym", ext: "jpg")
-        let metadata = try Hokusai(data: input).metadata()
+        let metadata = try await Hokusai(data: input).metadata()
 
         #expect(metadata.width == 320)
         #expect(metadata.height == 200)
-        #expect(metadata.channels == 3)
-        #expect(metadata.space != nil)
+        #expect(metadata.pixel.channels == 3)
+        #expect(metadata.pixel.interpretation == .sRGB)
+        #expect(metadata.format == .jpeg)
     }
 
     @Test func colourTransformsProduceEncodablePipelines() async throws {
