@@ -132,11 +132,6 @@ public final class HokusaiImage: @unchecked Sendable {
         }
     }
 
-    /// Renders the image as a single-page PDF using Cairo.
-    func toPDF(options: PDFOptions) throws -> Data {
-        try native().pdf(options: options)
-    }
-
     // MARK: - Get Backend (for operations)
 
     /// Returns the native pointer for internal operation adapters.

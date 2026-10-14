@@ -154,13 +154,28 @@ Core operations include resize, extract, rotate, auto-orient, composite, blur, s
 ## PDF output
 
 ```swift
-let pdf = try await Hokusai(url: URL(fileURLWithPath: "photo.jpg"))
+let info = try await Hokusai(url: URL(fileURLWithPath: "photo.jpg"))
     .resize(width: 1240)
-    .pdf(pageSize: .a4, dpi: 150)
+    .pdf(
+        pageSize: .a4(),
+        margins: .all(36),
+        background: .white,
+        metadata: PDFDocumentMetadata(title: "Site photo")
+    )
     .write(to: URL(fileURLWithPath: "report.pdf"))
+
+info.pdf?.pageWidth   // 595.276 points; info.width/height are the embedded pixels
 ```
 
-PDF output is Cairo-backed and contains the evaluated raster pipeline on one page. It is suitable for generated image reports and layered compositions, but does not currently preserve selectable vector text. The planned Swift API for vector PDF scenes is tracked in [#13](https://github.com/ivantokar/hokusai/issues/13).
+`.pdf()` is a **raster-document terminal**: the evaluated pixels are embedded as an image on a page by Cairo. Text drawn into the pipeline has already become pixels, so it is not selectable, and an input PDF that is rasterised and written again loses its vector content, fonts, links, and structure. Vector documents are a separate surface, tracked in [#13](https://github.com/ivantokar/hokusai/issues/13).
+
+- **Page size** says how big the page is, in points: `.image(dpi:)` (the raster at that resolution plus margins), `.a4(_:)`, `.letter(_:)` with a portrait or landscape orientation, or `.points(width:height:)`. Fixed sizes carry no DPI, because there is nothing for a resolution to change.
+- **Layout.** The raster is scaled uniformly to fit inside the margins and placed by `anchor` (centred by default).
+- **Resolution.** Hokusai never resamples because a page has a physical size. If you want a bound, `maxEffectiveDPI` downsamples a raster that would exceed it on the page before it is embedded.
+- **Transparency.** With no `background`, transparent pixels stay transparent in the PDF. A `background` colour paints the page behind the image; use `.white` for print.
+- **Colour.** Pixels are rendered as 8-bit sRGB. An embedded ICC profile is neither applied nor embedded.
+- **Document properties** are written only if you set them (title, author, subject, keywords, creator, dates). Nothing is copied from the source's EXIF, XMP, or IPTC. Without a `creationDate` Cairo records the current time, so set one for reproducible bytes.
+- **Output.** `data()` and `write(to:)` use the same writer. A file is written directly as Cairo produces bytes, never built as `Data` first, and a failed or cancelled write removes the partial file. The raster is converted once into a single buffer, so peak memory is one full-size raster lower than before (about 184 MiB less for an 8000 × 6000 RGBA image).
 
 ## Runtime
 

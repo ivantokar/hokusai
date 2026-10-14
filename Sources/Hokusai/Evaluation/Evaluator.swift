@@ -29,12 +29,17 @@ enum Evaluator {
         return try classifyingSourceFailures(in: context) {
             let image = try context.sink(for: build(plan, context: context, scope: nil))
             context.trace?.record(.sinkSelected("memory \(format.imageFormat.rawValue)"))
-            let data: Data
             switch encoder {
-            case .pdf(let options): data = try image.pdf(options: options)
-            case .raster(let encoder): data = try image.encoded(encoder)
+            case .pdf(let options):
+                let sink = PDFOutputSink(destination: .memory, isCancelled: { context.isCancelled })
+                let result = try image.writePDF(options, into: sink)
+                let data = sink.takeData()
+                return Output(data: data, info: OutputInfo(
+                    format: .pdf, width: result.rasterWidth, height: result.rasterHeight, size: data.count, pdf: result.details))
+            case .raster(let encoder):
+                let data = try image.encoded(encoder)
+                return Output(data: data, info: OutputInfo(format: format.imageFormat, width: image.width, height: image.height, size: data.count))
             }
-            return Output(data: data, info: OutputInfo(format: format.imageFormat, width: image.width, height: image.height, size: data.count))
         }
     }
 
@@ -43,24 +48,17 @@ enum Evaluator {
         let encoder = try selectEncoder(format, terminal)
         return try classifyingSourceFailures(in: context) {
             let image = try context.sink(for: build(plan, context: context, scope: nil))
-            let size: Int
+            context.trace?.record(.sinkSelected("file \(format.imageFormat.rawValue)"))
             switch encoder {
             case .pdf(let options):
-                // PDF builds its document in memory until the Cairo stream
-                // sink (#44) replaces this.
-                context.trace?.record(.sinkSelected("memory pdf"))
-                let document = try image.pdf(options: options)
-                do {
-                    try document.write(to: url)
-                } catch {
-                    throw HokusaiError.io(url: url, operation: .write, reason: error.localizedDescription)
-                }
-                size = document.count
+                let sink = PDFOutputSink(destination: .file(url), isCancelled: { context.isCancelled })
+                let result = try image.writePDF(options, into: sink)
+                return OutputInfo(
+                    format: .pdf, width: result.rasterWidth, height: result.rasterHeight, size: sink.byteCount, pdf: result.details)
             case .raster(let encoder):
-                context.trace?.record(.sinkSelected("file \(format.imageFormat.rawValue)"))
-                size = try image.write(encoder, to: url)
+                let size = try image.write(encoder, to: url)
+                return OutputInfo(format: format.imageFormat, width: image.width, height: image.height, size: size)
             }
-            return OutputInfo(format: format.imageFormat, width: image.width, height: image.height, size: size)
         }
     }
 

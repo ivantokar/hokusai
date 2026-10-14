@@ -254,7 +254,7 @@ import Testing
         #expect(jpeg == names(image))
     }
 
-    @Test func fileTerminalsUseADirectSinkExceptPDF() throws {
+    @Test func fileTerminalsUseADirectSink() throws {
         let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         func sink(_ pipeline: Hokusai, to name: String) throws -> [PlanTrace.Event] {
             let url = directory.appendingPathComponent("hokusai-plan-\(UUID().uuidString)-\(name)")
@@ -273,7 +273,7 @@ import Testing
         let memory = try run(image.png()).events
         #expect(png == [.sinkSelected("file png")])
         #expect(webp == [.sinkSelected("file webp")])
-        #expect(pdf == [.sinkSelected("memory pdf")])
+        #expect(pdf == [.sinkSelected("file pdf")])
         #expect(memory.contains(.sinkSelected("memory png")))
     }
 }
