@@ -21,6 +21,22 @@ All notable changes to this project are documented in this file.
 - `HokusaiError.resource(ResourceFailure)` for configured limits, starting
   with `maxQueuedEvaluations` (kind `.queuedEvaluations`).
 
+### Changed (output metadata)
+- **Breaking:** `preserveMetadata()` and `removeMetadata()` are replaced by
+  `metadataPolicy(_:)` with a typed `MetadataPolicy` (`exif`, `icc`, `xmp`,
+  `iptc`, `other`, `orientation`, `density`), plus `.default`, `.preserveAll`,
+  and `.removeAll`. Modern encoders pass libvips' native `keep` flags instead
+  of the legacy `strip` boolean.
+- **Breaking (behavior):** the default no longer removes everything. EXIF, XMP,
+  IPTC, and comments are still removed, but the ICC profile, orientation, and
+  density are now kept, so outputs can be slightly larger and wide-gamut images
+  keep their colours. Use `.removeAll` for the old output.
+- Removing EXIF while keeping orientation keeps a minimal EXIF block holding
+  the orientation. Removing orientation deletes the tag without rotating
+  pixels.
+- CLI: `convert` without `--strip-metadata` now applies the library default
+  instead of preserving everything; `--strip-metadata` means `.removeAll`.
+
 ### Changed (PDF)
 - **Breaking:** `PDFPageSize` is `.image(dpi:)`, `.a4(_:)`, `.letter(_:)`,
   `.points(width:height:)`. The global `dpi` argument of `pdf(pageSize:dpi:)`

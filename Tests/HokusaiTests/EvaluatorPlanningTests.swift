@@ -232,9 +232,9 @@ import Testing
 
     @Test func lastTerminalConfigurationWins() async throws {
         let image = try base().resize(width: 40)
-        let reconfigured = try image.png().webp(quality: 70).preserveMetadata().removeMetadata()
+        let reconfigured = try image.png().webp(quality: 70).metadataPolicy(.preserveAll).metadataPolicy(.default)
 
-        #expect(reconfigured.terminal.preservesMetadata == false)
+        #expect(reconfigured.terminal.metadataPolicy == .default)
         if case .webp(let options)? = reconfigured.terminal.encoder {
             #expect(options.quality == 70)
         } else {

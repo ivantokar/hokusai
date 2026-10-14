@@ -622,9 +622,32 @@ static inline int swift_vips_gifsave_buffer(VipsImage *in, void **buf, size_t *l
     return vips_gifsave_buffer(in, buf, len, NULL);
 }
 
+// MARK: - Output Metadata
+
+/** @brief Whether the image carries a metadata field with this name. */
+static inline int swift_vips_image_has_field(VipsImage *in, const char *name) {
+    return vips_image_get_typeof(in, name) != 0;
+}
+
+/** @brief Remove a metadata field from a private copy. Returns nonzero if it existed. */
+static inline int swift_vips_image_remove_field(VipsImage *in, const char *name) {
+    return vips_image_remove(in, name);
+}
+
+/** @brief A new image sharing the pixels of `in`, safe to edit the metadata of. */
+static inline int swift_vips_copy_private(VipsImage *in, VipsImage **out) {
+    return vips_copy(in, out, NULL);
+}
+
+/** @brief A new image with the given resolution in pixels per millimetre. */
+static inline int swift_vips_copy_with_resolution(VipsImage *in, VipsImage **out, double xres, double yres) {
+    return vips_copy(in, out, "xres", xres, "yres", yres, NULL);
+}
+
 // MARK: - Encoder Targets
 
 /*
+ * `keep` is a VipsForeignKeep bit set naming the metadata families to retain.
  * Every modern encoder writes through a VipsTarget, so one option mapping
  * serves the memory and file sinks (and future streams) identically. A target
  * has no filename, so codec choices that libvips would otherwise infer from a
@@ -632,23 +655,23 @@ static inline int swift_vips_gifsave_buffer(VipsImage *in, void **buf, size_t *l
  */
 
 /** @brief Encode as JPEG into `target`. */
-static inline int swift_vips_jpegsave_target(VipsImage *in, VipsTarget *target, int quality, int interlace, int strip) {
-    return vips_jpegsave_target(in, target, "Q", quality, "interlace", interlace, "strip", strip, NULL);
+static inline int swift_vips_jpegsave_target(VipsImage *in, VipsTarget *target, int quality, int interlace, int keep) {
+    return vips_jpegsave_target(in, target, "Q", quality, "interlace", interlace, "keep", keep, NULL);
 }
 
 /** @brief Encode as PNG into `target`; `interlace` selects Adam7 interlacing. */
-static inline int swift_vips_pngsave_target(VipsImage *in, VipsTarget *target, int compression, int interlace, int strip) {
-    return vips_pngsave_target(in, target, "compression", compression, "interlace", interlace, "strip", strip, NULL);
+static inline int swift_vips_pngsave_target(VipsImage *in, VipsTarget *target, int compression, int interlace, int keep) {
+    return vips_pngsave_target(in, target, "compression", compression, "interlace", interlace, "keep", keep, NULL);
 }
 
 /** @brief Encode as WebP into `target`. */
-static inline int swift_vips_webpsave_target(VipsImage *in, VipsTarget *target, int quality, int lossless, int effort, int strip) {
-    return vips_webpsave_target(in, target, "Q", quality, "lossless", lossless, "effort", effort, "strip", strip, NULL);
+static inline int swift_vips_webpsave_target(VipsImage *in, VipsTarget *target, int quality, int lossless, int effort, int keep) {
+    return vips_webpsave_target(in, target, "Q", quality, "lossless", lossless, "effort", effort, "keep", keep, NULL);
 }
 
 /** @brief Encode into a HEIF container with an explicit codec: AV1 (AVIF) when `av1` is nonzero, else HEVC (HEIC). */
-static inline int swift_vips_heifsave_target(VipsImage *in, VipsTarget *target, int quality, int lossless, int effort, int strip, int av1) {
-    return vips_heifsave_target(in, target, "Q", quality, "lossless", lossless, "effort", effort, "strip", strip,
+static inline int swift_vips_heifsave_target(VipsImage *in, VipsTarget *target, int quality, int lossless, int effort, int keep, int av1) {
+    return vips_heifsave_target(in, target, "Q", quality, "lossless", lossless, "effort", effort, "keep", keep,
         "compression", av1 ? VIPS_FOREIGN_HEIF_COMPRESSION_AV1 : VIPS_FOREIGN_HEIF_COMPRESSION_HEVC, NULL);
 }
 

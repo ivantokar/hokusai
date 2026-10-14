@@ -322,17 +322,15 @@ public struct Hokusai: Sendable {
             background: background, maxEffectiveDPI: maxEffectiveDPI, metadata: metadata)))
     }
 
-    /// Preserves source metadata when the selected encoder supports it.
-    public func preserveMetadata() throws -> Self {
+    /// Chooses which embedded metadata the encoded output keeps.
+    ///
+    /// The default removes EXIF, XMP, IPTC and comments while keeping the ICC
+    /// profile, orientation, and density. This is terminal configuration: it
+    /// does not change pixels, the last call wins, and nothing is read from the
+    /// source until a terminal evaluates the pipeline. See ``MetadataPolicy``.
+    public func metadataPolicy(_ policy: MetadataPolicy) -> Self {
         var terminal = terminal
-        terminal.preservesMetadata = true
-        return Self(plan: plan, terminal: terminal)
-    }
-
-    /// Removes non-essential source metadata from encoder output (the default).
-    public func removeMetadata() throws -> Self {
-        var terminal = terminal
-        terminal.preservesMetadata = false
+        terminal.metadataPolicy = policy
         return Self(plan: plan, terminal: terminal)
     }
 

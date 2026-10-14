@@ -57,7 +57,7 @@ import Testing
             .resize(width: 10)
             .blur()
             .webp(quality: 80)
-            .preserveMetadata()
+            .metadataPolicy(.preserveAll)
 
         let error = await terminalError { try await configured.data() }
         guard case HokusaiError.decode(let context)? = error else {
@@ -112,7 +112,7 @@ import Testing
 
         let plain = try await base.composite([CompositeLayer(logo, x: 4, y: 4)]).png().data()
         let configured = try await base
-            .composite([CompositeLayer(logo.avif(quality: 1).preserveMetadata(), x: 4, y: 4)])
+            .composite([CompositeLayer(logo.avif(quality: 1).metadataPolicy(.preserveAll), x: 4, y: 4)])
             .png()
             .data()
 

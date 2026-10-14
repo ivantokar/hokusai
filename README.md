@@ -79,7 +79,35 @@ let info = try await fromFile.write(to: URL(fileURLWithPath: "output.webp"))
 
 ### Evaluation order
 
-A pipeline means exactly the operations you wrote, in the order you wrote them. Hokusai may change *how* it runs them but never *what* they produce, so it only applies a short whitelist of equivalence-preserving rules: it skips operations that are provably the identity (a rotation by whole turns, compositing no layers), and within one `data()` or `write(to:)` it builds a source or layer that several parts of the pipeline share only once. It never reorders operations (a `trim` or smart crop stays where you put it), fuses resizes, selects `.sequential` access for you, or keeps results between evaluations; libvips' own operation cache is the only cache. Output metadata and encoder choices are not image operations: the last `.png()`/`.webp()`/`preserveMetadata()` wins, and a composite layer contributes only its image operations.
+A pipeline means exactly the operations you wrote, in the order you wrote them. Hokusai may change *how* it runs them but never *what* they produce, so it only applies a short whitelist of equivalence-preserving rules: it skips operations that are provably the identity (a rotation by whole turns, compositing no layers), and within one `data()` or `write(to:)` it builds a source or layer that several parts of the pipeline share only once. It never reorders operations (a `trim` or smart crop stays where you put it), fuses resizes, selects `.sequential` access for you, or keeps results between evaluations; libvips' own operation cache is the only cache. Output metadata and encoder choices are not image operations: the last `.png()`/`.webp()`/`metadataPolicy(_:)` wins, and a composite layer contributes only its image operations.
+
+### Output metadata
+
+What encoded output keeps of the source's embedded metadata is a typed `MetadataPolicy` on the terminal configuration, separate from `metadata()` (what the source contained) and from pixel analysis:
+
+```swift
+try image.jpeg()                                  // the default policy
+try image.jpeg().metadataPolicy(.preserveAll)
+try image.webp().metadataPolicy(.removeAll)
+try image.png().metadataPolicy(MetadataPolicy(icc: .remove, density: .remove))
+```
+
+The **default** is privacy-minimising but rendering-safe: EXIF, XMP, IPTC, and comments are removed, while the **ICC profile, orientation, and density** are kept, because they affect how an image displays. (Earlier versions stripped everything, including the profile.) `.preserveAll` keeps everything the format can carry; `.removeAll` removes everything, including the profile, orientation tag, and density, and leaves the pixels untouched, so an image that relied on one of them can display differently. Each family (`exif`, `icc`, `xmp`, `iptc`, `other`, `orientation`, `density`) can be set on its own. The policy maps to libvips' native `keep` flags and is applied identically to `data()` and `write(to:)`.
+
+- **Orientation** is not privacy metadata. `.remove` deletes the tag without rotating pixels; `autoOrient()` is the operation that applies it. EXIF holds the orientation tag, so removing EXIF while keeping orientation leaves a minimal EXIF block with the orientation and the technical entries libvips writes itself (pixel dimensions, resolution, versions), but none of the descriptive or location fields. If EXIF is kept in full, removing the orientation writes the neutral value "up".
+- **Density.** Formats always record some resolution, so `.remove` stops the source's from being carried over and the encoder writes its own default.
+- **ICC** retention is not a colour conversion: no profile is applied, attached, or changed.
+
+What each format can carry (a family a format cannot carry is simply absent from its output):
+
+| | EXIF | XMP | IPTC | ICC | orientation | density |
+|---|---|---|---|---|---|---|
+| JPEG | yes | yes | yes | yes | EXIF tag | yes |
+| PNG | yes | yes | no | yes | EXIF tag | yes |
+| WebP | yes | yes | no | yes | EXIF tag | no |
+| AVIF | yes | yes | no | yes | container rotation | no |
+
+AVIF is the exception for orientation. The format stores it as a rotation of the image container rather than as a tag, and a reader applies that rotation and reports no tag, so the decoded side lengths are the rotated ones. Whether libvips writes that rotation depends on the build: with libvips 8.18 it does, while on the 8.16 baseline (libheif 1.12) the orientation survives only as an EXIF tag, which AVIF viewers ignore. If you encode AVIF for such a build, call `autoOrient()` first so the pixels are upright.
 
 ### Source metadata
 
