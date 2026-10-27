@@ -62,7 +62,8 @@ import CVips
     func magicKernelsAreGatedOnTheLibvipsVersion(kernel: ResizeKernel) throws {
         let supported = swift_vips_kernel_mks(kernel == .mks2013 ? 0 : 1) >= 0
         if supported {
-            #expect(try lower(landscape().resize(width: 80, kernel: kernel)).width == 80)
+            let actual1 = try lower(landscape().resize(width: 80, kernel: kernel)).width
+            #expect(actual1 == 80)
         } else {
             expectHokusaiError({ try self.landscape().resize(width: 80, kernel: kernel) }) {
                 if case .unsupported = $0 { true } else { false }
@@ -124,9 +125,15 @@ import CVips
         let pad = try padded.pixel(x: 0, y: 10)
         switch index {
         case 0: #expect(pad.prefix(3).allSatisfy { $0 > 250 }, "background fill, got \(pad)")
-        case 1: #expect(pad == (try padded.pixel(x: 10, y: 10)), "copy repeats the edge pixel")
-        case 2: #expect(pad == (try reference.pixel(x: 30, y: 10)), "repeat tiles the image")
-        default: #expect(pad == (try reference.pixel(x: 9, y: 10)), "mirror reflects the image")
+        case 1: 
+            let expected2 = try padded.pixel(x: 10, y: 10)
+            #expect(pad == expected2, "copy repeats the edge pixel")
+        case 2: 
+            let expected3 = try reference.pixel(x: 30, y: 10)
+            #expect(pad == expected3, "repeat tiles the image")
+        default: 
+            let expected4 = try reference.pixel(x: 9, y: 10)
+            #expect(pad == expected4, "mirror reflects the image")
         }
     }
 
@@ -152,8 +159,12 @@ import CVips
         let original = try lower(landscape())
         let rotated = try lower(landscape().rotate(by: 90))
         // 90° clockwise: the original's top-left pixel ends at the top-right.
-        #expect(try rotated.pixel(x: rotated.width - 1, y: 0) == original.pixel(x: 0, y: 0))
-        #expect(try rotated.pixel(x: rotated.width - 1, y: original.width - 1) == original.pixel(x: original.width - 1, y: 0))
+        let actual5 = try rotated.pixel(x: rotated.width - 1, y: 0)
+        let expected5 = try original.pixel(x: 0, y: 0)
+        #expect(actual5 == expected5)
+        let actual6 = try rotated.pixel(x: rotated.width - 1, y: original.width - 1)
+        let expected6 = try original.pixel(x: original.width - 1, y: 0)
+        #expect(actual6 == expected6)
     }
 
     @Test func hugeAngleDoesNotCrash() throws {
@@ -179,7 +190,8 @@ import CVips
     @Test func autoOrientSwapsDimensionsAndClearsTheTag() throws {
         let data = try loadFixtureData(named: "orientation-6", ext: "jpg")
         let source = try Hokusai(data: data)
-        #expect(try lower(source).width == 120)
+        let actual7 = try lower(source).width
+        #expect(actual7 == 120)
         let oriented = try lower(source.autoOrient())
         #expect((oriented.width, oriented.height) == (80, 120))
         #expect(vips_image_get_orientation(oriented.pointer) == 1)
@@ -191,8 +203,12 @@ import CVips
         let flopped = try lower(landscape().flop())
         let (w, h) = (original.width, original.height)
         // Sample inside the noise block so the three pixels differ.
-        #expect(try flipped.pixel(x: 20, y: h - 1 - 60) == original.pixel(x: 20, y: 60))
-        #expect(try flopped.pixel(x: w - 1 - 20, y: 60) == original.pixel(x: 20, y: 60))
+        let actual8 = try flipped.pixel(x: 20, y: h - 1 - 60)
+        let expected8 = try original.pixel(x: 20, y: 60)
+        #expect(actual8 == expected8)
+        let actual9 = try flopped.pixel(x: w - 1 - 20, y: 60)
+        let expected9 = try original.pixel(x: 20, y: 60)
+        #expect(actual9 == expected9)
     }
 
     @Test func orientationSensitiveOrderIsPreserved() throws {
@@ -210,7 +226,9 @@ import CVips
         let original = try lower(landscape())
         let image = try lower(landscape().affine(.identity))
         #expect((image.width, image.height) == (original.width, original.height))
-        #expect(try image.pixel(x: 50, y: 60) == original.pixel(x: 50, y: 60))
+        let actual10 = try image.pixel(x: 50, y: 60)
+        let expected10 = try original.pixel(x: 50, y: 60)
+        #expect(actual10 == expected10)
     }
 
     @Test func affineScalesByTheMatrix() throws {
