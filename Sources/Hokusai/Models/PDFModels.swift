@@ -96,7 +96,7 @@ public struct PDFOptions: Sendable, Equatable {
     public var margins: PDFMargins
 
     /// Where the aspect-fitted raster sits within the margins. Centred by default.
-    public var anchor: CanvasAnchor
+    public var anchor: Gravity
 
     /// A colour that fills the page behind the raster. `nil` leaves the page
     /// unpainted, and transparent pixels stay transparent in the PDF; use
@@ -114,7 +114,7 @@ public struct PDFOptions: Sendable, Equatable {
     public init(
         pageSize: PDFPageSize = .image(),
         margins: PDFMargins = .none,
-        anchor: CanvasAnchor = .center,
+        anchor: Gravity = .center,
         background: Color? = nil,
         maxEffectiveDPI: Double? = nil,
         metadata: PDFDocumentMetadata? = nil

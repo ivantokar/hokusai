@@ -174,12 +174,12 @@ public struct Hokusai: Sendable {
     /// This operation can only add canvas. Use `resize` or `extract` when a
     /// requested size is smaller than the current image; that is detected
     /// when the pipeline is evaluated.
-    public func extend(to size: ImageSize, anchor: CanvasAnchor = .center, background: Color = .transparent) throws -> Self {
+    public func extend(to size: ImageSize, anchor: Gravity = .center, background: Color = .transparent) throws -> Self {
         try extend(to: size, anchor: anchor, mode: .background(background))
     }
 
     /// Extends the canvas to an exact size, filling the new area according to `mode`.
-    public func extend(to size: ImageSize, anchor: CanvasAnchor = .center, mode: ExtendMode) throws -> Self {
+    public func extend(to size: ImageSize, anchor: Gravity = .center, mode: ExtendMode) throws -> Self {
         try Self.validate(dimension: size.width, name: "width")
         try Self.validate(dimension: size.height, name: "height")
         _ = try mode.validated()
@@ -418,24 +418,51 @@ public struct Hokusai: Sendable {
     /// Later layers draw over earlier layers. Each layer may reuse another
     /// pipeline, allowing a logo or watermark to be prepared once and applied
     /// to many base images. Only a layer's image transformations apply; its
-    /// encoder and metadata settings are ignored.
-    public func composite(_ layers: [CompositeLayer]) throws -> Self {
+    /// encoder and metadata settings are ignored, and it is never encoded to
+    /// be composed. All layers are blended by one native operation.
+    ///
+    /// - Parameter space: The colour space layers are blended in.
+    public func composite(_ layers: [CompositeLayer], space: CompositingSpace = .srgb) throws -> Self {
         let steps = try layers.map { layer in
             guard layer.opacity.isFinite, (0...1).contains(layer.opacity) else {
                 throw HokusaiError.invalidOption(name: "opacity", reason: "must be a finite value from 0 through 1")
             }
-            return LayerStep(plan: layer.source.plan, x: layer.x, y: layer.y, blend: layer.blend, opacity: layer.opacity)
+            try layer.placement.validate()
+            return LayerStep(plan: layer.source.plan, placement: layer.placement, blend: layer.blend, opacity: layer.opacity)
         }
-        return appending(.composite(steps))
+        return appending(.composite(steps, space: space))
     }
 
-    /// Draws text onto the pipeline using the existing libvips/Pango renderer.
+    /// Renders text as a new pipeline.
     ///
-    /// Text styling remains intentionally typed by `TextOptions` until the
-    /// dedicated typography redesign lands; the pipeline and output semantics
-    /// are already the same as every other 1.0 transformation.
-    public func drawText(_ text: String, x: Int, y: Int, options: TextOptions = .init()) throws -> Self {
-        appending(.drawText(text, x: x, y: y, options: options))
+    /// The result is an ordinary immutable pipeline: transform it, composite
+    /// it, or encode it on its own. Text is rendered by libvips with Pango
+    /// when a terminal method runs, so a build without text support reports
+    /// ``HokusaiError/unsupported(feature:reason:)`` there, not here.
+    ///
+    /// ```swift
+    /// let badge = try Hokusai.text("SALE", style: TextStyle(fontSize: 48, color: .white))
+    /// ```
+    ///
+    /// - Throws: ``HokusaiError/invalidOption(name:reason:)`` for an empty
+    ///   text, a size or spacing out of range, or a font that is a file path.
+    public static func text(_ content: TextContent, layout: TextLayout = .natural, style: TextStyle = TextStyle()) throws -> Hokusai {
+        let source = TextSource(content: content, layout: layout, style: style)
+        try source.validate()
+        return Hokusai(plan: .source(.text(source)))
+    }
+
+    /// Draws text onto the pipeline.
+    ///
+    /// Sugar for compositing ``text(_:layout:style:)`` with the same
+    /// placement, clipping and blending rules as any other layer.
+    public func drawText(
+        _ content: TextContent,
+        placement: Placement = .at(x: 0, y: 0),
+        layout: TextLayout = .natural,
+        style: TextStyle = TextStyle()
+    ) throws -> Self {
+        try composite([CompositeLayer(Hokusai.text(content, layout: layout, style: style), placement: placement)])
     }
 
     // MARK: - Output configuration
@@ -481,7 +508,7 @@ public struct Hokusai: Sendable {
     public func pdf(
         pageSize: PDFPageSize = .image(),
         margins: PDFMargins = .none,
-        anchor: CanvasAnchor = .center,
+        anchor: Gravity = .center,
         background: Color? = nil,
         maxEffectiveDPI: Double? = nil,
         metadata: PDFDocumentMetadata? = nil

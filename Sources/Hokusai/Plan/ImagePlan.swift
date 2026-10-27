@@ -86,10 +86,13 @@ enum ImageSource: Sendable {
     case file(URL, InputOptions)
     /// Owned encoded bytes, shared copy-on-write between branches.
     case data(Data, InputOptions)
+    /// Generated text, rendered at evaluation time.
+    case text(TextSource)
 
     var options: InputOptions {
         switch self {
         case .file(_, let options), .data(_, let options): options
+        case .text: InputOptions()
         }
     }
 
@@ -98,6 +101,7 @@ enum ImageSource: Sendable {
         switch self {
         case .file(let url, _): "decode \(url.lastPathComponent)"
         case .data: "decode input data"
+        case .text: "render text"
         }
     }
 }
@@ -113,7 +117,7 @@ enum ImageOperation: Sendable {
     case flip
     case flop
     case extract(x: Int, y: Int, width: Int, height: Int)
-    case extend(to: ImageSize, anchor: CanvasAnchor, mode: ExtendMode)
+    case extend(to: ImageSize, anchor: Gravity, mode: ExtendMode)
     case extendEdges(top: Int, left: Int, bottom: Int, right: Int, mode: ExtendMode)
     case affine(AffineStep)
     case trim(threshold: Double)
@@ -133,8 +137,7 @@ enum ImageOperation: Sendable {
     case ensureAlpha(opacity: Double = 1)
     case removeAlpha
     case flatten(background: Color)
-    case composite([LayerStep])
-    case drawText(String, x: Int, y: Int, options: TextOptions)
+    case composite([LayerStep], space: CompositingSpace = .srgb)
 
     /// The operation name used in typed error contexts.
     var name: String {
@@ -165,7 +168,6 @@ enum ImageOperation: Sendable {
         case .removeAlpha: "remove alpha"
         case .flatten: "flatten"
         case .composite: "composite layer"
-        case .drawText: "draw text"
         }
     }
 }
@@ -197,8 +199,7 @@ struct AffineStep: Sendable {
 /// configuration, so a layer's encoder cannot cause an intermediate encode.
 struct LayerStep: Sendable {
     var plan: ImagePlan
-    var x: Int
-    var y: Int
+    var placement: Placement
     var blend: BlendMode
     var opacity: Double
 }

@@ -5,7 +5,7 @@ import CVips
 
 extension NativeImage {
     /// The libvips band format of this image.
-    private var bandFormat: Int32 { Int32(swift_vips_image_get_band_format(pointer)) }
+    var bandFormat: Int32 { Int32(swift_vips_image_get_band_format(pointer)) }
 
     /// The largest value of an integer band, or 1 for float images.
     var bandMaximum: Double {
@@ -25,7 +25,7 @@ extension NativeImage {
     }
 
     /// Joins `images` into one image, bands in order.
-    private static func bandjoin(_ images: [NativeImage], operation: String) throws -> NativeImage {
+    static func bandjoin(_ images: [NativeImage], operation: String) throws -> NativeImage {
         var pointers: [UnsafeMutablePointer<CVips.VipsImage>?] = images.map { $0.pointer }
         return try producing({ output in
             pointers.withUnsafeMutableBufferPointer { swift_vips_bandjoin($0.baseAddress, output, Int32($0.count)) }
@@ -33,7 +33,7 @@ extension NativeImage {
     }
 
     /// Casts to `format`, rounding to nearest when a float becomes an integer.
-    private func castRounded(to format: Int32, operation: String) throws -> NativeImage {
+    func castRounded(to format: Int32, operation: String) throws -> NativeImage {
         guard format != bandFormat else { return self }
         let isFloat = { (value: Int32) in value == Int32(VIPS_FORMAT_FLOAT.rawValue) || value == Int32(VIPS_FORMAT_DOUBLE.rawValue) }
         var base = self

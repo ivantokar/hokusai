@@ -166,15 +166,18 @@ let image = try Hokusai(
 let base = try Hokusai(url: URL(fileURLWithPath: "photo.jpg"))
 let logo = try Hokusai(url: URL(fileURLWithPath: "logo.png"))
 
-var label = TextOptions(font: "sans Bold", fontSize: 48, color: [255, 255, 255, 255])
-label.strokeColor = [0, 0, 0, 255]
-label.strokeWidth = 2
+let label = TextStyle(
+    font: "sans Bold", fontSize: 48, color: .white,
+    stroke: TextStroke(color: Color(red: 0, green: 0, blue: 0), width: 2))
 
 let image = try base
     .resize(width: 1200, height: 800, fit: .cover)
-    .composite([CompositeLayer(logo, x: 32, y: 32, opacity: 0.8)])
-    .drawText("Hello, Hokusai", x: 80, y: 680, options: label)
+    .composite([CompositeLayer(logo, placement: .gravity(.northWest, offsetX: 32, offsetY: 32), opacity: 0.8)])
+    .drawText("Hello, Hokusai", placement: .gravity(.southWest, offsetX: 80, offsetY: 40), style: label)
     .flatten(background: .white)
+
+// Text is an ordinary pipeline too: transform it, or encode it on its own.
+let badge = try Hokusai.text("SALE", layout: .fit(width: 300, height: 120)).png().data()
 ```
 
 Core operations include resize, extract, rotate, auto-orient, composite, blur, sharpen, trim, tint, flatten/remove alpha, metadata inspection, and typed JPEG/PNG/WebP/AVIF output.

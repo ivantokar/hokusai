@@ -78,6 +78,8 @@ enum Evaluator {
         case .data(let data, let options):
             let image = try NativeImage.open(data: data, options: options)
             return image.sourceMetadata(sourceByteSize: data.count)
+        case .text(let text):
+            return try NativeImage.renderText(text).sourceMetadata(sourceByteSize: nil)
         }
     }
 
@@ -185,7 +187,7 @@ enum Evaluator {
         label: String
     ) throws -> (image: NativeImage, shrink: ShrinkOnLoad?) {
         let sequential = source.options.access == .sequential
-        var native = try openUnshrunk(source)
+        var native = try openUnshrunk(source, trace: context.trace)
         var shrink: ShrinkOnLoad?
         var shrinkFactor: Int?
 
@@ -195,6 +197,7 @@ enum Evaluator {
             switch source {
             case .file(let url, let options): reduced = try NativeImage.open(path: url.path, options: options, decoderShrink: plan.factor)
             case .data(let data, let options): reduced = try NativeImage.open(data: data, options: options, decoderShrink: plan.factor)
+            case .text: reduced = native
             }
             // The decoder may round a dimension up but never below what was
             // asked; if it did, keep the full-size source rather than resize
@@ -210,10 +213,11 @@ enum Evaluator {
         return (try context.watch(native, label: label, sequential: sequential), shrink)
     }
 
-    private static func openUnshrunk(_ source: ImageSource) throws -> NativeImage {
+    private static func openUnshrunk(_ source: ImageSource, trace: PlanTrace?) throws -> NativeImage {
         switch source {
         case .file(let url, let options): try NativeImage.open(path: url.path, options: options)
         case .data(let data, let options): try NativeImage.open(data: data, options: options)
+        case .text(let text): try NativeImage.renderText(text, trace: trace)
         }
     }
 
@@ -355,27 +359,20 @@ enum Evaluator {
         case .flatten(let background):
             return try image.flatten(background: try background.rgba8())
 
-        case .composite(let layers):
-            var result = image
+        case .composite(let layers, let space):
+            var native: [NativeLayer] = []
             for (index, layer) in layers.enumerated() {
                 let scope = "composite layer \(index + 1)"
-                let overlay: NativeImage
                 do {
-                    overlay = try build(layer.plan, context: context, scope: scope)
+                    let overlay = try build(layer.plan, context: context, scope: scope)
+                    native.append(NativeLayer(image: overlay, placement: layer.placement, blend: layer.blend, opacity: layer.opacity))
                 } catch let error as HokusaiError {
                     throw error.scoped(scope)
                 }
-                result = try result.composite(
-                    overlay: overlay,
-                    x: layer.x,
-                    y: layer.y,
-                    options: CompositeOptions(mode: layer.blend, opacity: layer.opacity)
-                )
             }
-            return result
+            context.trace?.record(.compositeBlended(layers: native.count))
+            return try image.composite(native, space: space)
 
-        case .drawText(let text, let x, let y, let options):
-            return try image.drawText(text, x: x, y: y, options: options)
         }
     }
 

@@ -4,6 +4,43 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed (text)
+- **Breaking:** text is a generated pipeline source. `Hokusai.text(_:layout:style:)`
+  returns an ordinary immutable pipeline; `drawText(_:placement:layout:style:)`
+  is sugar that composites it with the shared `Placement`/`Gravity` model.
+  `TextOptions`, `TextGravity` and `drawText(_:x:y:options:)` are removed.
+- **Breaking:** `TextContent.plain` escapes Pango markup characters, so any
+  string is safe; `.markup` is the explicit opt-in.
+- **Breaking:** `TextLayout` separates `.natural`, `.width(_:wrap:)` and
+  `.fit(width:height:)`. Fit mode no longer passes a DPI, so libvips really
+  fits the text to the box (the old wrapper always set `dpi`, which disabled it).
+- **Breaking:** colours are `Color`, font files are `URL` (`TextStyle.fontFile`),
+  and a path-like `font` string is rejected.
+- **Breaking:** `kerning` and `antialiasing` are removed; they never did anything.
+- `lineHeight` is a multiple of the font's natural line pitch. The old
+  `lineSpacing` converted to the wrong unit. Added `justify` and `TextWrap`.
+- Stroke is one dilation and shadow one blur, blended with a single composite.
+  The old outline composited the text once per neighbouring pixel.
+- Rotation reuses the geometry transform. Text opacity is applied after
+  rendering, so `opacity: 0` text is transparent (Pango drew it opaque) and
+  shadows follow the glyph shape.
+
+### Changed (composition)
+- **Breaking:** `CompositeLayer` takes a typed `Placement` (`.at(x:y:)`,
+  `.gravity(_:offsetX:offsetY:)`, `.tile(gravity:)`); `CompositeLayer(_:x:y:)`
+  stays as a shorthand for exact coordinates. `CompositeLayer(data:)` is
+  removed: build the layer with `Hokusai(data:)`.
+- **Breaking:** `CanvasAnchor` is now `Gravity`, shared by `extend(to:)`, PDF
+  page options and layer placement.
+- `BlendMode` grows from three modes to the full libvips Porter-Duff and PDF
+  set (25 modes, `CaseIterable`).
+- `composite(_:space:)` blends every layer with one `vips_composite` call
+  instead of a `vips_composite2` chain, and no longer forces inputs to 8-bit
+  RGBA: libvips normalises colour and alpha, and opacity scales the alpha band
+  in the layer's own bit depth. `space: .linear` blends in linear light.
+- Gravity offsets are inward padding at edges and a signed shift on a centred
+  axis; coordinates beyond ±10,000,000 are rejected when the layer is added.
+
 ### Changed (effects)
 - **Breaking:** `normalize()` is now photographic contrast stretching,
   `normalize(lower: 1, upper: 99)`: the luminance range between two
