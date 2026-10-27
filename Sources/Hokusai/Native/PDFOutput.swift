@@ -393,9 +393,9 @@ extension NativeImage {
             if let maximum = options.maxEffectiveDPI, layout.effectiveDPI(pixelWidth: width) > maximum {
                 let targetWidth = max(1, Int((layout.width / 72 * maximum).rounded(.up)))
                 let targetHeight = max(1, Int((Double(targetWidth) * Double(height) / Double(width)).rounded()))
-                var resize = ResizeOptions()
-                resize.fit = .fill
-                image = try self.resize(width: targetWidth, height: targetHeight, options: resize)
+                image = try self.resize(
+                    width: targetWidth, height: targetHeight, fit: .fill, position: .center, kernel: .lanczos3,
+                    withoutEnlargement: false, withoutReduction: false, background: [0, 0, 0, 255])
                 layout = try PDFLayout.resolve(pixelWidth: image.width, pixelHeight: image.height, options: options)
             }
 

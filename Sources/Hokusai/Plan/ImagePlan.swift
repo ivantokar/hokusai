@@ -109,11 +109,13 @@ enum ImageSource: Sendable {
 enum ImageOperation: Sendable {
     case autoOrient
     case resize(ResizeStep)
-    case rotate(degrees: Double, background: Color)
+    case rotate(degrees: Double, background: Color, interpolation: Interpolation = .bilinear)
     case flip
     case flop
     case extract(x: Int, y: Int, width: Int, height: Int)
-    case extend(to: ImageSize, anchor: CanvasAnchor, background: Color)
+    case extend(to: ImageSize, anchor: CanvasAnchor, mode: ExtendMode)
+    case extendEdges(top: Int, left: Int, bottom: Int, right: Int, mode: ExtendMode)
+    case affine(AffineStep)
     case trim(threshold: Double)
     case blur(sigma: Double)
     case sharpen(sigma: Double)
@@ -135,7 +137,8 @@ enum ImageOperation: Sendable {
         case .flip: "flip"
         case .flop: "flop"
         case .extract: "extract"
-        case .extend: "extend"
+        case .extend, .extendEdges: "extend"
+        case .affine: "affine"
         case .trim: "trim"
         case .blur: "blur"
         case .sharpen: "sharpen"
@@ -162,6 +165,16 @@ struct ResizeStep: Sendable {
     var withoutEnlargement: Bool
     var withoutReduction: Bool
     var background: Color
+}
+
+/// An affine transform with every option resolved to a value.
+struct AffineStep: Sendable {
+    var matrix: AffineMatrix
+    var inputOffset: AffineOffset
+    var outputOffset: AffineOffset
+    var outputArea: AffineArea?
+    var edges: ExtendMode
+    var interpolation: Interpolation
 }
 
 /// A composite layer: only the layer's image plan, never its terminal

@@ -5,12 +5,24 @@ All notable changes to this project are documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- `resize(fit: .contain)` and `extend(to:)` failed with a transform error on
+  images without an alpha channel (for example JPEG) because the RGBA fill was
+  passed unchanged; the fill is now converted to the image's own bands, and
+  16-bit images use the 16-bit range.
+- `rotate(by:)` no longer traps on very large angles.
 - `.avif().data()` returned HEVC-coded HEIC bytes because the buffer encoder
   used libvips' default codec; it now produces AV1 AVIF and honours `effort`
   and `lossless`. File output no longer depends on the `.avif` suffix to pick
   AV1.
 
 ### Added
+- Geometry on the evaluator: `extend(top:left:bottom:right:mode:)` and
+  `extend(to:anchor:mode:)` with `ExtendMode` (`.background`, `.copy`,
+  `.repeat`, `.mirror`); `rotate(by:background:interpolation:)` using
+  `vips_rotate` with a typed `Interpolation`; `affine(_:inputOffset:outputOffset:outputArea:edges:interpolation:)`
+  with `AffineMatrix`; and the `mks2013`/`mks2021` resize kernels (libvips
+  8.17+, `unsupported` on older builds). `extract` rejects negative offsets
+  when the step is added.
 - `Hokusai.configure(_:)` with `RuntimeConfiguration`: process-wide
   `maxConcurrentEvaluations`, `maxQueuedEvaluations`, and `vipsConcurrency`,
   frozen at first runtime use.

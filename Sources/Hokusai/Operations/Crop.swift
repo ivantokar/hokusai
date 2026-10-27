@@ -55,67 +55,6 @@ extension NativeImage {
         return NativeImage(takingOwnership: out)
     }
 
-    /// Produces a target-sized crop using an anchor or libvips smart-crop mode.
-    func smartCrop(width: Int, height: Int, position: Position) throws -> NativeImage {
-        let currentWidth = self.width
-        let currentHeight = self.height
-
-        // Avoid native work when crop geometry already matches the image.
-        if currentWidth == width && currentHeight == height {
-            return self
-        }
-
-        var output: UnsafeMutablePointer<CVips.VipsImage>?
-
-        switch position {
-        case .attention:
-            // Ask libvips to retain the region it considers visually salient.
-            let result = swift_vips_smartcrop(
-                pointer,
-                &output,
-                Int32(width),
-                Int32(height),
-                VIPS_INTERESTING_ATTENTION
-            )
-
-            guard result == 0, let out = output else {
-                VipsBackend.discardPartialImage(output)
-                throw HokusaiError.nativeTransform("smart crop")
-            }
-
-            return NativeImage(takingOwnership: out)
-
-        case .entropy:
-            // Ask libvips to retain the region with the most visual detail.
-            let result = swift_vips_smartcrop(
-                pointer,
-                &output,
-                Int32(width),
-                Int32(height),
-                VIPS_INTERESTING_ENTROPY
-            )
-
-            guard result == 0, let out = output else {
-                VipsBackend.discardPartialImage(output)
-                throw HokusaiError.nativeTransform("smart crop")
-            }
-
-            return NativeImage(takingOwnership: out)
-
-        default:
-            // Fixed anchors resolve to deterministic top-left coordinates.
-            let (left, top) = calculateCropPosition(
-                imageWidth: currentWidth,
-                imageHeight: currentHeight,
-                targetWidth: width,
-                targetHeight: height,
-                position: position
-            )
-
-            return try crop(left: left, top: top, width: width, height: height)
-        }
-    }
-
     /// Trims border pixels similar to the image background.
     ///
     /// The compatibility `background` parameter is intentionally rejected:
@@ -137,42 +76,5 @@ extension NativeImage {
             throw HokusaiError.nativeTransform("trim")
         }
         return try crop(left: Int(left), top: Int(top), width: Int(width), height: Int(height))
-    }
-
-    // MARK: - Private Helpers
-
-    /// Resolves a deterministic anchor into a clamped top-left crop coordinate.
-    private func calculateCropPosition(
-        imageWidth: Int,
-        imageHeight: Int,
-        targetWidth: Int,
-        targetHeight: Int,
-        position: Position
-    ) -> (left: Int, top: Int) {
-        let xOffset = (imageWidth - targetWidth) / 2
-        let yOffset = (imageHeight - targetHeight) / 2
-
-        switch position {
-        case .center:
-            return (xOffset, yOffset)
-        case .top:
-            return (xOffset, 0)
-        case .bottom:
-            return (xOffset, max(0, imageHeight - targetHeight))
-        case .left:
-            return (0, yOffset)
-        case .right:
-            return (max(0, imageWidth - targetWidth), yOffset)
-        case .topLeft:
-            return (0, 0)
-        case .topRight:
-            return (max(0, imageWidth - targetWidth), 0)
-        case .bottomLeft:
-            return (0, max(0, imageHeight - targetHeight))
-        case .bottomRight:
-            return (max(0, imageWidth - targetWidth), max(0, imageHeight - targetHeight))
-        default:
-            return (xOffset, yOffset)
-        }
     }
 }

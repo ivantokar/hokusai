@@ -123,6 +123,7 @@ public struct Hokusai: Sendable {
         try Self.validate(dimension: width, name: "width")
         try Self.validate(dimension: height, name: "height")
         _ = try background.rgba8()
+        try kernel.requireAvailable()
         return appending(.resize(ResizeStep(
             width: width,
             height: height,
@@ -138,13 +139,15 @@ public struct Hokusai: Sendable {
     /// Rotates the pipeline clockwise by a finite number of degrees.
     ///
     /// Use ``autoOrient()`` for camera orientation. This method is for an
-    /// intentional visual rotation and fills exposed corners with `background`.
-    public func rotate(by degrees: Double, background: Color = .transparent) throws -> Self {
+    /// intentional visual rotation. Exact right angles are lossless; any other
+    /// angle resamples with `interpolation` and fills exposed corners with
+    /// `background`.
+    public func rotate(by degrees: Double, background: Color = .transparent, interpolation: Interpolation = .bilinear) throws -> Self {
         guard degrees.isFinite else {
             throw HokusaiError.invalidOption(name: "degrees", reason: "must be finite")
         }
         _ = try background.rgba8()
-        return appending(.rotate(degrees: degrees, background: background))
+        return appending(.rotate(degrees: degrees, background: background, interpolation: interpolation))
     }
 
     /// Mirrors the image vertically using familiar image-processing terminology.
@@ -160,6 +163,9 @@ public struct Hokusai: Sendable {
     public func extract(x: Int, y: Int, width: Int, height: Int) throws -> Self {
         try Self.validate(dimension: width, name: "width")
         try Self.validate(dimension: height, name: "height")
+        guard x >= 0, y >= 0 else {
+            throw HokusaiError.invalidOption(name: x < 0 ? "x" : "y", reason: "must be zero or greater")
+        }
         return appending(.extract(x: x, y: y, width: width, height: height))
     }
 
@@ -169,10 +175,73 @@ public struct Hokusai: Sendable {
     /// requested size is smaller than the current image; that is detected
     /// when the pipeline is evaluated.
     public func extend(to size: ImageSize, anchor: CanvasAnchor = .center, background: Color = .transparent) throws -> Self {
+        try extend(to: size, anchor: anchor, mode: .background(background))
+    }
+
+    /// Extends the canvas to an exact size, filling the new area according to `mode`.
+    public func extend(to size: ImageSize, anchor: CanvasAnchor = .center, mode: ExtendMode) throws -> Self {
         try Self.validate(dimension: size.width, name: "width")
         try Self.validate(dimension: size.height, name: "height")
-        _ = try background.rgba8()
-        return appending(.extend(to: size, anchor: anchor, background: background))
+        _ = try mode.validated()
+        return appending(.extend(to: size, anchor: anchor, mode: mode))
+    }
+
+    /// Adds padding around the image.
+    ///
+    /// Each side is a number of pixels, zero or greater. `mode` decides what
+    /// fills the new pixels: a colour, or the image's own edge pixels copied,
+    /// repeated or mirrored.
+    ///
+    /// ```swift
+    /// let padded = try image.extend(top: 10, left: 10, bottom: 10, right: 10, mode: .mirror)
+    /// ```
+    public func extend(top: Int = 0, left: Int = 0, bottom: Int = 0, right: Int = 0, mode: ExtendMode = .background(.transparent)) throws -> Self {
+        for (name, value) in [("top", top), ("left", left), ("bottom", bottom), ("right", right)] {
+            guard (0...maximumNativeCoordinate).contains(value) else {
+                throw HokusaiError.invalidOption(name: name, reason: "must be in 0...\(maximumNativeCoordinate)")
+            }
+        }
+        _ = try mode.validated()
+        return appending(.extendEdges(top: top, left: left, bottom: bottom, right: right, mode: mode))
+    }
+
+    /// Applies a 2×2 affine transform.
+    ///
+    /// The matrix maps input to output coordinates (`x' = a·x + b·y`,
+    /// `y' = c·x + d·y`). Offsets are applied before (`inputOffset`) and after
+    /// (`outputOffset`) the matrix, `outputArea` crops the result, and `edges`
+    /// decides what fills pixels that map from outside the source.
+    public func affine(
+        _ matrix: AffineMatrix,
+        inputOffset: AffineOffset = .zero,
+        outputOffset: AffineOffset = .zero,
+        outputArea: AffineArea? = nil,
+        edges: ExtendMode = .background(.transparent),
+        interpolation: Interpolation = .bilinear
+    ) throws -> Self {
+        let values = [matrix.a, matrix.b, matrix.c, matrix.d, inputOffset.x, inputOffset.y, outputOffset.x, outputOffset.y]
+        guard values.allSatisfy({ $0.isFinite && abs($0) <= Double(maximumNativeCoordinate) * 10 }) else {
+            throw HokusaiError.invalidOption(name: "matrix", reason: "values and offsets must be finite and of reasonable size")
+        }
+        guard matrix.a * matrix.d - matrix.b * matrix.c != 0 else {
+            throw HokusaiError.invalidOption(name: "matrix", reason: "must be invertible (a·d − b·c must not be zero)")
+        }
+        if let area = outputArea {
+            try Self.validate(dimension: area.width, name: "outputArea.width")
+            try Self.validate(dimension: area.height, name: "outputArea.height")
+            guard abs(area.x) <= maximumNativeCoordinate, abs(area.y) <= maximumNativeCoordinate,
+                  area.width <= maximumNativeCoordinate, area.height <= maximumNativeCoordinate else {
+                throw HokusaiError.invalidOption(name: "outputArea", reason: "must lie within \(maximumNativeCoordinate) pixels")
+            }
+        }
+        _ = try edges.validated()
+        return appending(.affine(AffineStep(
+            matrix: matrix,
+            inputOffset: inputOffset,
+            outputOffset: outputOffset,
+            outputArea: outputArea,
+            edges: edges,
+            interpolation: interpolation)))
     }
 
     /// Removes edges whose pixels are similar to the image background.

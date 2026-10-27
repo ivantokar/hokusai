@@ -58,7 +58,7 @@ enum Planner {
 
     private static func identityRule(for operation: ImageOperation, options: PlannerOptions) -> PlannerRule? {
         switch operation {
-        case .rotate(let degrees, _)
+        case .rotate(let degrees, _, _)
             where options.isEnabled(.identityRotation) && degrees.truncatingRemainder(dividingBy: 360) == 0:
             // Exact whole turns only. A resize to unchanged dimensions, a colour
             // conversion that looks equivalent, or a zero-looking blend are not
