@@ -72,7 +72,7 @@ import Testing
     }
 
     @Test func onlyAnEmptyCompositeIsAnIdentity() throws {
-        let layer = LayerStep(plan: try logo().plan, x: 0, y: 0, blend: .over, opacity: 1)
+        let layer = LayerStep(plan: try logo().plan, placement: .at(x: 0, y: 0), blend: .over, opacity: 1)
         let steps = Planner.plan([.composite([]), .composite([layer])], options: .default)
         #expect(steps[0].skippedBy == .emptyComposite)
         #expect(steps[1].skippedBy == nil)

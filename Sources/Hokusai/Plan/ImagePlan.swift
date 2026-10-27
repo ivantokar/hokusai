@@ -113,7 +113,7 @@ enum ImageOperation: Sendable {
     case flip
     case flop
     case extract(x: Int, y: Int, width: Int, height: Int)
-    case extend(to: ImageSize, anchor: CanvasAnchor, mode: ExtendMode)
+    case extend(to: ImageSize, anchor: Gravity, mode: ExtendMode)
     case extendEdges(top: Int, left: Int, bottom: Int, right: Int, mode: ExtendMode)
     case affine(AffineStep)
     case trim(threshold: Double)
@@ -133,7 +133,7 @@ enum ImageOperation: Sendable {
     case ensureAlpha(opacity: Double = 1)
     case removeAlpha
     case flatten(background: Color)
-    case composite([LayerStep])
+    case composite([LayerStep], space: CompositingSpace = .srgb)
     case drawText(String, x: Int, y: Int, options: TextOptions)
 
     /// The operation name used in typed error contexts.
@@ -197,8 +197,7 @@ struct AffineStep: Sendable {
 /// configuration, so a layer's encoder cannot cause an intermediate encode.
 struct LayerStep: Sendable {
     var plan: ImagePlan
-    var x: Int
-    var y: Int
+    var placement: Placement
     var blend: BlendMode
     var opacity: Double
 }

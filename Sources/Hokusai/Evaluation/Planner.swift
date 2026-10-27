@@ -74,7 +74,7 @@ enum Planner {
             // conversion that looks equivalent, or a zero-looking blend are not
             // identities: they carry resampling, interpretation, and blend contracts.
             return .identityRotation
-        case .composite(let layers) where options.isEnabled(.emptyComposite) && layers.isEmpty:
+        case .composite(let layers, _) where options.isEnabled(.emptyComposite) && layers.isEmpty:
             return .emptyComposite
         default:
             return nil
@@ -98,6 +98,8 @@ final class PlanTrace: @unchecked Sendable {
         case memoisationHit(String)
         /// The decoder was asked to shrink the source by this factor.
         case shrinkOnLoad(Int)
+        /// All layers of a composite step were blended by one native call.
+        case compositeBlended(layers: Int)
         /// The terminal sink: `memory <format>` or `file <format>`.
         case sinkSelected(String)
     }

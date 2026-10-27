@@ -237,7 +237,7 @@ extension NativeImage {
 extension ResizePosition {
     /// The compass anchor for fixed placements. Content-aware strategies have
     /// no anchor of their own and centre.
-    var canvasAnchor: CanvasAnchor {
+    var canvasAnchor: Gravity {
         switch self {
         case .center, .attention, .entropy: .center
         case .north: .north
@@ -256,7 +256,7 @@ extension ResizePosition {
 
 extension NativeImage {
     /// Extends to an exact canvas size. The canvas can only grow.
-    func extend(to size: ImageSize, anchor: CanvasAnchor, mode: ExtendMode) throws -> NativeImage {
+    func extend(to size: ImageSize, anchor: Gravity, mode: ExtendMode) throws -> NativeImage {
         guard size.width >= width, size.height >= height else {
             throw HokusaiError.invalidOption(name: "size", reason: "extend cannot reduce an image; use resize or extract")
         }
