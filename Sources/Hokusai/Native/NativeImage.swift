@@ -134,6 +134,42 @@ extension NativeImage {
         return image
     }
 
+    /// The libvips loader that opened this image, such as `jpegload` or
+    /// `jpegload_source`; `nil` for images that were not loaded from a file.
+    var loaderName: String? {
+        swift_vips_image_get_string_field(pointer, "vips-loader").map { String(cString: $0) }
+    }
+
+    /// Whether a decoder-level `shrink` can be requested for this source.
+    var supportsDecoderShrink: Bool {
+        loaderName?.hasPrefix("jpegload") == true
+    }
+
+    /// The EXIF orientation, 1 when absent.
+    var exifOrientation: Int { Int(vips_image_get_orientation(pointer)) }
+
+    /// Reopens a JPEG file with the decoder shrinking it by `factor` (2, 4 or 8).
+    static func open(path: String, options: InputOptions, decoderShrink factor: Int) throws -> NativeImage {
+        try VipsRuntime.ensureInitialized()
+        try requireReadableFile(path)
+        let name = URL(fileURLWithPath: path).lastPathComponent
+        return try opened(options: options, operation: "decode \(name)", reason: "could not decode the image file") { _ in
+            swift_vips_open_file_shrink(
+                path, options.access == .sequential ? 1 : 0, options.failOn.vipsValue, Int32(factor), options.revalidate ? 1 : 0)
+        }
+    }
+
+    /// Reopens encoded JPEG bytes with the decoder shrinking them by `factor` (2, 4 or 8).
+    static func open(data: Data, options: InputOptions, decoderShrink factor: Int) throws -> NativeImage {
+        try VipsRuntime.ensureInitialized()
+        return try opened(options: options, operation: "decode input data", reason: "could not decode the image data") { _ in
+            data.withUnsafeBytes { bytes in
+                swift_vips_open_buffer_shrink(
+                    bytes.baseAddress, data.count, options.access == .sequential ? 1 : 0, options.failOn.vipsValue, Int32(factor))
+            }
+        }
+    }
+
     /// The number of pages libvips reports; 1 for single-page formats.
     var pageCount: Int { Int(swift_vips_image_n_pages(pointer)) }
 

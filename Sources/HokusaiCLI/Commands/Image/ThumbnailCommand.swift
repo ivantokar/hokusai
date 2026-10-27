@@ -44,10 +44,11 @@ struct ThumbnailCommand: AsyncParsableCommand {
         }
     }
 
-    /// Builds the current pipeline-based thumbnail flow and saves its result.
+    /// Builds the thumbnail as `autoOrient` and `resize` on the public pipeline
+    /// and saves its result.
     ///
-    /// This command uses `autoOrient` and `resize`; it does not currently use
-    /// the separate shrink-on-load thumbnail API.
+    /// There is no separate thumbnail path: eligible JPEG sources get
+    /// shrink-on-load from the evaluator, as for any other `resize`.
     mutating func run() async throws {
         let prompt = PromptService()
         try Hokusai.initialize()

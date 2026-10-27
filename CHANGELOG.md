@@ -16,6 +16,18 @@ All notable changes to this project are documented in this file.
   AV1.
 
 ### Added
+- Shrink-on-load behind the normal `resize`. When a JPEG file or `Data` source
+  starts with `resize` (optionally after `autoOrient`) and the decoded image
+  would still have at least the pixels the resize needs, the decoder shrinks it
+  by 2, 4 or 8 before the remaining resample. Output dimensions are computed
+  from the full-resolution header, so they are exactly those of a normal decode
+  and resize; pixel values agree within codec tolerance. Any other operation
+  first, any other codec, an explicit `InputOptions.page`, or a source already
+  built for another consumer in the same evaluation keeps the normal path. No
+  API change. Measured on a 6000×4000 JPEG resized to 400×400 WebP (including
+  encoding, libvips cache bypassed): 31 ms to 14 ms for a smooth 0.7 MB file,
+  102 ms to 82 ms for a noise-dense 14 MB file, whose entropy decoding the
+  shrink cannot skip.
 - Geometry on the evaluator: `extend(top:left:bottom:right:mode:)` and
   `extend(to:anchor:mode:)` with `ExtendMode` (`.background`, `.copy`,
   `.repeat`, `.mirror`); `rotate(by:background:interpolation:)` using
