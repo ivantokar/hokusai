@@ -47,7 +47,8 @@ import Testing
     }
 
     @Test func formatWithoutTypedEncoderIsUnsupported() async throws {
-        let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("hokusai-\(UUID().uuidString).gif")
+        // SVG is an input format; it has no encoder to infer from the extension.
+        let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("hokusai-\(UUID().uuidString).svg")
         let error = await terminalError { try await self.image().write(to: url) }
         guard case HokusaiError.unsupported? = error else {
             Issue.record("expected unsupported, got \(String(describing: error))")

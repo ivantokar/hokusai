@@ -204,6 +204,9 @@ public enum OutputFormat: Sendable, Equatable {
     case png(PNGOptions = .init())
     case webp(WebPOptions = .init())
     case avif(AVIFOptions = .init())
+    case heif(HEIFOptions = .init())
+    case tiff(TIFFOptions = .init())
+    case gif(GIFOptions = .init())
     case pdf(PDFOptions = .init())
 
     /// The metadata format corresponding to this encoder choice.
@@ -213,37 +216,12 @@ public enum OutputFormat: Sendable, Equatable {
         case .png: .png
         case .webp: .webp
         case .avif: .avif
+        case .heif: .heif
+        case .tiff: .tiff
+        case .gif: .gif
         case .pdf: .pdf
         }
     }
-}
-
-/// JPEG encoder settings. Quality uses libvips' 0...100 convention.
-public struct JPEGOptions: Sendable, Equatable {
-    public var quality: Int
-    public var progressive: Bool
-    public init(quality: Int = 80, progressive: Bool = false) { self.quality = quality; self.progressive = progressive }
-}
-/// PNG encoder settings. Compression level follows libvips' 0...9 convention.
-public struct PNGOptions: Sendable, Equatable {
-    public var compressionLevel: Int
-    /// Adam7 interlacing: the image appears progressively while loading.
-    public var interlaced: Bool
-    public init(compressionLevel: Int = 6, interlaced: Bool = false) { self.compressionLevel = compressionLevel; self.interlaced = interlaced }
-}
-/// WebP encoder settings for lossy/lossless output and encoder effort.
-public struct WebPOptions: Sendable, Equatable {
-    public var quality: Int
-    public var effort: Int
-    public var lossless: Bool
-    public init(quality: Int = 80, effort: Int = 4, lossless: Bool = false) { self.quality = quality; self.effort = effort; self.lossless = lossless }
-}
-/// AVIF encoder settings for lossy/lossless output and encoder effort.
-public struct AVIFOptions: Sendable, Equatable {
-    public var quality: Int
-    public var effort: Int
-    public var lossless: Bool
-    public init(quality: Int = 50, effort: Int = 4, lossless: Bool = false) { self.quality = quality; self.effort = effort; self.lossless = lossless }
 }
 
 /// Encoded bytes and the stable facts measured from the evaluated output.

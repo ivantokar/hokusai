@@ -54,8 +54,14 @@ enum CLIParser {
             configured = try pipeline.avif(quality: quality ?? 50, effort: effort ?? 4, lossless: lossless)
         case .pdf:
             configured = try pipeline.pdf()
-        case .gif, .tiff, .heif, .svg:
-            throw ValidationError("The 1.0 pipeline CLI does not support output format: \(format.rawValue)")
+        case .heif:
+            configured = try pipeline.heif(quality: quality ?? 50, lossless: lossless)
+        case .tiff:
+            configured = try pipeline.tiff(quality: quality ?? 75)
+        case .gif:
+            configured = try pipeline.gif()
+        case .svg:
+            throw ValidationError("SVG is an input format and cannot be written")
         }
         // Without the flag the library's default policy applies unchanged;
         // the flag asks for the strict policy explicitly.

@@ -4,6 +4,29 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added (encoders, #23)
+- Typed `heif(...)` (explicit `HEIFCompression`: HEVC or AV1), `tiff(...)` and
+  still `gif(...)` encoders, with `.heic`/`.heif`/`.tif`/`.tiff`/`.gif`
+  extension inference in `write(to:)`. `OutputFormat` gains `.heif`, `.tiff`
+  and `.gif`; SVG is rejected as an output.
+- Curated options with typed values and no raw native integers: JPEG
+  `chromaSubsampling` and `optimizeCoding`; PNG `palette` (`PNGPalette`);
+  WebP `alphaQuality`, `nearLossless`, `smartSubsample` and `preset`; AVIF
+  `bitDepth` and `chromaSubsampling`; TIFF compression, predictor, tiling,
+  pyramid and BigTIFF; GIF dither, effort, bit depth and interlace.
+  `jpeg(options:)`, `png(options:)`, `webp(options:)`, `avif(options:)`,
+  `heif(options:)` and `tiff(options:)` take the full value, so the short
+  convenience signatures stay short.
+- `RuntimeCapabilities` reports TIFF, GIF and HEIF output, and
+  `heifCompressions` / `canEncode(_: HEIFCompression)` say which HEIF codecs
+  this build can encode and decode (HEVC is often missing). An unavailable
+  format or codec is `unsupported`, not a native failure.
+- The CLI `convert` command accepts `heif`, `tiff` and `gif`.
+
+### Fixed
+- Writing a TIFF to a file failed ("bad seek"): the file target could not seek
+  or read back. It now supports both, so every encoder works on both sinks.
+
 ### Changed (public API surface, #51)
 - **Breaking:** `Hokusai.rgba(red:green:blue:opacity:)` is removed. Colour
   belongs to `Color`: `Color.sRGB8(red:green:blue:alpha:)` takes `UInt8`

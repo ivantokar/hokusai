@@ -393,8 +393,14 @@ enum Evaluator {
         _ terminal: TerminalConfig,
         capabilities: @autoclosure () throws -> RuntimeCapabilities = try VipsRuntime.capabilities()
     ) throws -> SelectedEncoder {
-        guard try capabilities().canEncode(format.imageFormat) else {
+        let available = try capabilities()
+        guard available.canEncode(format.imageFormat) else {
             throw HokusaiError.unsupported(feature: "encoding \(format.imageFormat.rawValue)", reason: "not available in this libvips build")
+        }
+        if case .heif(let options) = format, !available.canEncode(options.compression) {
+            throw HokusaiError.unsupported(
+                feature: "encoding HEIF with \(options.compression == .hevc ? "HEVC" : "AV1")",
+                reason: "this libheif build has no encoder and decoder for that codec")
         }
         if case .pdf(let options) = format {
             return .pdf(options)

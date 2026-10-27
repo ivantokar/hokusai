@@ -60,10 +60,11 @@ static inline int swift_vips_operation_exists(const char *nickname) {
 /**
  * @brief Encode and fully decode a tiny AV1 HEIF image.
  *
- * Returns 0 when both an AV1 encoder and decoder are usable. libheif plugins
+ * Returns 0 when both an encoder and a decoder for the codec (AV1 when `av1` is
+ * nonzero, else HEVC) are usable. libheif plugins
  * are optional, so the presence of heifsave/heifload is not enough.
  */
-static inline int swift_vips_avif_roundtrip_probe(void) {
+static inline int swift_vips_heif_roundtrip_probe(int av1) {
     VipsImage *black = NULL;
     VipsImage *probe = NULL;
     VipsImage *decoded = NULL;
@@ -82,7 +83,8 @@ static inline int swift_vips_avif_roundtrip_probe(void) {
     if (copied) {
         return -1;
     }
-    if (!vips_heifsave_buffer(probe, &buffer, &length, "compression", VIPS_FOREIGN_HEIF_COMPRESSION_AV1, NULL) &&
+    if (!vips_heifsave_buffer(probe, &buffer, &length, "compression",
+                            av1 ? VIPS_FOREIGN_HEIF_COMPRESSION_AV1 : VIPS_FOREIGN_HEIF_COMPRESSION_HEVC, NULL) &&
         !vips_heifload_buffer(buffer, length, &decoded, NULL) &&
         !vips_avg(decoded, &mean, NULL)) {
         result = 0;
@@ -811,25 +813,87 @@ static inline int swift_vips_copy_with_resolution(VipsImage *in, VipsImage **out
  * suffix (AVIF versus HEIC) are always passed explicitly.
  */
 
-/** @brief Encode as JPEG into `target`. */
-static inline int swift_vips_jpegsave_target(VipsImage *in, VipsTarget *target, int quality, int interlace, int keep) {
-    return vips_jpegsave_target(in, target, "Q", quality, "interlace", interlace, "keep", keep, NULL);
+/** @brief Chroma subsampling: 0 automatic, 1 4:2:0, 2 4:4:4. */
+static inline VipsForeignSubsample swift_vips_subsample(int mode) {
+    return mode == 1 ? VIPS_FOREIGN_SUBSAMPLE_ON : mode == 2 ? VIPS_FOREIGN_SUBSAMPLE_OFF : VIPS_FOREIGN_SUBSAMPLE_AUTO;
 }
 
-/** @brief Encode as PNG into `target`; `interlace` selects Adam7 interlacing. */
-static inline int swift_vips_pngsave_target(VipsImage *in, VipsTarget *target, int compression, int interlace, int keep) {
+/** @brief Encode as JPEG into `target`. */
+static inline int swift_vips_jpegsave_target(
+    VipsImage *in, VipsTarget *target, int quality, int interlace, int subsample, int optimize_coding, int keep
+) {
+    return vips_jpegsave_target(in, target, "Q", quality, "interlace", interlace,
+        "subsample_mode", swift_vips_subsample(subsample), "optimize_coding", optimize_coding, "keep", keep, NULL);
+}
+
+/** @brief Encode as PNG into `target`. A nonzero `palette` quantises to an indexed image. */
+static inline int swift_vips_pngsave_target(
+    VipsImage *in, VipsTarget *target, int compression, int interlace,
+    int palette, int palette_quality, double dither, int effort, int bitdepth, int keep
+) {
+    if (palette) {
+        return vips_pngsave_target(in, target, "compression", compression, "interlace", interlace,
+            "palette", TRUE, "Q", palette_quality, "dither", dither, "effort", effort, "bitdepth", bitdepth,
+            "keep", keep, NULL);
+    }
     return vips_pngsave_target(in, target, "compression", compression, "interlace", interlace, "keep", keep, NULL);
 }
 
-/** @brief Encode as WebP into `target`. */
-static inline int swift_vips_webpsave_target(VipsImage *in, VipsTarget *target, int quality, int lossless, int effort, int keep) {
-    return vips_webpsave_target(in, target, "Q", quality, "lossless", lossless, "effort", effort, "keep", keep, NULL);
+/** @brief Encode as WebP into `target`; `preset` is 0 default, 1 picture, 2 photo, 3 drawing, 4 icon, 5 text. */
+static inline int swift_vips_webpsave_target(
+    VipsImage *in, VipsTarget *target, int quality, int lossless, int effort,
+    int alpha_quality, int near_lossless, int smart_subsample, int preset, int keep
+) {
+    static const VipsForeignWebpPreset presets[] = {
+        VIPS_FOREIGN_WEBP_PRESET_DEFAULT, VIPS_FOREIGN_WEBP_PRESET_PICTURE, VIPS_FOREIGN_WEBP_PRESET_PHOTO,
+        VIPS_FOREIGN_WEBP_PRESET_DRAWING, VIPS_FOREIGN_WEBP_PRESET_ICON, VIPS_FOREIGN_WEBP_PRESET_TEXT,
+    };
+    return vips_webpsave_target(in, target, "Q", quality, "lossless", lossless, "effort", effort,
+        "alpha_q", alpha_quality, "near_lossless", near_lossless, "smart_subsample", smart_subsample,
+        "preset", presets[preset], "keep", keep, NULL);
 }
 
 /** @brief Encode into a HEIF container with an explicit codec: AV1 (AVIF) when `av1` is nonzero, else HEVC (HEIC). */
-static inline int swift_vips_heifsave_target(VipsImage *in, VipsTarget *target, int quality, int lossless, int effort, int keep, int av1) {
-    return vips_heifsave_target(in, target, "Q", quality, "lossless", lossless, "effort", effort, "keep", keep,
+static inline int swift_vips_heifsave_target(
+    VipsImage *in, VipsTarget *target, int quality, int lossless, int effort, int bitdepth, int subsample, int keep, int av1
+) {
+    return vips_heifsave_target(in, target, "Q", quality, "lossless", lossless, "effort", effort,
+        "bitdepth", bitdepth, "subsample_mode", swift_vips_subsample(subsample), "keep", keep,
         "compression", av1 ? VIPS_FOREIGN_HEIF_COMPRESSION_AV1 : VIPS_FOREIGN_HEIF_COMPRESSION_HEVC, NULL);
+}
+
+/**
+ * @brief Encode as TIFF into `target`.
+ * `compression`: 0 none, 1 jpeg, 2 deflate, 3 packbits, 4 ccittfax4, 5 lzw, 6 webp, 7 zstd, 8 jpeg2000.
+ * `predictor`: 0 none, 1 horizontal, 2 float. `tile_width` of 0 writes strips.
+ */
+static inline int swift_vips_tiffsave_target(
+    VipsImage *in, VipsTarget *target, int compression, int quality, int predictor,
+    int tile_width, int tile_height, int pyramid, int bigtiff, int keep
+) {
+    static const VipsForeignTiffCompression compressions[] = {
+        VIPS_FOREIGN_TIFF_COMPRESSION_NONE, VIPS_FOREIGN_TIFF_COMPRESSION_JPEG, VIPS_FOREIGN_TIFF_COMPRESSION_DEFLATE,
+        VIPS_FOREIGN_TIFF_COMPRESSION_PACKBITS, VIPS_FOREIGN_TIFF_COMPRESSION_CCITTFAX4, VIPS_FOREIGN_TIFF_COMPRESSION_LZW,
+        VIPS_FOREIGN_TIFF_COMPRESSION_WEBP, VIPS_FOREIGN_TIFF_COMPRESSION_ZSTD, VIPS_FOREIGN_TIFF_COMPRESSION_JP2K,
+    };
+    static const VipsForeignTiffPredictor predictors[] = {
+        VIPS_FOREIGN_TIFF_PREDICTOR_NONE, VIPS_FOREIGN_TIFF_PREDICTOR_HORIZONTAL, VIPS_FOREIGN_TIFF_PREDICTOR_FLOAT,
+    };
+    if (tile_width > 0) {
+        return vips_tiffsave_target(in, target, "compression", compressions[compression], "Q", quality,
+            "predictor", predictors[predictor], "tile", TRUE, "tile_width", tile_width, "tile_height", tile_height,
+            "pyramid", pyramid, "bigtiff", bigtiff, "keep", keep, NULL);
+    }
+    return vips_tiffsave_target(in, target, "compression", compressions[compression], "Q", quality,
+        "predictor", predictors[predictor], "bigtiff", bigtiff, "keep", keep, NULL);
+}
+
+/** @brief Encode a single frame as GIF into `target`. */
+static inline int swift_vips_gifsave_target(
+    VipsImage *in, VipsTarget *target, double dither, int effort, int bitdepth, int interlace, int keep
+) {
+    return vips_gifsave_target(in, target, "dither", dither, "effort", effort, "bitdepth", bitdepth,
+        "interlace", interlace, "keep", keep, NULL);
 }
 
 /** @brief A target that collects encoded bytes in memory. */
@@ -891,23 +955,35 @@ static inline int swift_vips_file_sink_error(const SwiftVipsFileSink *sink) {
     return sink->error;
 }
 
-static gint64 swift_vips_file_sink_write(VipsTargetCustom *target, const void *data, gint64 length, void *user_data) {
-    SwiftVipsFileSink *sink = (SwiftVipsFileSink *) user_data;
-    if (sink->error != 0) {
-        return -1;
+/* Opens the destination on first use. It is opened read-write so formats that
+ * rewrite earlier bytes (TIFF) can seek and read back; a destination that
+ * cannot be read falls back to write-only and simply cannot seek.
+ * Returns 0, or -1 with the errno recorded. */
+static int swift_vips_file_sink_open(SwiftVipsFileSink *sink) {
+    if (sink->fd >= 0) {
+        return 0;
+    }
+    int flags = O_CREAT | O_TRUNC;
+#ifdef O_CLOEXEC
+    flags |= O_CLOEXEC;
+#endif
+    sink->fd = open(sink->path, flags | O_RDWR, 0666);
+    if (sink->fd < 0 && (errno == EACCES || errno == EISDIR || errno == EPERM)) {
+        sink->fd = open(sink->path, flags | O_WRONLY, 0666);
     }
     if (sink->fd < 0) {
-        int flags = O_WRONLY | O_CREAT | O_TRUNC;
-#ifdef O_CLOEXEC
-        flags |= O_CLOEXEC;
-#endif
-        sink->fd = open(sink->path, flags, 0666);
-        if (sink->fd < 0) {
-            sink->error = errno;
-            return -1;
-        }
-        struct stat info;
-        sink->is_regular = fstat(sink->fd, &info) == 0 && S_ISREG(info.st_mode);
+        sink->error = errno;
+        return -1;
+    }
+    struct stat info;
+    sink->is_regular = fstat(sink->fd, &info) == 0 && S_ISREG(info.st_mode);
+    return 0;
+}
+
+static gint64 swift_vips_file_sink_write(VipsTargetCustom *target, const void *data, gint64 length, void *user_data) {
+    SwiftVipsFileSink *sink = (SwiftVipsFileSink *) user_data;
+    if (sink->error != 0 || swift_vips_file_sink_open(sink) != 0) {
+        return -1;
     }
     const char *cursor = (const char *) data;
     gint64 remaining = length;
@@ -922,15 +998,52 @@ static gint64 swift_vips_file_sink_write(VipsTargetCustom *target, const void *d
         }
         cursor += count;
         remaining -= count;
-        sink->written += count;
+        if (!sink->is_regular) {
+            sink->written += count;
+        }
+    }
+    if (sink->is_regular) {
+        /* The size is the furthest byte written, since seekable formats overwrite. */
+        off_t position = lseek(sink->fd, 0, SEEK_CUR);
+        if (position > sink->written) {
+            sink->written = position;
+        }
     }
     return length;
+}
+
+static gint64 swift_vips_file_sink_read(VipsTargetCustom *target, void *data, gint64 length, void *user_data) {
+    SwiftVipsFileSink *sink = (SwiftVipsFileSink *) user_data;
+    if (sink->error != 0 || swift_vips_file_sink_open(sink) != 0) {
+        return -1;
+    }
+    for (;;) {
+        ssize_t count = read(sink->fd, data, (size_t) length);
+        if (count >= 0) {
+            return count;
+        }
+        if (errno != EINTR) {
+            return -1;
+        }
+    }
+}
+
+/* A failed seek is not an I/O error of the destination: the format simply
+ * cannot be written to something unseekable, and libvips reports that. */
+static gint64 swift_vips_file_sink_seek(VipsTargetCustom *target, gint64 offset, int whence, void *user_data) {
+    SwiftVipsFileSink *sink = (SwiftVipsFileSink *) user_data;
+    if (sink->error != 0 || swift_vips_file_sink_open(sink) != 0) {
+        return -1;
+    }
+    return lseek(sink->fd, (off_t) offset, whence);
 }
 
 /** @brief A target that writes to `sink`. The caller keeps `sink` alive until the target is released. */
 static inline VipsTarget *swift_vips_file_target_new(SwiftVipsFileSink *sink) {
     VipsTargetCustom *target = vips_target_custom_new();
     g_signal_connect(target, "write", G_CALLBACK(swift_vips_file_sink_write), sink);
+    g_signal_connect(target, "read", G_CALLBACK(swift_vips_file_sink_read), sink);
+    g_signal_connect(target, "seek", G_CALLBACK(swift_vips_file_sink_seek), sink);
     return VIPS_TARGET(target);
 }
 
