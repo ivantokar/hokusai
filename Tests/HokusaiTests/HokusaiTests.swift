@@ -50,28 +50,6 @@ import Testing
         #expect(try output.height == 1)
     }
 
-    @Test func drawTextWithVipsBackend() throws {
-        let data = try loadFixtureData(named: "pixel", ext: "png")
-        let image = try Hokusai.image(from: data)
-        let canvas = try image.resize(width: 256, height: 128)
-
-        var options = TextOptions()
-        options.font = "sans"
-        options.fontSize = 20
-        options.color = [255, 255, 255, 255]
-        options.strokeColor = [0, 0, 0, 255]
-        options.strokeWidth = 1
-        options.shadowOffset = (x: 1, y: 1)
-        options.shadowColor = [0, 0, 0, 150]
-
-        let output = try canvas.drawText("A", x: 24, y: 48, options: options)
-        let png = try output.toBuffer(options: SaveOptions(format: .png))
-
-        #expect(try output.width == 256)
-        #expect(try output.height == 128)
-        #expect(!png.isEmpty)
-    }
-
     // MARK: - Sequential Access
 
     @Test func loadWithSequentialAccess() throws {

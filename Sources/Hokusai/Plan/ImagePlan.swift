@@ -86,10 +86,13 @@ enum ImageSource: Sendable {
     case file(URL, InputOptions)
     /// Owned encoded bytes, shared copy-on-write between branches.
     case data(Data, InputOptions)
+    /// Generated text, rendered at evaluation time.
+    case text(TextSource)
 
     var options: InputOptions {
         switch self {
         case .file(_, let options), .data(_, let options): options
+        case .text: InputOptions()
         }
     }
 
@@ -98,6 +101,7 @@ enum ImageSource: Sendable {
         switch self {
         case .file(let url, _): "decode \(url.lastPathComponent)"
         case .data: "decode input data"
+        case .text: "render text"
         }
     }
 }
@@ -134,7 +138,6 @@ enum ImageOperation: Sendable {
     case removeAlpha
     case flatten(background: Color)
     case composite([LayerStep], space: CompositingSpace = .srgb)
-    case drawText(String, x: Int, y: Int, options: TextOptions)
 
     /// The operation name used in typed error contexts.
     var name: String {
@@ -165,7 +168,6 @@ enum ImageOperation: Sendable {
         case .removeAlpha: "remove alpha"
         case .flatten: "flatten"
         case .composite: "composite layer"
-        case .drawText: "draw text"
         }
     }
 }

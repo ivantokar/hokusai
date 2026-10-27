@@ -488,37 +488,11 @@ static inline int swift_vips_getpoint(VipsImage *in, int x, int y, double *value
     return n;
 }
 
-static inline int swift_vips_text(VipsImage **out, const char *text, const char *font, int dpi, VipsAlign align) {
-    return vips_text(out, text, "font", font, "dpi", dpi, "align", align, NULL);
-}
-
-static inline int swift_vips_text_full(
-    VipsImage **out,
-    const char *text,
-    const char *font,
-    int width,
-    int height,
-    int dpi,
-    VipsAlign align,
-    int spacing,
-    int rgba
-) {
-    // Forward full layout and RGBA controls to libvips text rendering.
-    return vips_text(
-        out,
-        text,
-        "font", font,
-        "width", width,
-        "height", height,
-        "dpi", dpi,
-        "align", align,
-        "spacing", spacing,
-        "rgba", rgba,
-        NULL
-    );
-}
-
-static inline int swift_vips_text_full_fontfile(
+/**
+ * @brief Renders RGBA text. `fontfile` may be NULL and `dpi` 0, which leaves
+ * libvips to choose the resolution when both `width` and `height` are set.
+ */
+static inline int swift_vips_text_render(
     VipsImage **out,
     const char *text,
     const char *font,
@@ -527,27 +501,46 @@ static inline int swift_vips_text_full_fontfile(
     int height,
     int dpi,
     VipsAlign align,
+    int justify,
     int spacing,
-    int rgba
+    VipsTextWrap wrap
 ) {
-    // Include a font-file override only when the caller supplied one.
-    if (fontfile && fontfile[0] != '\0') {
-        return vips_text(
-            out,
-            text,
-            "font", font,
-            "fontfile", fontfile,
-            "width", width,
-            "height", height,
-            "dpi", dpi,
-            "align", align,
-            "spacing", spacing,
-            "rgba", rgba,
-            NULL
-        );
+    if (fontfile && dpi > 0) {
+        return vips_text(out, text, "font", font, "fontfile", fontfile, "width", width, "height", height,
+                         "dpi", dpi, "align", align, "justify", justify, "spacing", spacing, "wrap", wrap,
+                         "rgba", TRUE, NULL);
     }
+    if (fontfile) {
+        return vips_text(out, text, "font", font, "fontfile", fontfile, "width", width, "height", height,
+                         "align", align, "justify", justify, "spacing", spacing, "wrap", wrap,
+                         "rgba", TRUE, NULL);
+    }
+    if (dpi > 0) {
+        return vips_text(out, text, "font", font, "width", width, "height", height,
+                         "dpi", dpi, "align", align, "justify", justify, "spacing", spacing, "wrap", wrap,
+                         "rgba", TRUE, NULL);
+    }
+    return vips_text(out, text, "font", font, "width", width, "height", height,
+                     "align", align, "justify", justify, "spacing", spacing, "wrap", wrap,
+                     "rgba", TRUE, NULL);
+}
 
-    return swift_vips_text_full(out, text, font, width, height, dpi, align, spacing, rgba);
+/** @brief Binary dilation of a uchar image by a round structuring element of `radius` pixels. */
+static inline int swift_vips_dilate_round(VipsImage *in, VipsImage **out, int radius) {
+    int size = radius * 2 + 1;
+    double *values = g_new0(double, size * size);
+    for (int y = 0; y < size; y++) {
+        for (int x = 0; x < size; x++) {
+            int dx = x - radius, dy = y - radius;
+            values[y * size + x] = (dx * dx + dy * dy <= radius * radius) ? 255 : 0;
+        }
+    }
+    VipsImage *mask = vips_image_new_matrix_from_array(size, size, values, size * size);
+    g_free(values);
+    if (!mask) return -1;
+    int result = vips_morph(in, out, mask, VIPS_OPERATION_MORPHOLOGY_DILATE, NULL);
+    g_object_unref(mask);
+    return result;
 }
 
 static inline int swift_vips_find_trim(
