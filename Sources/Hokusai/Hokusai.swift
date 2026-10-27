@@ -79,15 +79,6 @@ public struct Hokusai: Sendable {
         self.init(plan: .source(.file(url, options)))
     }
 
-    /// Converts conventional 8-bit RGBA components into Hokusai's unit-range
-    /// ``Color`` value.
-    ///
-    /// Use this at boundaries that receive CSS- or UI-style colour values:
-    /// `Hokusai.rgba(red: 255, green: 255, blue: 255)`.
-    public static func rgba(red: Double, green: Double, blue: Double, opacity: Double = 255) -> Color {
-        Color(red: red / 255, green: green / 255, blue: blue / 255, opacity: opacity / 255)
-    }
-
     // MARK: - Pipeline transformations
 
     /// Applies the source EXIF orientation before later transformations.
@@ -483,9 +474,10 @@ public struct Hokusai: Sendable {
         try encode(as: .jpeg(.init(quality: quality, progressive: progressive)))
     }
 
-    /// Selects PNG output with a compression level from 0 through 9.
-    public func png(compressionLevel: Int = 6, progressive: Bool = false) throws -> Self {
-        try encode(as: .png(.init(compressionLevel: compressionLevel, progressive: progressive)))
+    /// Selects PNG output with a compression level from 0 through 9, and
+    /// optional Adam7 interlacing.
+    public func png(compressionLevel: Int = 6, interlaced: Bool = false) throws -> Self {
+        try encode(as: .png(.init(compressionLevel: compressionLevel, interlaced: interlaced)))
     }
 
     /// Selects WebP output.
@@ -639,19 +631,6 @@ public struct Hokusai: Sendable {
     ///   not be initialized. The failure is final for the process.
     public static func initialize() throws {
         try VipsRuntime.ensureInitialized()
-    }
-
-    // MARK: - Version Information
-
-    /// The version string reported by the linked libvips runtime.
-    public static var vipsVersion: String {
-        guard let version = vips_version_string() else { return "unknown" }
-        return String(cString: version)
-    }
-
-    /// A human-readable Hokusai and libvips version summary.
-    public static var version: String {
-        return "Hokusai (libvips \(vipsVersion))"
     }
 
     // MARK: - Runtime configuration

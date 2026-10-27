@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed (public API surface, #51)
+- **Breaking:** `Hokusai.rgba(red:green:blue:opacity:)` is removed. Colour
+  belongs to `Color`: `Color.sRGB8(red:green:blue:alpha:)` takes `UInt8`
+  components, so out-of-range byte values cannot be written.
+- **Breaking:** `OutputInfo.size` is `OutputInfo.byteCount`; `width` and
+  `height` remain pixels.
+- **Breaking:** PNG `progressive` is `interlaced` (`png(compressionLevel:interlaced:)`,
+  `PNGOptions.interlaced`). JPEG keeps `progressive`.
+- **Breaking:** `Hokusai.vipsVersion` and `Hokusai.version` are removed; the
+  libvips version is `Hokusai.capabilities().libvipsVersion`.
+- `OutputFormat`, the four encoder option structs and `Output` are `Equatable`.
+
 ### Removed (legacy API, #32)
 - **Breaking:** `HokusaiImage`, `ImageBackend`, `ImageData`, `BackendType` and
   `VipsBackend`. `Hokusai` is the only image model; native ownership stays in

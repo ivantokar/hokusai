@@ -131,7 +131,7 @@ metadata.sourceByteSize     // exact for Data, the file size for a file
 
 ### Output
 
-One encoder configuration means the same thing wherever it is written: `data()` and `write(to:)` apply identical codec options, so `png(progressive: true)`, `jpeg(progressive: true)`, `webp(lossless: true)` and `avif(...)` produce the same bytes in memory and on disk. `.avif()` always encodes AV1, never the HEVC that libvips picks by default, and `OutputInfo.format` names the format that was actually encoded.
+One encoder configuration means the same thing wherever it is written: `data()` and `write(to:)` apply identical codec options, so `png(interlaced: true)`, `jpeg(progressive: true)`, `webp(lossless: true)` and `avif(...)` produce the same bytes in memory and on disk. `.avif()` always encodes AV1, never the HEVC that libvips picks by default, and `OutputInfo.format` names the format that was actually encoded.
 
 - `data()` needs an explicit encoder (`.jpeg()`, `.png()`, `.webp()`, `.avif()`, `.pdf()`), because a pipeline can originate from several sources and "same as the input" has no meaning.
 - `write(to:)` infers the encoder from the file extension only when you did not select one. An explicit encoder always wins, so choose a matching extension yourself: `.png().write(to: "a.jpg")` writes PNG data.

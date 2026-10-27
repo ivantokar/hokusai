@@ -65,7 +65,7 @@ struct BenchmarkPipelineCommand: AsyncParsableCommand {
         let inputDescription = "\(metadata.width)x\(metadata.height) \(metadata.pixel.hasAlpha ? "RGBA" : "RGB") (\(metadata.format?.rawValue ?? "unknown"))"
         prompt.header("WebP Pipeline Benchmark")
         prompt.panel("Environment", items: [
-            ("libvips", Hokusai.vipsVersion),
+            ("libvips", try Hokusai.capabilities().libvipsVersion),
             ("Concurrency", Hokusai.runtimeStatus.vipsConcurrency.map(String.init) ?? "unknown"),
             ("Input", inputDescription),
             ("WebP", "Q\(quality), effort \(effort)"),

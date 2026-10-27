@@ -47,7 +47,7 @@ enum CLIParser {
         case .jpeg:
             configured = try pipeline.jpeg(quality: quality ?? 80, progressive: progressive)
         case .png:
-            configured = try pipeline.png(compressionLevel: compression ?? 6, progressive: progressive)
+            configured = try pipeline.png(compressionLevel: compression ?? 6, interlaced: progressive)
         case .webp:
             configured = try pipeline.webp(quality: quality ?? 80, effort: effort ?? 4, lossless: lossless)
         case .avif:

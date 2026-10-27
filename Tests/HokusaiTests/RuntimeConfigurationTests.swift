@@ -1,3 +1,4 @@
+import CVips
 import Foundation
 import Testing
 @testable import Hokusai
@@ -65,7 +66,7 @@ import Testing
     @Test func capabilitiesDescribeTheBaselineBuild() throws {
         let capabilities = try Hokusai.capabilities()
 
-        #expect(capabilities.libvipsVersion == Hokusai.vipsVersion)
+        #expect(capabilities.libvipsVersion == String(cString: vips_version_string()))
         for format in [ImageFormat.jpeg, .png, .webp] {
             #expect(capabilities.canDecode(format))
             #expect(capabilities.canEncode(format))

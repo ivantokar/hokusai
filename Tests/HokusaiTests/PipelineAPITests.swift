@@ -18,7 +18,7 @@ import NIOCore
         #expect(output.info.format == .webp)
         #expect(output.info.width == 80)
         #expect(output.info.height == 80)
-        #expect(output.info.size == output.data.count)
+        #expect(output.info.byteCount == output.data.count)
         #expect(!output.data.isEmpty)
     }
 
