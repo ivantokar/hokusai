@@ -61,12 +61,16 @@ import Testing
 
     @Test func theShrinkNeverLeavesFewerPixelsThanTheResizeNeeds() throws {
         // 320 wide: /8 gives 40, /4 gives 80. A 60 pixel target needs /4.
-        #expect(try run(landscape().resize(width: 60)).shrinkFactors == [4])
+        let actual11 = try run(landscape().resize(width: 60)).shrinkFactors
+        #expect(actual11 == [4])
         // A 41 pixel target is just above what /8 leaves.
-        #expect(try run(landscape().resize(width: 41)).shrinkFactors == [4])
+        let actual12 = try run(landscape().resize(width: 41)).shrinkFactors
+        #expect(actual12 == [4])
         // A target at or above the source size cannot shrink at all.
-        #expect(try run(landscape().resize(width: 320)).shrinkFactors.isEmpty)
-        #expect(try run(landscape().resize(width: 640)).shrinkFactors.isEmpty)
+        let actual13 = try run(landscape().resize(width: 320)).shrinkFactors.isEmpty
+        #expect(actual13)
+        let actual14 = try run(landscape().resize(width: 640)).shrinkFactors.isEmpty
+        #expect(actual14)
     }
 
     @Test func autoOrientMayPrecedeTheResize() throws {
@@ -94,25 +98,31 @@ import Testing
         case "rotate": leading = try base.rotate(by: 90)
         default: leading = try base.trim()
         }
-        #expect(try run(leading.resize(width: 30)).shrinkFactors.isEmpty)
+        let actual15 = try run(leading.resize(width: 30)).shrinkFactors.isEmpty
+        #expect(actual15)
     }
 
     @Test func onlyTheLeadingResizeDecidesTheShrink() throws {
         // 320 → 160 can shrink by 2; the later resize to 30 cannot reach back.
-        #expect(try run(landscape().resize(width: 160).resize(width: 30)).shrinkFactors == [2])
+        let actual16 = try run(landscape().resize(width: 160).resize(width: 30)).shrinkFactors
+        #expect(actual16 == [2])
         // A leading resize that needs the full size blocks the whole chain.
-        #expect(try run(landscape().resize(width: 200).resize(width: 30)).shrinkFactors.isEmpty)
+        let actual17 = try run(landscape().resize(width: 200).resize(width: 30)).shrinkFactors.isEmpty
+        #expect(actual17)
     }
 
     @Test func theRuleCanBeDisabled() throws {
-        #expect(try run(landscape().resize(width: 30), planner: forcedNormal).shrinkFactors.isEmpty)
-        #expect(try run(landscape().resize(width: 30), planner: .reference).shrinkFactors.isEmpty)
+        let actual18 = try run(landscape().resize(width: 30), planner: forcedNormal).shrinkFactors.isEmpty
+        #expect(actual18)
+        let actual19 = try run(landscape().resize(width: 30), planner: .reference).shrinkFactors.isEmpty
+        #expect(actual19)
     }
 
     @Test func anExplicitPageDisablesIt() throws {
         let data = try loadFixtureData(named: "landscape-asym", ext: "jpg")
         let source = try Hokusai(data: data, options: InputOptions(page: 0))
-        #expect(try run(source.resize(width: 30)).shrinkFactors.isEmpty)
+        let actual20 = try run(source.resize(width: 30)).shrinkFactors.isEmpty
+        #expect(actual20)
     }
 
     // MARK: - Equivalence with the normal path
@@ -151,7 +161,8 @@ import Testing
         let normal = try run(pipeline, planner: forcedNormal)
         #expect(!optimised.shrinkFactors.isEmpty)
         #expect((optimised.image.width, optimised.image.height) == (normal.image.width, normal.image.height))
-        #expect(try meanDifference(optimised.image, normal.image) < 25)
+        let actual21 = try meanDifference(optimised.image, normal.image)
+        #expect(actual21 < 25)
     }
 
     @Test func pixelsAgreeWithinCodecTolerance() throws {
@@ -159,7 +170,8 @@ import Testing
         let optimised = try run(pipeline)
         let normal = try run(pipeline, planner: forcedNormal)
         #expect(!optimised.shrinkFactors.isEmpty)
-        #expect(try meanDifference(optimised.image, normal.image) < 20)
+        let actual22 = try meanDifference(optimised.image, normal.image)
+        #expect(actual22 < 20)
     }
 
     @Test func attentionCropStillFindsTheDetailBlock() throws {
