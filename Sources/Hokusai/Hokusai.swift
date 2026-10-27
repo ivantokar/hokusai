@@ -238,12 +238,32 @@ public struct Hokusai: Sendable {
     /// Removes edges whose pixels are similar to the image background.
     ///
     /// `threshold` controls tolerance: lower values remove only nearly
-    /// identical borders, while higher values remove a broader range.
+    /// identical borders, while higher values remove a broader range. The
+    /// scan runs when the pipeline is evaluated, not here.
     public func trim(threshold: Double = 10) throws -> Self {
-        guard threshold.isFinite, threshold >= 0 else {
-            throw HokusaiError.invalidOption(name: "threshold", reason: "must be a finite value greater than or equal to zero")
-        }
-        return appending(.trim(threshold: threshold))
+        try trim(TrimOptions(threshold: threshold))
+    }
+
+    /// Removes the border around the content, with control over how the
+    /// background is chosen and how much of it is kept.
+    ///
+    /// The background defaults to the top-left pixel. An image that is all
+    /// background is left unchanged rather than cropped to nothing.
+    public func trim(_ options: TrimOptions) throws -> Self {
+        try options.validate()
+        return appending(.trim(options))
+    }
+
+    /// Crops to `width` × `height` around the most interesting region, without resizing.
+    ///
+    /// A size larger than the image at that point in the pipeline is
+    /// clamped to the image. Use ``resize(width:height:fit:position:kernel:withoutEnlargement:withoutReduction:background:)``
+    /// with `.cover` to scale and crop in one step, and ``extract(x:y:width:height:)``
+    /// for a fixed rectangle.
+    public func smartCrop(width: Int, height: Int, strategy: SmartCropStrategy = .attention) throws -> Self {
+        try Self.validate(dimension: width, name: "width")
+        try Self.validate(dimension: height, name: "height")
+        return appending(.smartCrop(width: width, height: height, strategy: strategy))
     }
 
     /// Applies a Gaussian blur.

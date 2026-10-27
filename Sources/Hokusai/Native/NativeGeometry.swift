@@ -222,9 +222,9 @@ extension NativeImage {
         }
         switch position {
         case .attention:
-            return try applying("smart crop") { swift_vips_smartcrop($0, $1, Int32(width), Int32(height), VIPS_INTERESTING_ATTENTION) }
+            return try smartCrop(width: width, height: height, strategy: .attention)
         case .entropy:
-            return try applying("smart crop") { swift_vips_smartcrop($0, $1, Int32(width), Int32(height), VIPS_INTERESTING_ENTROPY) }
+            return try smartCrop(width: width, height: height, strategy: .entropy)
         default:
             let anchor = position.canvasAnchor
             // The crop box sits inside the image, so offsets are clamped at zero.

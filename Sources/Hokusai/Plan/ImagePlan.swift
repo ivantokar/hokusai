@@ -120,7 +120,8 @@ enum ImageOperation: Sendable {
     case extend(to: ImageSize, anchor: Gravity, mode: ExtendMode)
     case extendEdges(top: Int, left: Int, bottom: Int, right: Int, mode: ExtendMode)
     case affine(AffineStep)
-    case trim(threshold: Double)
+    case trim(TrimOptions)
+    case smartCrop(width: Int, height: Int, strategy: SmartCropStrategy)
     case blur(sigma: Double, precision: BlurPrecision = .integer, minAmplitude: Double = 0.2)
     case sharpen(SharpenOptions)
     case grayscale
@@ -151,6 +152,7 @@ enum ImageOperation: Sendable {
         case .extend, .extendEdges: "extend"
         case .affine: "affine"
         case .trim: "trim"
+        case .smartCrop: "smart crop"
         case .blur: "blur"
         case .sharpen: "sharpen"
         case .grayscale: "grayscale"

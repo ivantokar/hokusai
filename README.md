@@ -180,7 +180,7 @@ let image = try base
 let badge = try Hokusai.text("SALE", layout: .fit(width: 300, height: 120)).png().data()
 ```
 
-Core operations include resize, extract, rotate, auto-orient, composite, blur, sharpen, trim, tint, flatten/remove alpha, metadata inspection, and typed JPEG/PNG/WebP/AVIF output.
+Core operations include resize, extract, rotate, auto-orient, composite, blur, sharpen, trim (with background, line-art and margin controls), smart crop, tint, flatten/remove alpha, metadata inspection, and typed JPEG/PNG/WebP/AVIF output.
 
 ## PDF output
 
