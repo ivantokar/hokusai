@@ -237,12 +237,14 @@ import Testing
     @Test func aMissingFontFileIsATypedReadError() throws {
         let missing = URL(fileURLWithPath: "/nonexistent/Font.ttf")
         let pipeline = try text("x", style: TextStyle(fontFile: missing))
-        let error = #expect(throws: HokusaiError.self) { try render(pipeline) }
-        guard case .io(_, let operation, _)? = error else {
-            Issue.record("expected an io error, got \(String(describing: error))")
-            return
+        do {
+            _ = try render(pipeline)
+            Issue.record("expected an io error")
+        } catch HokusaiError.io(_, let operation, _) {
+            #expect(operation == .read)
+        } catch {
+            Issue.record("expected an io error, got \(error)")
         }
-        #expect(operation == .read)
     }
 
     @Test func aFontFileRendersWhenTheBuildSupportsIt() throws {
