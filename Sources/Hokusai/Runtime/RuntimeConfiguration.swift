@@ -99,6 +99,29 @@ public struct RuntimeCapabilities: Sendable, Hashable {
     /// Whether `drawText` can render text (libvips built with Pango/Cairo).
     public let textRendering: Bool
 
+    /// The HEIF codecs this build can both encode and decode. `.av1` is what
+    /// AVIF needs; `.hevc` is what `.heic` files need and is often missing.
+    public let heifCompressions: Set<HEIFCompression>
+
+    /// Whether palette (indexed) PNG output works. It needs libimagequant or
+    /// quantizr; without them libvips would silently write full colour.
+    public let pngPalette: Bool
+
+    /// Whether the HEIF encoder can use `compression`.
+    public func canEncode(_ compression: HEIFCompression) -> Bool { heifCompressions.contains(compression) }
+
+    init(
+        libvipsVersion: String, inputFormats: Set<ImageFormat>, outputFormats: Set<ImageFormat>,
+        textRendering: Bool, heifCompressions: Set<HEIFCompression> = [], pngPalette: Bool = false
+    ) {
+        self.libvipsVersion = libvipsVersion
+        self.inputFormats = inputFormats
+        self.outputFormats = outputFormats
+        self.textRendering = textRendering
+        self.heifCompressions = heifCompressions
+        self.pngPalette = pngPalette
+    }
+
     /// Whether `format` can be decoded.
     public func canDecode(_ format: ImageFormat) -> Bool { inputFormats.contains(format) }
 

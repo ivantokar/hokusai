@@ -75,7 +75,7 @@ import Testing
         #expect(capabilities.canEncode(.pdf))
         #expect(capabilities.textRendering)
         // Only formats with a typed Hokusai encoder are reported as outputs.
-        #expect(capabilities.outputFormats.isSubset(of: [.jpeg, .png, .webp, .avif, .pdf]))
+        #expect(capabilities.outputFormats.isSubset(of: [.jpeg, .png, .webp, .avif, .heif, .tiff, .gif, .pdf]))
     }
 
     @Test(.enabled(if: (try? Hokusai.capabilities().canEncode(.avif)) ?? false, "AVIF not available in this libvips build"))

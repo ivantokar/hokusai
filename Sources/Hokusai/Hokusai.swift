@@ -470,15 +470,23 @@ public struct Hokusai: Sendable {
     }
 
     /// Selects JPEG output with optional progressive encoding.
+    ///
+    /// Chroma subsampling and Huffman optimisation are in ``JPEGOptions``.
     public func jpeg(quality: Int = 80, progressive: Bool = false) throws -> Self {
         try encode(as: .jpeg(.init(quality: quality, progressive: progressive)))
     }
+
+    /// Selects JPEG output from a full options value.
+    public func jpeg(options: JPEGOptions) throws -> Self { try encode(as: .jpeg(options)) }
 
     /// Selects PNG output with a compression level from 0 through 9, and
     /// optional Adam7 interlacing.
     public func png(compressionLevel: Int = 6, interlaced: Bool = false) throws -> Self {
         try encode(as: .png(.init(compressionLevel: compressionLevel, interlaced: interlaced)))
     }
+
+    /// Selects PNG output from a full options value, including palette mode.
+    public func png(options: PNGOptions) throws -> Self { try encode(as: .png(options)) }
 
     /// Selects WebP output.
     ///
@@ -488,10 +496,39 @@ public struct Hokusai: Sendable {
         try encode(as: .webp(.init(quality: quality, effort: effort, lossless: lossless)))
     }
 
+    /// Selects WebP output from a full options value.
+    public func webp(options: WebPOptions) throws -> Self { try encode(as: .webp(options)) }
+
     /// Selects AVIF output.
     public func avif(quality: Int = 50, effort: Int = 4, lossless: Bool = false) throws -> Self {
         try encode(as: .avif(.init(quality: quality, effort: effort, lossless: lossless)))
     }
+
+    /// Selects AVIF output from a full options value. The codec is always AV1.
+    public func avif(options: AVIFOptions) throws -> Self { try encode(as: .avif(options)) }
+
+    /// Selects HEIF output with an explicit codec (HEVC by default, as in `.heic`).
+    ///
+    /// Whether the codec is available depends on the libvips build; check
+    /// ``RuntimeCapabilities/canEncode(_:)-(HEIFCompression)``. It is reported
+    /// when the pipeline is evaluated.
+    public func heif(compression: HEIFCompression = .hevc, quality: Int = 50, lossless: Bool = false) throws -> Self {
+        try encode(as: .heif(.init(compression: compression, quality: quality, lossless: lossless)))
+    }
+
+    /// Selects HEIF output from a full options value.
+    public func heif(options: HEIFOptions) throws -> Self { try encode(as: .heif(options)) }
+
+    /// Selects TIFF output with the given compression.
+    public func tiff(compression: TIFFCompression = .none, quality: Int = 75) throws -> Self {
+        try encode(as: .tiff(.init(compression: compression, quality: quality)))
+    }
+
+    /// Selects TIFF output from a full options value, including tiling and BigTIFF.
+    public func tiff(options: TIFFOptions) throws -> Self { try encode(as: .tiff(options)) }
+
+    /// Selects still GIF output. Animation is not part of this encoder.
+    public func gif(options: GIFOptions = GIFOptions()) throws -> Self { try encode(as: .gif(options)) }
 
     /// Configures a one-page Cairo PDF document from the current image pipeline.
     ///
@@ -591,13 +628,49 @@ public struct Hokusai: Sendable {
     }
 
     private static func validate(output: OutputFormat) throws {
-        func quality(_ value: Int) throws { guard (1...100).contains(value) else { throw HokusaiError.invalidOption(name: "quality", reason: "must be in 1...100") } }
-        func effort(_ value: Int) throws { guard (0...9).contains(value) else { throw HokusaiError.invalidOption(name: "effort", reason: "must be in 0...9") } }
+        func range(_ name: String, _ value: Int, _ bounds: ClosedRange<Int>) throws {
+            guard bounds.contains(value) else {
+                throw HokusaiError.invalidOption(name: name, reason: "must be in \(bounds.lowerBound)...\(bounds.upperBound)")
+            }
+        }
+        func unit(_ name: String, _ value: Double) throws {
+            guard value.isFinite, (0...1).contains(value) else { throw HokusaiError.invalidOption(name: name, reason: "must be in 0...1") }
+        }
         switch output {
-        case .jpeg(let options): try quality(options.quality)
-        case .png(let options): guard (0...9).contains(options.compressionLevel) else { throw HokusaiError.invalidOption(name: "compressionLevel", reason: "must be in 0...9") }
-        case .webp(let options): try quality(options.quality); try effort(options.effort)
-        case .avif(let options): try quality(options.quality); try effort(options.effort)
+        case .jpeg(let options):
+            try range("quality", options.quality, 1...100)
+        case .png(let options):
+            try range("compressionLevel", options.compressionLevel, 0...9)
+            if let palette = options.palette {
+                try range("palette.quality", palette.quality, 0...100)
+                try unit("palette.dither", palette.dither)
+                try range("palette.effort", palette.effort, 1...10)
+                try range("palette.bitDepth", palette.bitDepth, 1...8)
+                guard [1, 2, 4, 8].contains(palette.bitDepth) else {
+                    throw HokusaiError.invalidOption(name: "palette.bitDepth", reason: "must be 1, 2, 4 or 8")
+                }
+            }
+        case .webp(let options):
+            try range("quality", options.quality, 1...100)
+            try range("effort", options.effort, 0...6)
+            try range("alphaQuality", options.alphaQuality, 0...100)
+        case .avif(let options):
+            try range("quality", options.quality, 1...100)
+            try range("effort", options.effort, 0...9)
+        case .heif(let options):
+            try range("quality", options.quality, 1...100)
+            try range("effort", options.effort, 0...9)
+        case .tiff(let options):
+            try range("quality", options.quality, 1...100)
+            if let tiling = options.tiling {
+                try range("tiling.width", tiling.width, 16...32768)
+                try range("tiling.height", tiling.height, 16...32768)
+                guard tiling.width % 16 == 0, tiling.height % 16 == 0 else {
+                    throw HokusaiError.invalidOption(name: "tiling", reason: "width and height must be multiples of 16")
+                }
+            }
+        case .gif(let options):
+            try options.validate()
         case .pdf(let options):
             try PDFLayout.validate(options)
         }
@@ -612,8 +685,11 @@ public struct Hokusai: Sendable {
         case .png: return .png()
         case .webp: return .webp()
         case .avif: return .avif()
+        case .heif: return .heif()
+        case .tiff: return .tiff()
+        case .gif: return .gif()
         case .pdf: return .pdf()
-        default: throw HokusaiError.unsupported(feature: "writing \(format.rawValue)", reason: "no typed encoder for this format")
+        case .svg: throw HokusaiError.unsupported(feature: "writing svg", reason: "SVG is an input format, not an encoder")
         }
     }
 

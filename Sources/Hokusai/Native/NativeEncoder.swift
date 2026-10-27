@@ -1,6 +1,17 @@
 import Foundation
 import CVips
 
+extension ChromaSubsampling {
+    /// 0 automatic, 1 4:2:0, 2 4:4:4, as the shims expect.
+    fileprivate var nativeValue: Int32 {
+        switch self {
+        case .automatic: 0
+        case .yuv420: 1
+        case .yuv444: 2
+        }
+    }
+}
+
 /// One internal lowering of a typed raster encoder, applied identically to
 /// every sink.
 ///
@@ -13,6 +24,9 @@ enum NativeEncoder {
     case png(PNGOptions, metadata: MetadataPolicy)
     case webp(WebPOptions, metadata: MetadataPolicy)
     case avif(AVIFOptions, metadata: MetadataPolicy)
+    case heif(HEIFOptions, metadata: MetadataPolicy)
+    case tiff(TIFFOptions, metadata: MetadataPolicy)
+    case gif(GIFOptions, metadata: MetadataPolicy)
 
     /// The lowering for `format`, or `nil` for PDF.
     init?(format: OutputFormat, metadata: MetadataPolicy) {
@@ -21,6 +35,9 @@ enum NativeEncoder {
         case .png(let options): self = .png(options, metadata: metadata)
         case .webp(let options): self = .webp(options, metadata: metadata)
         case .avif(let options): self = .avif(options, metadata: metadata)
+        case .heif(let options): self = .heif(options, metadata: metadata)
+        case .tiff(let options): self = .tiff(options, metadata: metadata)
+        case .gif(let options): self = .gif(options, metadata: metadata)
         case .pdf: return nil
         }
     }
@@ -28,7 +45,8 @@ enum NativeEncoder {
     /// The metadata policy this encoder applies.
     var metadata: MetadataPolicy {
         switch self {
-        case .jpeg(_, let metadata), .png(_, let metadata), .webp(_, let metadata), .avif(_, let metadata): metadata
+        case .jpeg(_, let metadata), .png(_, let metadata), .webp(_, let metadata), .avif(_, let metadata),
+             .heif(_, let metadata), .tiff(_, let metadata), .gif(_, let metadata): metadata
         }
     }
 
@@ -39,6 +57,9 @@ enum NativeEncoder {
         case .png: .png
         case .webp: .webp
         case .avif: .avif
+        case .heif: .heif
+        case .tiff: .tiff
+        case .gif: .gif
         }
     }
 
@@ -49,14 +70,40 @@ enum NativeEncoder {
     fileprivate func save(_ image: NativeImage, keep: Int32, to target: UnsafeMutablePointer<VipsTarget>) -> Int32 {
         switch self {
         case .jpeg(let options, _):
-            return swift_vips_jpegsave_target(image.pointer, target, Int32(options.quality), options.progressive ? 1 : 0, keep)
+            return swift_vips_jpegsave_target(
+                image.pointer, target, Int32(options.quality), options.progressive ? 1 : 0,
+                options.chromaSubsampling.nativeValue, options.optimizeCoding ? 1 : 0, keep)
         case .png(let options, _):
-            return swift_vips_pngsave_target(image.pointer, target, Int32(options.compressionLevel), options.interlaced ? 1 : 0, keep)
+            let palette = options.palette
+            return swift_vips_pngsave_target(
+                image.pointer, target, Int32(options.compressionLevel), options.interlaced ? 1 : 0,
+                palette == nil ? 0 : 1, Int32(palette?.quality ?? 100), palette?.dither ?? 1,
+                Int32(palette?.effort ?? 7), Int32(palette?.bitDepth ?? 8), keep)
         case .webp(let options, _):
-            return swift_vips_webpsave_target(image.pointer, target, Int32(options.quality), options.lossless ? 1 : 0, Int32(options.effort), keep)
+            return swift_vips_webpsave_target(
+                image.pointer, target, Int32(options.quality), options.lossless ? 1 : 0, Int32(options.effort),
+                Int32(options.alphaQuality), options.nearLossless ? 1 : 0, options.smartSubsample ? 1 : 0,
+                Int32(WebPPreset.allCases.firstIndex(of: options.preset) ?? 0), keep)
         case .avif(let options, _):
             // A target has no filename to infer the codec from, so AV1 is explicit.
-            return swift_vips_heifsave_target(image.pointer, target, Int32(options.quality), options.lossless ? 1 : 0, Int32(options.effort), keep, 1)
+            return swift_vips_heifsave_target(
+                image.pointer, target, Int32(options.quality), options.lossless ? 1 : 0, Int32(options.effort),
+                Int32(options.bitDepth.rawValue), options.chromaSubsampling.nativeValue, keep, 1)
+        case .heif(let options, _):
+            return swift_vips_heifsave_target(
+                image.pointer, target, Int32(options.quality), options.lossless ? 1 : 0, Int32(options.effort),
+                Int32(options.bitDepth.rawValue), options.chromaSubsampling.nativeValue, keep,
+                options.compression == .av1 ? 1 : 0)
+        case .tiff(let options, _):
+            return swift_vips_tiffsave_target(
+                image.pointer, target, Int32(TIFFCompression.allCases.firstIndex(of: options.compression) ?? 0),
+                Int32(options.quality), Int32(TIFFPredictor.allCases.firstIndex(of: options.predictor) ?? 0),
+                Int32(options.tiling?.width ?? 0), Int32(options.tiling?.height ?? 0),
+                options.tiling?.pyramid == true ? 1 : 0, options.bigTIFF ? 1 : 0, keep)
+        case .gif(let options, _):
+            return swift_vips_gifsave_target(
+                image.pointer, target, options.dither, Int32(options.effort), Int32(options.bitDepth),
+                options.interlaced ? 1 : 0, keep)
         }
     }
 

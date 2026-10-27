@@ -89,13 +89,23 @@ enum VipsRuntime {
         if exists("jpegsave") { outputs.insert(.jpeg) }
         if exists("pngsave") { outputs.insert(.png) }
         if exists("webpsave") { outputs.insert(.webp) }
+        if exists("tiffsave") { outputs.insert(.tiff) }
+        if exists("gifsave") { outputs.insert(.gif) }
         if hokusai_cairo_pdf_available() != 0 { outputs.insert(.pdf) }
 
         // A HEIF saver may lack an AV1 encoder, and a HEIF loader may lack an
         // AV1 decoder, so AVIF is verified by a round trip of a tiny image.
-        if exists("heifsave"), swift_vips_avif_roundtrip_probe() == 0 {
-            outputs.insert(.avif)
-            inputs.insert(.avif)
+        var heifCompressions = Set<HEIFCompression>()
+        if exists("heifsave") {
+            if swift_vips_heif_roundtrip_probe(1) == 0 {
+                outputs.insert(.avif)
+                inputs.insert(.avif)
+                heifCompressions.insert(.av1)
+            }
+            if swift_vips_heif_roundtrip_probe(0) == 0 {
+                heifCompressions.insert(.hevc)
+            }
+            if !heifCompressions.isEmpty { outputs.insert(.heif) }
         }
         // A failed probe leaves libvips diagnostics behind; do not leak them
         // into the next unrelated error.
@@ -105,7 +115,9 @@ enum VipsRuntime {
             libvipsVersion: vips_version_string().map { String(cString: $0) } ?? "unknown",
             inputFormats: inputs,
             outputFormats: outputs,
-            textRendering: exists("text")
+            textRendering: exists("text"),
+            heifCompressions: heifCompressions,
+            pngPalette: exists("pngsave") && swift_vips_png_palette_probe() == 0
         )
     }
 }
