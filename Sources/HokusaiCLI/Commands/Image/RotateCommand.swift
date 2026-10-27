@@ -30,8 +30,7 @@ struct RotateCommand: AsyncParsableCommand {
         try Hokusai.initialize()
 
         let image = try Hokusai(url: URL(fileURLWithPath: input))
-        let rgba = try background.map(CLIParser.parseRGBA)
-        let bg = rgba.map { Hokusai.rgba(red: $0[0], green: $0[1], blue: $0[2], opacity: $0[3]) } ?? .transparent
+        let bg = try background.map(CLIParser.parseColor) ?? .transparent
         let rotated = try image.rotate(by: angle, background: bg)
         _ = try await rotated.write(to: URL(fileURLWithPath: output))
 

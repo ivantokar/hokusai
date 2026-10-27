@@ -33,7 +33,7 @@ libvips evaluation happens only in ``Hokusai/data()`` and
 ### Encoding and output
 
 - ``Hokusai/jpeg(quality:progressive:)``
-- ``Hokusai/png(compressionLevel:progressive:)``
+- ``Hokusai/png(compressionLevel:interlaced:)``
 - ``Hokusai/webp(quality:effort:lossless:)``
 - ``Hokusai/data()``
 - ``Hokusai/write(to:)``

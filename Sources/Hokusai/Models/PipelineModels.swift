@@ -15,6 +15,12 @@ public struct Color: Hashable, Sendable {
         self.opacity = opacity
     }
 
+    /// Creates a colour from 8-bit sRGB components, the way CSS and design
+    /// tools write them: `Color.sRGB8(red: 255, green: 64, blue: 0)`.
+    public static func sRGB8(red: UInt8, green: UInt8, blue: UInt8, alpha: UInt8 = 255) -> Color {
+        Color(red: Double(red) / 255, green: Double(green) / 255, blue: Double(blue) / 255, opacity: Double(alpha) / 255)
+    }
+
     public static let transparent = Color(red: 0, green: 0, blue: 0, opacity: 0)
     public static let white = Color(red: 1, green: 1, blue: 1)
 
@@ -193,7 +199,7 @@ public enum ColorSpace: Sendable, Equatable {
 }
 
 /// Typed output encoder configuration.
-public enum OutputFormat: Sendable {
+public enum OutputFormat: Sendable, Equatable {
     case jpeg(JPEGOptions = .init())
     case png(PNGOptions = .init())
     case webp(WebPOptions = .init())
@@ -213,26 +219,27 @@ public enum OutputFormat: Sendable {
 }
 
 /// JPEG encoder settings. Quality uses libvips' 0...100 convention.
-public struct JPEGOptions: Sendable {
+public struct JPEGOptions: Sendable, Equatable {
     public var quality: Int
     public var progressive: Bool
     public init(quality: Int = 80, progressive: Bool = false) { self.quality = quality; self.progressive = progressive }
 }
 /// PNG encoder settings. Compression level follows libvips' 0...9 convention.
-public struct PNGOptions: Sendable {
+public struct PNGOptions: Sendable, Equatable {
     public var compressionLevel: Int
-    public var progressive: Bool
-    public init(compressionLevel: Int = 6, progressive: Bool = false) { self.compressionLevel = compressionLevel; self.progressive = progressive }
+    /// Adam7 interlacing: the image appears progressively while loading.
+    public var interlaced: Bool
+    public init(compressionLevel: Int = 6, interlaced: Bool = false) { self.compressionLevel = compressionLevel; self.interlaced = interlaced }
 }
 /// WebP encoder settings for lossy/lossless output and encoder effort.
-public struct WebPOptions: Sendable {
+public struct WebPOptions: Sendable, Equatable {
     public var quality: Int
     public var effort: Int
     public var lossless: Bool
     public init(quality: Int = 80, effort: Int = 4, lossless: Bool = false) { self.quality = quality; self.effort = effort; self.lossless = lossless }
 }
 /// AVIF encoder settings for lossy/lossless output and encoder effort.
-public struct AVIFOptions: Sendable {
+public struct AVIFOptions: Sendable, Equatable {
     public var quality: Int
     public var effort: Int
     public var lossless: Bool
@@ -240,7 +247,7 @@ public struct AVIFOptions: Sendable {
 }
 
 /// Encoded bytes and the stable facts measured from the evaluated output.
-public struct Output: Sendable {
+public struct Output: Sendable, Equatable {
     public let data: Data
     public let info: OutputInfo
 }
@@ -254,16 +261,17 @@ public struct OutputInfo: Sendable, Equatable {
     public let format: ImageFormat
     public let width: Int
     public let height: Int
-    public let size: Int
+    /// The encoded size in bytes. ``width`` and ``height`` are pixels.
+    public let byteCount: Int
 
     /// Page facts when `format` is PDF; `nil` for every other format.
     public let pdf: PDFOutputDetails?
 
-    init(format: ImageFormat, width: Int, height: Int, size: Int, pdf: PDFOutputDetails? = nil) {
+    init(format: ImageFormat, width: Int, height: Int, byteCount: Int, pdf: PDFOutputDetails? = nil) {
         self.format = format
         self.width = width
         self.height = height
-        self.size = size
+        self.byteCount = byteCount
         self.pdf = pdf
     }
 }

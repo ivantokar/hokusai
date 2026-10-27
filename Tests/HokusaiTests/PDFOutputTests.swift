@@ -151,7 +151,7 @@ private let pdfReadable = (try? Hokusai.capabilities().canDecode(.pdf)) ?? false
 
         #expect(output.info.format == .pdf)
         #expect((output.info.width, output.info.height) == (320, 200), "raster pixels, not points")
-        #expect(output.info.size == output.data.count)
+        #expect(output.info.byteCount == output.data.count)
         let pdf = try #require(output.info.pdf)
         #expect(pdf.pageCount == 1)
         #expect(abs(pdf.pageWidth - 595.276) < 0.001 && abs(pdf.pageHeight - 841.89) < 0.001)
@@ -174,7 +174,7 @@ private let pdfReadable = (try? Hokusai.capabilities().canDecode(.pdf)) ?? false
 
         #expect(memory.data == file, "reproducible with a fixed creation date")
         #expect(info == memory.info)
-        #expect(info.size == file.count)
+        #expect(info.byteCount == file.count)
         expectWellFormed(file)
     }
 
@@ -190,7 +190,7 @@ private let pdfReadable = (try? Hokusai.capabilities().canDecode(.pdf)) ?? false
 
         #expect(trace.events.contains(.sinkSelected("file pdf")))
         let written = try Data(contentsOf: url)
-        #expect(info.size == written.count)
+        #expect(info.byteCount == written.count)
     }
 
     @Test func documentMetadataIsOptInAndNeverCopiedFromTheSource() async throws {

@@ -62,7 +62,7 @@ import Testing
     @Test func everyRasterFormatEncodesIdenticallyToMemoryAndFile() async throws {
         var pipelines: [(String, Hokusai)] = [
             ("jpeg", try photo().jpeg(quality: 70, progressive: true)),
-            ("png", try photo().png(compressionLevel: 3, progressive: true)),
+            ("png", try photo().png(compressionLevel: 3, interlaced: true)),
             ("webp", try photo().webp(quality: 60, effort: 2)),
             ("webp-lossless", try photo().webp(lossless: true)),
         ]
@@ -72,7 +72,7 @@ import Testing
             let result = try await bothSinks(pipeline)
             #expect(result.memory.data == result.file, "\(name): file bytes differ from data()")
             #expect(result.info == result.memory.info, "\(name): OutputInfo differs between sinks")
-            #expect(result.info.size == result.file.count, "\(name): size is not the encoded byte count")
+            #expect(result.info.byteCount == result.file.count, "\(name): size is not the encoded byte count")
             #expect(result.info.width == 96)
         }
     }
@@ -90,8 +90,8 @@ import Testing
     }
 
     @Test func pngInterlaceReachesBothSinks() async throws {
-        let interlaced = try await bothSinks(photo().png(progressive: true))
-        let plain = try await bothSinks(photo().png(progressive: false))
+        let interlaced = try await bothSinks(photo().png(interlaced: true))
+        let plain = try await bothSinks(photo().png(interlaced: false))
 
         #expect(pngInterlace(interlaced.memory.data) == 1)
         #expect(pngInterlace(interlaced.file) == 1)
@@ -270,7 +270,7 @@ import Testing
     // MARK: - Concurrency
 
     @Test func concurrentWritesAndDataCallsDoNotInterfere() async throws {
-        let pipeline = try photo().png(progressive: true)
+        let pipeline = try photo().png(interlaced: true)
         let expected = try await pipeline.data().data
 
         try await withThrowingTaskGroup(of: Bool.self) { group in

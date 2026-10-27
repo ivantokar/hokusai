@@ -35,10 +35,10 @@ enum Evaluator {
                 let result = try image.writePDF(options, into: sink)
                 let data = sink.takeData()
                 return Output(data: data, info: OutputInfo(
-                    format: .pdf, width: result.rasterWidth, height: result.rasterHeight, size: data.count, pdf: result.details))
+                    format: .pdf, width: result.rasterWidth, height: result.rasterHeight, byteCount: data.count, pdf: result.details))
             case .raster(let encoder):
                 let data = try image.encoded(encoder)
-                return Output(data: data, info: OutputInfo(format: format.imageFormat, width: image.width, height: image.height, size: data.count))
+                return Output(data: data, info: OutputInfo(format: format.imageFormat, width: image.width, height: image.height, byteCount: data.count))
             }
         }
     }
@@ -54,10 +54,10 @@ enum Evaluator {
                 let sink = PDFOutputSink(destination: .file(url), isCancelled: { context.isCancelled })
                 let result = try image.writePDF(options, into: sink)
                 return OutputInfo(
-                    format: .pdf, width: result.rasterWidth, height: result.rasterHeight, size: sink.byteCount, pdf: result.details)
+                    format: .pdf, width: result.rasterWidth, height: result.rasterHeight, byteCount: sink.byteCount, pdf: result.details)
             case .raster(let encoder):
                 let size = try image.write(encoder, to: url)
-                return OutputInfo(format: format.imageFormat, width: image.width, height: image.height, size: size)
+                return OutputInfo(format: format.imageFormat, width: image.width, height: image.height, byteCount: size)
             }
         }
     }

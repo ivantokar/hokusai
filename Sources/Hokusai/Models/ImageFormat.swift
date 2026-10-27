@@ -1,6 +1,6 @@
 import Foundation
 
-/// Image formats recognized by Hokusai's loaders and legacy encoders.
+/// Image formats Hokusai recognises when reading, and names in reports.
 ///
 /// Availability is runtime-dependent for some formats because it follows the
 /// linked libvips build. The 1.0 pipeline currently exposes a smaller typed

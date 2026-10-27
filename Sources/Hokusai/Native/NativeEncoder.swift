@@ -51,7 +51,7 @@ enum NativeEncoder {
         case .jpeg(let options, _):
             return swift_vips_jpegsave_target(image.pointer, target, Int32(options.quality), options.progressive ? 1 : 0, keep)
         case .png(let options, _):
-            return swift_vips_pngsave_target(image.pointer, target, Int32(options.compressionLevel), options.progressive ? 1 : 0, keep)
+            return swift_vips_pngsave_target(image.pointer, target, Int32(options.compressionLevel), options.interlaced ? 1 : 0, keep)
         case .webp(let options, _):
             return swift_vips_webpsave_target(image.pointer, target, Int32(options.quality), options.lossless ? 1 : 0, Int32(options.effort), keep)
         case .avif(let options, _):
