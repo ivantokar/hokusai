@@ -433,13 +433,36 @@ public struct Hokusai: Sendable {
         return appending(.composite(steps, space: space))
     }
 
-    /// Draws text onto the pipeline using the existing libvips/Pango renderer.
+    /// Renders text as a new pipeline.
     ///
-    /// Text styling remains intentionally typed by `TextOptions` until the
-    /// dedicated typography redesign lands; the pipeline and output semantics
-    /// are already the same as every other 1.0 transformation.
-    public func drawText(_ text: String, x: Int, y: Int, options: TextOptions = .init()) throws -> Self {
-        appending(.drawText(text, x: x, y: y, options: options))
+    /// The result is an ordinary immutable pipeline: transform it, composite
+    /// it, or encode it on its own. Text is rendered by libvips with Pango
+    /// when a terminal method runs, so a build without text support reports
+    /// ``HokusaiError/unsupported(feature:reason:)`` there, not here.
+    ///
+    /// ```swift
+    /// let badge = try Hokusai.text("SALE", style: TextStyle(fontSize: 48, color: .white))
+    /// ```
+    ///
+    /// - Throws: ``HokusaiError/invalidOption(name:reason:)`` for an empty
+    ///   text, a size or spacing out of range, or a font that is a file path.
+    public static func text(_ content: TextContent, layout: TextLayout = .natural, style: TextStyle = TextStyle()) throws -> Hokusai {
+        let source = TextSource(content: content, layout: layout, style: style)
+        try source.validate()
+        return Hokusai(plan: .source(.text(source)))
+    }
+
+    /// Draws text onto the pipeline.
+    ///
+    /// Sugar for compositing ``text(_:layout:style:)`` with the same
+    /// placement, clipping and blending rules as any other layer.
+    public func drawText(
+        _ content: TextContent,
+        placement: Placement = .at(x: 0, y: 0),
+        layout: TextLayout = .natural,
+        style: TextStyle = TextStyle()
+    ) throws -> Self {
+        try composite([CompositeLayer(Hokusai.text(content, layout: layout, style: style), placement: placement)])
     }
 
     // MARK: - Output configuration

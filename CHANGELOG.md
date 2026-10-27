@@ -4,6 +4,27 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed (text)
+- **Breaking:** text is a generated pipeline source. `Hokusai.text(_:layout:style:)`
+  returns an ordinary immutable pipeline; `drawText(_:placement:layout:style:)`
+  is sugar that composites it with the shared `Placement`/`Gravity` model.
+  `TextOptions`, `TextGravity` and `drawText(_:x:y:options:)` are removed.
+- **Breaking:** `TextContent.plain` escapes Pango markup characters, so any
+  string is safe; `.markup` is the explicit opt-in.
+- **Breaking:** `TextLayout` separates `.natural`, `.width(_:wrap:)` and
+  `.fit(width:height:)`. Fit mode no longer passes a DPI, so libvips really
+  fits the text to the box (the old wrapper always set `dpi`, which disabled it).
+- **Breaking:** colours are `Color`, font files are `URL` (`TextStyle.fontFile`),
+  and a path-like `font` string is rejected.
+- **Breaking:** `kerning` and `antialiasing` are removed; they never did anything.
+- `lineHeight` is a multiple of the font's natural line pitch. The old
+  `lineSpacing` converted to the wrong unit. Added `justify` and `TextWrap`.
+- Stroke is one dilation and shadow one blur, blended with a single composite.
+  The old outline composited the text once per neighbouring pixel.
+- Rotation reuses the geometry transform. Text opacity is applied after
+  rendering, so `opacity: 0` text is transparent (Pango drew it opaque) and
+  shadows follow the glyph shape.
+
 ### Changed (composition)
 - **Breaking:** `CompositeLayer` takes a typed `Placement` (`.at(x:y:)`,
   `.gravity(_:offsetX:offsetY:)`, `.tile(gravity:)`); `CompositeLayer(_:x:y:)`

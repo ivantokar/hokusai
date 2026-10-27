@@ -25,7 +25,7 @@ extension NativeImage {
     }
 
     /// Joins `images` into one image, bands in order.
-    private static func bandjoin(_ images: [NativeImage], operation: String) throws -> NativeImage {
+    static func bandjoin(_ images: [NativeImage], operation: String) throws -> NativeImage {
         var pointers: [UnsafeMutablePointer<CVips.VipsImage>?] = images.map { $0.pointer }
         return try producing({ output in
             pointers.withUnsafeMutableBufferPointer { swift_vips_bandjoin($0.baseAddress, output, Int32($0.count)) }

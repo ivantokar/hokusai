@@ -63,7 +63,7 @@ struct TextCommand: AsyncParsableCommand {
     @Option(help: "Rotation in degrees.")
     var rotation: Double?
 
-    /// Maps command-line options to `TextOptions`, draws the layer, and saves it.
+    /// Maps command-line options to a `TextStyle`, draws the layer, and saves it.
     ///
     /// Shadow colour applies only when both shadow offsets are supplied, which
     /// avoids constructing an invisible or positionless shadow layer.
@@ -73,27 +73,36 @@ struct TextCommand: AsyncParsableCommand {
 
         let image = try Hokusai(url: URL(fileURLWithPath: input))
 
-        var options = TextOptions()
-        options.font = font
-        options.fontSize = fontSize
-        options.color = try CLIParser.parseRGBA(color)
-        options.align = CLIParser.parseTextAlign(align)
-        options.width = textWidth
-        options.height = textHeight
-        options.strokeWidth = strokeWidth
-        if let strokeColor { options.strokeColor = try CLIParser.parseRGBA(strokeColor) }
-
+        var style = TextStyle(fontSize: fontSize, color: try CLIParser.parseColor(color), alignment: CLIParser.parseTextAlign(align))
+        let lowered = font.lowercased()
+        if font.contains("/") || lowered.hasSuffix(".ttf") || lowered.hasSuffix(".otf") {
+            style.fontFile = URL(fileURLWithPath: font)
+        } else {
+            style.font = font
+        }
+        if let strokeWidth {
+            style.stroke = TextStroke(color: try CLIParser.parseColor(strokeColor ?? "0,0,0,255"), width: strokeWidth)
+        }
         if let shadowOffsetX, let shadowOffsetY {
-            options.shadowOffset = (x: shadowOffsetX, y: shadowOffsetY)
-            if let shadowColor {
-                options.shadowColor = try CLIParser.parseRGBA(shadowColor)
+            var shadowStyle = TextShadow(offsetX: Int(shadowOffsetX.rounded()), offsetY: Int(shadowOffsetY.rounded()))
+            if let shadowColor { shadowStyle.color = try CLIParser.parseColor(shadowColor) }
+            if let shadowOpacity {
+                let c = shadowStyle.color
+                shadowStyle.color = Color(red: c.red, green: c.green, blue: c.blue, opacity: min(max(shadowOpacity, 0), 1))
             }
+            style.shadow = shadowStyle
+        }
+        style.rotation = rotation ?? 0
+
+        let layout: TextLayout
+        switch (textWidth, textHeight) {
+        case (let width?, let height?): layout = .fit(width: width, height: height)
+        case (let width?, nil): layout = .width(width)
+        case (nil, nil): layout = .natural
+        case (nil, _?): throw ValidationError("--text-height needs --text-width")
         }
 
-        options.shadowOpacity = shadowOpacity
-        options.rotation = rotation
-
-        let withText = try image.drawText(text, x: x, y: y, options: options)
+        let withText = try image.drawText(.plain(text), placement: .at(x: x, y: y), layout: layout, style: style)
         _ = try await withText.write(to: URL(fileURLWithPath: output))
 
         prompt.success("Saved text image")
@@ -104,4 +113,3 @@ struct TextCommand: AsyncParsableCommand {
         ])
     }
 }
-
