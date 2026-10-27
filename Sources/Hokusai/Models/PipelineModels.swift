@@ -56,8 +56,74 @@ public enum ResizePosition: Sendable {
 }
 
 /// Interpolation kernel used when pipeline resize samples pixels.
+///
+/// `mks2013` and `mks2021` are the Magic Kernel Sharp kernels. They need
+/// libvips 8.17 or newer, which is above Hokusai's 8.16 baseline, so using
+/// one on an older build throws `unsupported` when the step is added.
 public enum ResizeKernel: Sendable {
-    case nearest, linear, cubic, mitchell, lanczos2, lanczos3
+    case nearest, linear, cubic, mitchell, lanczos2, lanczos3, mks2013, mks2021
+}
+
+/// How a canvas or transform fills pixels outside the source image.
+public enum ExtendMode: Sendable, Equatable {
+    /// Fills with a colour. Use ``Color/transparent`` for transparent padding.
+    case background(Color)
+    /// Repeats the nearest edge pixel outwards.
+    case copy
+    /// Tiles the image.
+    case `repeat`
+    /// Tiles the image, mirroring every other tile.
+    case mirror
+}
+
+/// Pixel interpolation used by resampling transforms such as ``Hokusai/rotate(by:background:interpolation:)``.
+public enum Interpolation: String, Sendable, CaseIterable {
+    case nearest, bilinear, bicubic, lbb, nohalo, vsqbs
+}
+
+/// A 2×2 linear transform: `x' = a·x + b·y`, `y' = c·x + d·y`.
+public struct AffineMatrix: Hashable, Sendable {
+    public var a: Double
+    public var b: Double
+    public var c: Double
+    public var d: Double
+
+    public init(a: Double, b: Double, c: Double, d: Double) {
+        self.a = a
+        self.b = b
+        self.c = c
+        self.d = d
+    }
+
+    public static let identity = AffineMatrix(a: 1, b: 0, c: 0, d: 1)
+}
+
+/// A fractional pixel offset used by ``Hokusai/affine(_:inputOffset:outputOffset:outputArea:edges:interpolation:)``.
+public struct AffineOffset: Hashable, Sendable {
+    public var x: Double
+    public var y: Double
+
+    public init(x: Double, y: Double) {
+        self.x = x
+        self.y = y
+    }
+
+    public static let zero = AffineOffset(x: 0, y: 0)
+}
+
+/// The output rectangle of an affine transform, in output pixel coordinates.
+public struct AffineArea: Hashable, Sendable {
+    public var x: Int
+    public var y: Int
+    public var width: Int
+    public var height: Int
+
+    public init(x: Int, y: Int, width: Int, height: Int) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+    }
 }
 
 /// Portable colour spaces supported by the first Hokusai pipeline release.
@@ -165,25 +231,6 @@ public struct CompositeLayer: Sendable {
     }
 }
 
-internal extension ResizePosition {
-    /// Maps pipeline placement names onto the legacy operation's vocabulary.
-    var legacyPosition: Position {
-        switch self {
-        case .center: .center
-        case .north: .top
-        case .south: .bottom
-        case .east: .right
-        case .west: .left
-        case .northWest: .topLeft
-        case .northEast: .topRight
-        case .southWest: .bottomLeft
-        case .southEast: .bottomRight
-        case .attention: .attention
-        case .entropy: .entropy
-        }
-    }
-}
-
 internal extension CanvasAnchor {
     /// Calculates the top-left offset for the selected anchor inside a canvas.
     func offset(imageWidth: Int, imageHeight: Int, canvasWidth: Int, canvasHeight: Int) -> (x: Int, y: Int) {
@@ -199,20 +246,6 @@ internal extension CanvasAnchor {
         case .northEast: return (canvasWidth - imageWidth, 0)
         case .southWest: return (0, canvasHeight - imageHeight)
         case .southEast: return (canvasWidth - imageWidth, canvasHeight - imageHeight)
-        }
-    }
-}
-
-internal extension ResizeKernel {
-    /// Maps typed pipeline kernels onto the legacy libvips operation enum.
-    var legacyKernel: Kernel {
-        switch self {
-        case .nearest: .nearest
-        case .linear: .linear
-        case .cubic: .cubic
-        case .mitchell: .mitchell
-        case .lanczos2: .lanczos2
-        case .lanczos3: .lanczos3
         }
     }
 }

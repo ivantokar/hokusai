@@ -85,7 +85,7 @@ import Testing
             .resize(ResizeStep(width: 320, height: 200, fit: .fill, position: .center, kernel: .lanczos3,
                                withoutEnlargement: false, withoutReduction: false, background: .transparent)),
             .convertToSRGB,
-            .extend(to: ImageSize(width: 320, height: 200), anchor: .center, background: .transparent),
+            .extend(to: ImageSize(width: 320, height: 200), anchor: .center, mode: .background(.transparent)),
             .flip,
             .blur(sigma: 0.0001),
         ], options: .default)

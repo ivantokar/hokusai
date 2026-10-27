@@ -301,6 +301,99 @@ static inline int swift_vips_similarity_background(VipsImage *in, VipsImage **ou
     return vips_similarity(in, out, "angle", angle, "background", background, NULL);
 }
 
+// MARK: - Geometry (modern evaluator)
+
+/// Embeds `in` in a larger canvas. `background` is only read for
+/// VIPS_EXTEND_BACKGROUND and may be NULL for the other modes; unlike
+/// `swift_vips_embed` this passes `extend`, so the background actually applies.
+static inline int swift_vips_embed_extend(
+    VipsImage *in,
+    VipsImage **out,
+    int x,
+    int y,
+    int width,
+    int height,
+    VipsExtend extend,
+    VipsArrayDouble *background
+) {
+    if (background != NULL) {
+        return vips_embed(in, out, x, y, width, height, "extend", extend, "background", background, NULL);
+    }
+    return vips_embed(in, out, x, y, width, height, "extend", extend, NULL);
+}
+
+/// Returns a new reference to the named interpolator, or NULL if unknown.
+/// The caller releases it with g_object_unref.
+static inline VipsInterpolate *swift_vips_interpolate_new(const char *nickname) {
+    return vips_interpolate_new(nickname);
+}
+
+static inline int swift_vips_rotate(
+    VipsImage *in,
+    VipsImage **out,
+    double angle,
+    VipsArrayDouble *background,
+    VipsInterpolate *interpolate
+) {
+    return vips_rotate(in, out, angle, "background", background, "interpolate", interpolate, NULL);
+}
+
+/// General 2x2 affine transform. `oarea` is four ints (left, top, width,
+/// height) or NULL to use libvips' computed output area.
+static inline int swift_vips_affine(
+    VipsImage *in,
+    VipsImage **out,
+    double a, double b, double c, double d,
+    VipsInterpolate *interpolate,
+    VipsExtend extend,
+    VipsArrayDouble *background,
+    double idx, double idy, double odx, double ody,
+    const int *oarea
+) {
+    VipsArrayInt *area = oarea != NULL ? vips_array_int_new(oarea, 4) : NULL;
+    int result;
+    if (area != NULL) {
+        result = vips_affine(in, out, a, b, c, d,
+            "interpolate", interpolate, "extend", extend, "background", background,
+            "idx", idx, "idy", idy, "odx", odx, "ody", ody, "oarea", area, NULL);
+        vips_area_unref(VIPS_AREA(area));
+    } else {
+        result = vips_affine(in, out, a, b, c, d,
+            "interpolate", interpolate, "extend", extend, "background", background,
+            "idx", idx, "idy", idy, "odx", odx, "ody", ody, NULL);
+    }
+    return result;
+}
+
+/// The Magic Kernel resize kernels exist in headers from libvips 8.15, but
+/// Hokusai only offers them on 8.17+. Returns the VipsKernel value, or -1
+/// when this build cannot provide `which` (0 = mks2013, 1 = mks2021).
+static inline int swift_vips_kernel_mks(int which) {
+#if (VIPS_MAJOR_VERSION > 8) || (VIPS_MAJOR_VERSION == 8 && VIPS_MINOR_VERSION >= 17)
+    if (vips_version(0) > 8 || (vips_version(0) == 8 && vips_version(1) >= 17)) {
+        return which == 0 ? (int) VIPS_KERNEL_MKS2013 : (int) VIPS_KERNEL_MKS2021;
+    }
+#endif
+    (void) which;
+    return -1;
+}
+
+/// Reads one pixel into `values` (capacity `capacity`); returns the band
+/// count, or -1 on failure.
+static inline int swift_vips_getpoint(VipsImage *in, int x, int y, double *values, int capacity) {
+    double *vector = NULL;
+    int n = 0;
+    if (vips_getpoint(in, &vector, &n, x, y, NULL) != 0) {
+        return -1;
+    }
+    int copied = n < capacity ? n : capacity;
+    for (int i = 0; i < copied; i++) {
+        values[i] = vector[i];
+    }
+    g_free(vector);
+    return n;
+}
+
 static inline int swift_vips_text(VipsImage **out, const char *text, const char *font, int dpi, VipsAlign align) {
     return vips_text(out, text, "font", font, "dpi", dpi, "align", align, NULL);
 }

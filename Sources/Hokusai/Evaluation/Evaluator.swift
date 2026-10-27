@@ -175,38 +175,39 @@ enum Evaluator {
     private static func apply(_ operation: ImageOperation, to image: NativeImage, context: EvaluationContext) throws -> NativeImage {
         switch operation {
         case .autoOrient:
-            return try image.autoRotate()
+            return try image.autoOrient()
 
         case .resize(let step):
-            var options = ResizeOptions()
-            options.fit = step.fit
-            options.position = step.position.legacyPosition
-            options.kernel = step.kernel.legacyKernel
-            options.withoutEnlargement = step.withoutEnlargement
-            options.withoutReduction = step.withoutReduction
-            options.background = try step.background.rgba8()
-            return try image.resize(width: step.width, height: step.height, options: options)
+            return try image.resize(
+                width: step.width,
+                height: step.height,
+                fit: step.fit,
+                position: step.position,
+                kernel: step.kernel,
+                withoutEnlargement: step.withoutEnlargement,
+                withoutReduction: step.withoutReduction,
+                background: try step.background.rgba8())
 
-        case .rotate(let degrees, let background):
-            return try image.rotate(angle: .custom(degrees), background: try background.rgba8())
+        case .rotate(let degrees, let background, let interpolation):
+            return try image.rotate(degrees: degrees, background: try background.rgba8(), interpolation: interpolation)
 
         case .flip:
-            return try image.flip(direction: .vertical)
+            return try image.mirrored(VIPS_DIRECTION_VERTICAL, operation: "flip")
 
         case .flop:
-            return try image.flip(direction: .horizontal)
+            return try image.mirrored(VIPS_DIRECTION_HORIZONTAL, operation: "flop")
 
         case .extract(let x, let y, let width, let height):
             return try image.crop(left: x, top: y, width: width, height: height)
 
-        case .extend(let size, let anchor, let background):
-            guard size.width >= image.width, size.height >= image.height else {
-                throw HokusaiError.invalidOption(name: "size", reason: "extend cannot reduce an image; use resize or extract")
-            }
-            let offset = anchor.offset(imageWidth: image.width, imageHeight: image.height, canvasWidth: size.width, canvasHeight: size.height)
-            return try withNativeColor(background, operation: "extend") { area in
-                try image.applying("extend") { swift_vips_embed($0, $1, Int32(offset.x), Int32(offset.y), Int32(size.width), Int32(size.height), area) }
-            }
+        case .extend(let size, let anchor, let mode):
+            return try image.extend(to: size, anchor: anchor, mode: mode)
+
+        case .extendEdges(let top, let left, let bottom, let right, let mode):
+            return try image.extend(top: top, left: left, bottom: bottom, right: right, mode: mode)
+
+        case .affine(let step):
+            return try image.affine(step)
 
         case .trim(let threshold):
             var left: Int32 = 0, top: Int32 = 0, width: Int32 = 0, height: Int32 = 0
