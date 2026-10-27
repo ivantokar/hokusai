@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed (composition)
+- **Breaking:** `CompositeLayer` takes a typed `Placement` (`.at(x:y:)`,
+  `.gravity(_:offsetX:offsetY:)`, `.tile(gravity:)`); `CompositeLayer(_:x:y:)`
+  stays as a shorthand for exact coordinates. `CompositeLayer(data:)` is
+  removed: build the layer with `Hokusai(data:)`.
+- **Breaking:** `CanvasAnchor` is now `Gravity`, shared by `extend(to:)`, PDF
+  page options and layer placement.
+- `BlendMode` grows from three modes to the full libvips Porter-Duff and PDF
+  set (25 modes, `CaseIterable`).
+- `composite(_:space:)` blends every layer with one `vips_composite` call
+  instead of a `vips_composite2` chain, and no longer forces inputs to 8-bit
+  RGBA: libvips normalises colour and alpha, and opacity scales the alpha band
+  in the layer's own bit depth. `space: .linear` blends in linear light.
+- Gravity offsets are inward padding at edges and a signed shift on a centred
+  axis; coordinates beyond ±10,000,000 are rejected when the layer is added.
+
 ### Changed (effects)
 - **Breaking:** `normalize()` is now photographic contrast stretching,
   `normalize(lower: 1, upper: 99)`: the luminance range between two

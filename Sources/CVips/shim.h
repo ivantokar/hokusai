@@ -977,6 +977,29 @@ static inline int swift_vips_composite2(
     return vips_composite2(base, overlay, out, mode, "x", x, "y", y, NULL);
 }
 
+/** @brief Blends `n` images (base first) in one call; `mode`, `x` and `y` hold n - 1 entries. */
+static inline int swift_vips_composite_array(
+    VipsImage **in,
+    VipsImage **out,
+    int n,
+    int *mode,
+    const int *x,
+    const int *y,
+    VipsInterpretation space
+) {
+    VipsArrayInt *xs = vips_array_int_new(x, n - 1);
+    VipsArrayInt *ys = vips_array_int_new(y, n - 1);
+    int result = vips_composite(in, out, n, mode, "x", xs, "y", ys, "compositing_space", space, NULL);
+    vips_area_unref(VIPS_AREA(xs));
+    vips_area_unref(VIPS_AREA(ys));
+    return result;
+}
+
+/** @brief Repeats an image `across` x `down` times; lazy, no pixels are copied. */
+static inline int swift_vips_replicate(VipsImage *in, VipsImage **out, int across, int down) {
+    return vips_replicate(in, out, across, down, NULL);
+}
+
 // MARK: - Array Helpers
 
 static inline VipsArrayDouble* swift_vips_array_double_new(const double *array, int n) {
