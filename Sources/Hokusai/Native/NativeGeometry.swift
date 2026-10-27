@@ -372,3 +372,12 @@ extension NativeImage {
         return Array(values.prefix(Int(count)))
     }
 }
+
+// MARK: - Extract
+
+extension NativeImage {
+    /// The rectangle at (`left`, `top`) of `width` × `height`, measured from the top-left corner.
+    func crop(left: Int, top: Int, width: Int, height: Int) throws -> NativeImage {
+        try applying("extract") { swift_vips_extract_area($0, $1, Int32(left), Int32(top), Int32(width), Int32(height)) }
+    }
+}

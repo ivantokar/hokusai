@@ -44,10 +44,16 @@ final class NativeImage {
     ) throws -> NativeImage {
         var output: Pointer?
         guard body(&output) == 0, let output else {
-            VipsBackend.discardPartialImage(output)
+            NativeImage.discardPartialImage(output)
             throw failure()
         }
         return NativeImage(takingOwnership: output)
+    }
+
+    /// Releases a native image returned alongside a failed operation. libvips
+    /// normally leaves output null on failure, but adapters must not assume it.
+    static func discardPartialImage(_ image: Pointer?) {
+        if let image { g_object_unref(image) }
     }
 
     /// Applies a single-input native transform named `operation`.
@@ -186,38 +192,6 @@ extension NativeImage {
 
     /// Whether this probe-wrapped source failed to produce pixels.
     var sourceProbeFailed: Bool { swift_vips_source_probe_failed(pointer) != 0 }
-
-    /// Opens a local source through libvips' shrink-on-load thumbnail path.
-    static func thumbnail(path: String, width: Int, options: ThumbnailOptions) throws -> NativeImage {
-        try VipsRuntime.ensureInitialized()
-        let arguments = try ThumbnailArguments.validate(width: width, options: options)
-
-        try requireReadableFile(path)
-
-        return try producing({
-            swift_vips_thumbnail(path, $0, arguments.width, arguments.height, arguments.crop, arguments.noRotate)
-        }, failure: { .decode(.native("thumbnail \(URL(fileURLWithPath: path).lastPathComponent)", "could not decode and resize the image file")) })
-    }
-
-    /// Creates a shrink-on-load thumbnail from copied encoded bytes.
-    static func thumbnail(data: Data, width: Int, options: ThumbnailOptions) throws -> NativeImage {
-        try VipsRuntime.ensureInitialized()
-        let arguments = try ThumbnailArguments.validate(width: width, options: options)
-
-        guard !data.isEmpty else {
-            throw HokusaiError.invalidInput(reason: "encoded data is empty")
-        }
-
-        // As with normal buffer loading, the shim copies bytes before lazy
-        // thumbnail evaluation can outlive the Swift `Data` value.
-        return try producing({ output in
-            data.withUnsafeBytes { bytes in
-                swift_vips_thumbnail_buffer(
-                    bytes.baseAddress, data.count, output,
-                    arguments.width, arguments.height, arguments.crop, arguments.noRotate)
-            }
-        }, failure: { .decode(.native("thumbnail input data", "could not decode and resize the image data")) })
-    }
 
     /// Classifies a missing source as I/O before libvips reports it as a
     /// generic load failure.

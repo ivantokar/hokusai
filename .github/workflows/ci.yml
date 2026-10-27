@@ -71,7 +71,6 @@ jobs:
       - name: Build optional integration products
         run: |
           swift build --target HokusaiNIO
-          swift build --target HokusaiLegacy
 
       - name: Test
         run: swift test
@@ -112,7 +111,6 @@ jobs:
       - name: Build optional integration products
         run: |
           swift build --target HokusaiNIO
-          swift build --target HokusaiLegacy
 
       - name: Test
         run: swift test

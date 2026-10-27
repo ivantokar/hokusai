@@ -21,10 +21,6 @@ let package = Package(
             name: "HokusaiNIO",
             targets: ["HokusaiNIO"]
         ),
-        .library(
-            name: "HokusaiLegacy",
-            targets: ["HokusaiLegacy"]
-        ),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
@@ -72,10 +68,6 @@ let package = Package(
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOFoundationCompat", package: "swift-nio"),
             ]
-        ),
-        .target(
-            name: "HokusaiLegacy",
-            dependencies: ["Hokusai"]
         ),
         // PURPOSE: Test target (library, CVips mapping, and CLI argument parsing)
         .testTarget(

@@ -102,7 +102,7 @@ enum VipsRuntime {
         _ = VipsDiagnostics.drain()
 
         return RuntimeCapabilities(
-            libvipsVersion: VipsBackend.version,
+            libvipsVersion: Hokusai.vipsVersion,
             inputFormats: inputs,
             outputFormats: outputs,
             textRendering: exists("text")

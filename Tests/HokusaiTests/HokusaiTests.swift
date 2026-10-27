@@ -2,15 +2,15 @@ import Foundation
 import Testing
 @testable import Hokusai
 
+/// Smoke tests for the public pipeline: load, inspect, transform, encode.
 @Suite struct CoreTests {
     init() throws {
         try Hokusai.initialize()
     }
 
-    @Test func loadImageMetadata() throws {
+    @Test func loadImageMetadata() async throws {
         let data = try loadFixtureData(named: "pixel", ext: "png")
-        let image = try Hokusai.image(from: data)
-        let metadata = try image.metadata()
+        let metadata = try await Hokusai(data: data).metadata()
 
         #expect(metadata.width == 1)
         #expect(metadata.height == 1)
@@ -18,121 +18,70 @@ import Testing
         #expect(metadata.pixel.hasAlpha)
     }
 
-    @Test func loadImageFromFilePath() throws {
-        let path = try fixturePath(named: "landscape-asym", ext: "jpg")
-        let image = try Hokusai.image(from: path)
+    @Test func loadImageFromFileURL() async throws {
+        let url = try fixtureURL(named: "landscape-asym", ext: "jpg")
+        let metadata = try await Hokusai(url: url).metadata()
 
-        #expect(try image.width == 320)
-        #expect(try image.height == 200)
+        #expect(metadata.width == 320)
+        #expect(metadata.height == 200)
     }
 
-    @Test func resizeImage() throws {
+    @Test func resizeImage() async throws {
         let data = try loadFixtureData(named: "pixel", ext: "png")
-        let image = try Hokusai.image(from: data)
-        let resized = try image.resize(width: 8, height: 8)
+        let output = try await Hokusai(data: data).resize(width: 8, height: 8).png().data()
 
-        #expect(try resized.width == 8)
-        #expect(try resized.height == 8)
+        #expect(output.info.width == 8)
+        #expect(output.info.height == 8)
     }
 
-    @Test func compositeImage() throws {
-        let data = try loadFixtureData(named: "pixel", ext: "png")
-        let base = try Hokusai.image(from: data)
-        let overlay = try Hokusai.image(from: data)
-        let output = try base.composite(
-            overlay: overlay,
-            x: 0,
-            y: 0,
-            options: CompositeOptions(mode: .over, opacity: 0.5)
-        )
+    // MARK: - Sequential access
 
-        #expect(try output.width == 1)
-        #expect(try output.height == 1)
-    }
-
-    // MARK: - Sequential Access
-
-    @Test func loadWithSequentialAccess() throws {
+    @Test func loadWithSequentialAccess() async throws {
         let data = try loadFixtureData(named: "pixel", ext: "png")
 
         // Sequential load must produce the same image as random load.
-        let sequential = try Hokusai.image(from: data, options: InputOptions(access: .sequential))
-        let metadata = try sequential.metadata()
+        let metadata = try await Hokusai(data: data, options: InputOptions(access: .sequential)).metadata()
 
         #expect(metadata.width == 1)
         #expect(metadata.height == 1)
         #expect(metadata.pixel.hasAlpha)
     }
 
-    @Test func sequentialLoadPresetConvenience() throws {
+    @Test func sequentialLoadPresetConvenience() async throws {
         let data = try loadFixtureData(named: "landscape-asym", ext: "jpg")
+        let metadata = try await Hokusai(data: data, options: .sequential).metadata()
 
-        let image = try Hokusai.image(from: data, options: .sequential)
-        #expect(try image.width == 320)
-        #expect(try image.height == 200)
+        #expect(metadata.width == 320)
+        #expect(metadata.height == 200)
     }
 
-    @Test func sequentialSinglePassPipelineProducesOutput() throws {
+    @Test func sequentialSinglePassPipelineProducesOutput() async throws {
         // The documented use case: load -> resize -> encode, one forward pass.
-        let path = try fixturePath(named: "landscape-asym", ext: "jpg")
-        let image = try Hokusai.image(from: path, options: .sequential)
-        let output = try image.resize(width: 64, height: 40).toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
+        let url = try fixtureURL(named: "landscape-asym", ext: "jpg")
+        let output = try await Hokusai(url: url, options: .sequential).resize(width: 64, height: 40).jpeg(quality: 85).data()
 
-        #expect(!output.isEmpty)
+        #expect(!output.data.isEmpty)
     }
 
-    // MARK: - Existing behavior unchanged
+    // MARK: - Defaults
 
-    @Test func normalResizeOutputIsValid() throws {
+    @Test func defaultInputOptionsLoadTheSupportedFixtures() async throws {
         let data = try loadFixtureData(named: "pixel", ext: "png")
-        let image = try Hokusai.image(from: data)
-        let resized = try image.resize(width: 16, height: 16)
+        let metadata = try await Hokusai(data: data, options: InputOptions()).metadata()
 
-        #expect(try resized.width == 16)
-        #expect(try resized.height == 16)
-        let jpeg = try resized.toBuffer(options: SaveOptions(format: .jpeg, quality: 85))
-        #expect(!jpeg.isEmpty)
+        #expect(metadata.width == 1)
+        #expect(metadata.height == 1)
     }
 
-    @Test func defaultInputOptionsMatchPriorBehavior() throws {
-        let data = try loadFixtureData(named: "pixel", ext: "png")
+    /// Mirrors the README thumbnail recipe so the documented snippet runs.
+    @Test func readmeThumbnailRecipeRuns() async throws {
+        let url = try fixtureURL(named: "landscape-asym", ext: "jpg")
+        let image = try Hokusai(url: url)
 
-        // Default InputOptions() must load the supported fixtures unchanged.
-        let explicit = try Hokusai.image(from: data, options: InputOptions())
-        let meta = try explicit.metadata()
+        let bounded = try await image.resize(width: 40, height: 30, fit: .inside).png().data()
+        #expect(bounded.info.width <= 40 && bounded.info.height <= 30)
 
-        #expect(meta.width == 1)
-        #expect(meta.height == 1)
-    }
-
-    // MARK: - README example mirror
-
-    /// Mirrors the README "Thumbnail" examples so the documented snippets are
-    /// exercised by the suite.
-    @Test func readmeThumbnailExamplesCompileAndRun() throws {
-        let photoPath = try fixturePath(named: "landscape-asym", ext: "jpg")
-        let imageData = try loadFixtureData(named: "landscape-asym", ext: "jpg")
-
-        let thumb = try Hokusai.thumbnail(from: photoPath, width: 40)
-        #expect(try thumb.width == 40)
-
-        let opts = ThumbnailOptions(height: 30)
-        let bounded = try Hokusai.thumbnail(from: photoPath, width: 40, options: opts)
-        #expect(try bounded.height <= 30)
-
-        let cropped = try Hokusai.thumbnail(
-            from: photoPath,
-            width: 40,
-            options: ThumbnailOptions(height: 30, crop: .attention)
-        )
-        #expect(try cropped.width == 40)
-        #expect(try cropped.height == 30)
-
-        let fromBuffer = try Hokusai.thumbnail(from: imageData, width: 40)
-        #expect(try fromBuffer.width == 40)
-
-        let image = try Hokusai.image(from: photoPath)
-        let fromImage = try image.thumbnail(width: 40)
-        #expect(try fromImage.width == 40)
+        let cropped = try await image.resize(width: 40, height: 30, fit: .cover, position: .attention).png().data()
+        #expect(cropped.info.width == 40 && cropped.info.height == 30)
     }
 }

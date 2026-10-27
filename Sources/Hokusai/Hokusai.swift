@@ -641,127 +641,12 @@ public struct Hokusai: Sendable {
         try VipsRuntime.ensureInitialized()
     }
 
-    // MARK: - Image Loading
-
-    /// Load an image from a filesystem path.
-    ///
-    /// This performs synchronous libvips work on the calling thread. (Earlier
-    /// versions declared this method `async` although it never suspended; the
-    /// marker was removed so callers are not misled about execution. The
-    /// upcoming pipeline-API milestone will define the library's terminal
-    /// execution and concurrency policy; until then, offload to a background
-    /// executor yourself if you must not block the caller.)
-    ///
-    /// - Parameters:
-    ///   - path: Path to a readable image file.
-    ///   - options: Input options, including the access pattern, decoder
-    ///     failure level, and input limits. See ``InputOptions``.
-    public static func image(from path: String, options: InputOptions = InputOptions()) throws -> HokusaiImage {
-        return try loadFromFile(path, options: options)
-    }
-
-    /// Load an image from in-memory bytes.
-    ///
-    /// The bytes are copied during the call, so `data` does not need to
-    /// outlive the returned image. Like the path-based overload, this is
-    /// synchronous libvips work on the calling thread.
-    ///
-    /// - Parameters:
-    ///   - data: Encoded image bytes (JPEG, PNG, WebP, etc.).
-    ///   - options: Input options. See ``InputOptions``.
-    public static func image(from data: Data, options: InputOptions = InputOptions()) throws -> HokusaiImage {
-        return try loadFromBuffer(data, options: options)
-    }
-
-    /// Synchronous load from file for non-async call sites.
-    ///
-    /// - Parameters:
-    ///   - path: Path to a readable image file.
-    ///   - options: Input options. See ``InputOptions``.
-    public static func loadFromFile(_ path: String, options: InputOptions = InputOptions()) throws -> HokusaiImage {
-        let vipsBackend = try VipsBackend.loadFromFile(path, options: options)
-        return HokusaiImage(backend: .vips(vipsBackend))
-    }
-
-    /// Synchronous load from encoded bytes for non-async call sites.
-    ///
-    /// - Parameters:
-    ///   - data: Encoded image bytes.
-    ///   - options: Input options. See ``InputOptions``.
-    public static func loadFromBuffer(_ data: Data, options: InputOptions = InputOptions()) throws -> HokusaiImage {
-        let vipsBackend = try VipsBackend.loadFromBuffer(data, options: options)
-        return HokusaiImage(backend: .vips(vipsBackend))
-    }
-
-    // MARK: - Thumbnail
-
-    /// Load and resize a file in a single optimised libvips pass.
-    ///
-    /// Calls `vips_thumbnail()` internally, which uses the shrink-on-load
-    /// support of the format loader where one exists: JPEG (decoder shrink by
-    /// 2×, 4×, or 8×), WebP (libwebp decode-time scaling), TIFF (pyramid
-    /// levels), HEIF (embedded thumbnail), PDF/SVG (render scale). PNG has no
-    /// shrink-on-load, so PNG performance is similar to
-    /// ``loadFromFile(_:options:)`` followed by
-    /// ``HokusaiImage/resize(width:height:options:)``.
-    ///
-    /// Sources smaller than the target are scaled **up** by default (libvips
-    /// `VIPS_SIZE_BOTH` behaviour). EXIF auto-rotation is applied by default;
-    /// pass `options.noRotate = true` to disable it.
-    ///
-    /// Prefer ``HokusaiImage/resize(width:height:options:)`` when you need an
-    /// explicit interpolation kernel or fit modes like ``ResizeFit/contain``.
-    ///
-    /// - Parameters:
-    ///   - path: Path to a readable image file.
-    ///   - width: Target width (1...Int32.max). Output height follows the
-    ///     source aspect ratio unless `options.height` is also set.
-    ///   - options: Thumbnail options (height constraint, crop strategy,
-    ///     rotation behaviour). Crop strategies other than
-    ///     ``ThumbnailCrop/none`` require `options.height`.
-    /// - Returns: A new ``HokusaiImage`` at the requested dimensions.
-    /// - Throws: ``HokusaiError/invalidOption(name:reason:)`` for non-positive or
-    ///   out-of-range dimensions, ``HokusaiError/io(url:operation:reason:)``
-    ///   for a missing file, or ``HokusaiError/decode(_:)`` when libvips cannot decode or
-    ///   transform the source.
-    public static func thumbnail(from path: String, width: Int, options: ThumbnailOptions = ThumbnailOptions()) throws -> HokusaiImage {
-        let backend = try VipsBackend.thumbnailFromFile(path, width: width, options: options)
-        return HokusaiImage(backend: .vips(backend))
-    }
-
-    /// Load and resize an in-memory buffer in a single optimised libvips pass.
-    ///
-    /// Behaviour, validation, and trade-offs are the same as the path-based
-    /// `thumbnail`; shrink-on-load applies for formats that support it in
-    /// buffer form. The bytes are copied during the call, so `data` does not
-    /// need to outlive the returned image.
-    ///
-    /// - Parameters:
-    ///   - data: Encoded image bytes.
-    ///   - width: Target width (1...Int32.max).
-    ///   - options: Thumbnail options. Crop strategies other than
-    ///     ``ThumbnailCrop/none`` require `options.height`.
-    /// - Returns: A new ``HokusaiImage`` at the requested dimensions.
-    /// - Throws: ``HokusaiError/invalidOption(name:reason:)``,
-    ///   ``HokusaiError/invalidInput(reason:)`` for empty input, or
-    ///   ``HokusaiError/decode(_:)`` when libvips cannot decode or
-    ///   transform the source.
-    public static func thumbnail(from data: Data, width: Int, options: ThumbnailOptions = ThumbnailOptions()) throws -> HokusaiImage {
-        let backend = try VipsBackend.thumbnailFromBuffer(data, width: width, options: options)
-        return HokusaiImage(backend: .vips(backend))
-    }
-
     // MARK: - Version Information
 
     /// The version string reported by the linked libvips runtime.
     public static var vipsVersion: String {
-        return VipsBackend.version
-    }
-
-    /// Deprecated compatibility placeholder for the removed ImageMagick backend.
-    @available(*, deprecated, message: "ImageMagick backend was removed. Use vipsVersion instead.")
-    public static var magickVersion: String {
-        return "removed (native runtime)"
+        guard let version = vips_version_string() else { return "unknown" }
+        return String(cString: version)
     }
 
     /// A human-readable Hokusai and libvips version summary.

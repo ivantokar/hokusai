@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Removed (legacy API, #32)
+- **Breaking:** `HokusaiImage`, `ImageBackend`, `ImageData`, `BackendType` and
+  `VipsBackend`. `Hokusai` is the only image model; native ownership stays in
+  the internal `NativeImage`, which releases its `VipsImage*` on deinit.
+- **Breaking:** the `HokusaiLegacy` product and target.
+- **Breaking:** `Hokusai.image(from:)`, `loadFromFile`, `loadFromBuffer`,
+  `Hokusai.thumbnail(from:)`, the synchronous `toBuffer`/`toFile`/`toFormat`
+  terminals, `extendedMetadata()`, and `magickVersion`.
+- **Breaking:** the legacy option types `ResizeOptions`, `CropOptions`,
+  `SaveOptions`, `ThumbnailOptions`, `ThumbnailCrop`, `Position`, `Kernel`,
+  `FlipDirection` and `RotationAngle`. Use the typed `resize`, `extract`,
+  `rotate` and encoder methods on `Hokusai`.
+- The `vips_thumbnail` shims; `resize` already shrinks JPEG sources in the decoder.
+- The CLI `--kernel` option now also accepts `mks2013` and `mks2021`.
+
 ### Changed (text)
 - **Breaking:** text is a generated pipeline source. `Hokusai.text(_:layout:style:)`
   returns an ordinary immutable pipeline; `drawText(_:placement:layout:style:)`
