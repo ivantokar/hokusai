@@ -116,7 +116,8 @@ enum VipsRuntime {
             inputFormats: inputs,
             outputFormats: outputs,
             textRendering: exists("text"),
-            heifCompressions: heifCompressions
+            heifCompressions: heifCompressions,
+            pngPalette: exists("pngsave") && swift_vips_png_palette_probe() == 0
         )
     }
 }

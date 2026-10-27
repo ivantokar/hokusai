@@ -21,6 +21,9 @@ All notable changes to this project are documented in this file.
   `heifCompressions` / `canEncode(_: HEIFCompression)` say which HEIF codecs
   this build can encode and decode (HEVC is often missing). An unavailable
   format or codec is `unsupported`, not a native failure.
+- `RuntimeCapabilities.pngPalette` is verified by writing a palette PNG: on a
+  libvips without a quantiser the option would be silently ignored, so it is
+  `unsupported` instead.
 - The CLI `convert` command accepts `heif`, `tiff` and `gif`.
 
 ### Fixed

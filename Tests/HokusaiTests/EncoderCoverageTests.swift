@@ -105,13 +105,9 @@ import Testing
     }
 
     @Test func pngPaletteProducesAnIndexedImage() async throws {
+        guard try Hokusai.capabilities().pngPalette else { return }
         let full = try await picture().png().data()
-        let indexed: Output
-        do {
-            indexed = try await picture().png(options: PNGOptions(palette: PNGPalette(quality: 80, bitDepth: 8))).data()
-        } catch HokusaiError.encode {
-            return  // this libvips has no palette quantiser (libimagequant/quantizr)
-        }
+        let indexed = try await picture().png(options: PNGOptions(palette: PNGPalette(quality: 80, bitDepth: 8))).data()
         // IHDR colour type is the byte at offset 25: 3 means indexed.
         #expect(full.data[25] != 3)
         #expect(indexed.data[25] == 3)
@@ -260,6 +256,16 @@ import Testing
             #expect(throws: HokusaiError.self) {
                 try Evaluator.selectEncoder(format, TerminalConfig(), capabilities: none)
             }
+        }
+    }
+
+    @Test func paletteOutputWithoutAQuantiserIsUnsupportedNotSilentlyIgnored() throws {
+        let without = RuntimeCapabilities(libvipsVersion: "test", inputFormats: [], outputFormats: [.png], textRendering: false)
+        #expect(throws: HokusaiError.self) {
+            try Evaluator.selectEncoder(.png(PNGOptions(palette: PNGPalette())), TerminalConfig(), capabilities: without)
+        }
+        #expect(throws: Never.self) {
+            _ = try Evaluator.selectEncoder(.png(), TerminalConfig(), capabilities: without)
         }
     }
 

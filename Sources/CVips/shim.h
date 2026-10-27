@@ -95,6 +95,37 @@ static inline int swift_vips_heif_roundtrip_probe(int av1) {
     return result;
 }
 
+/**
+ * @brief Whether pngsave really writes an indexed PNG when asked for a palette.
+ *
+ * Without libimagequant or quantizr, libvips only warns and writes full
+ * colour, so the option would be silently ignored. Returns 0 when the output
+ * has PNG colour type 3 (indexed).
+ */
+static inline int swift_vips_png_palette_probe(void) {
+    VipsImage *black = NULL;
+    VipsImage *probe = NULL;
+    void *buffer = NULL;
+    size_t length = 0;
+    int result = -1;
+
+    if (vips_black(&black, 16, 16, "bands", 3, NULL)) {
+        return -1;
+    }
+    int copied = vips_copy(black, &probe, "interpretation", VIPS_INTERPRETATION_sRGB, NULL);
+    g_object_unref(black);
+    if (copied) {
+        return -1;
+    }
+    if (!vips_pngsave_buffer(probe, &buffer, &length, "palette", TRUE, NULL) && length > 25 &&
+        ((const unsigned char *) buffer)[25] == 3) {
+        result = 0;
+    }
+    if (buffer) g_free(buffer);
+    g_object_unref(probe);
+    return result;
+}
+
 // MARK: - Evaluation Cancellation
 
 static int swift_vips_passthrough_generate(VipsRegion *out_region, void *seq, void *a, void *b, gboolean *stop) {

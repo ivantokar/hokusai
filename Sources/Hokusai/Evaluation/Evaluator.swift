@@ -397,6 +397,10 @@ enum Evaluator {
         guard available.canEncode(format.imageFormat) else {
             throw HokusaiError.unsupported(feature: "encoding \(format.imageFormat.rawValue)", reason: "not available in this libvips build")
         }
+        if case .png(let options) = format, options.palette != nil, !available.pngPalette {
+            throw HokusaiError.unsupported(
+                feature: "palette PNG", reason: "this libvips build has no palette quantiser (libimagequant or quantizr)")
+        }
         if case .heif(let options) = format, !available.canEncode(options.compression) {
             throw HokusaiError.unsupported(
                 feature: "encoding HEIF with \(options.compression == .hevc ? "HEVC" : "AV1")",
