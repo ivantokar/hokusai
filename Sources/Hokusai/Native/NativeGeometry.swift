@@ -113,6 +113,11 @@ extension NativeImage {
     ///
     /// Sizes are computed in Swift so libvips receives one coherent, positive
     /// target. `background` is 8-bit RGBA and only affects `contain`.
+    ///
+    /// `reference` is the size the written pipeline sees when this image is a
+    /// decoder-shrunk stand-in for it (see ``Evaluator``): the target size is
+    /// derived from `reference`, so the result has exactly the dimensions the
+    /// unshrunk image would give, and only the remaining scale is resampled.
     func resize(
         width: Int?,
         height: Int?,
@@ -121,14 +126,15 @@ extension NativeImage {
         kernel: ResizeKernel,
         withoutEnlargement: Bool,
         withoutReduction: Bool,
-        background: [Double]
+        background: [Double],
+        reference: (width: Int, height: Int)? = nil
     ) throws -> NativeImage {
         guard width != nil || height != nil else {
             throw HokusaiError.invalidOption(name: "resize", reason: "specify width, height, or both")
         }
 
         let (finalWidth, finalHeight) = Self.proportionalSize(
-            current: (self.width, self.height),
+            current: reference ?? (self.width, self.height),
             target: (width, height),
             fit: fit,
             withoutEnlargement: withoutEnlargement,
@@ -158,7 +164,7 @@ extension NativeImage {
     ///
     /// Each side is at least one pixel so extreme aspect ratios never ask
     /// libvips for an empty image.
-    private static func proportionalSize(
+    static func proportionalSize(
         current: (width: Int, height: Int),
         target: (width: Int?, height: Int?),
         fit: ResizeFit,

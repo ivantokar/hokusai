@@ -139,11 +139,17 @@ enum Evaluator {
         }
 
         var current: NativeImage
+        // Set when the decoder shrank the source: the intermediate nodes up to
+        // the resize then describe a smaller image than their written meaning,
+        // so they must not be shared with other consumers of this plan.
+        var shrink: ShrinkOnLoad?
         if let image {
             current = image
         } else {
-            current = try open(chain.source, context: context, label: label)
-            if shareable { context.remember(current, for: chain.sourceID) }
+            let opened = try open(chain.source, planned: steps, context: context, label: label)
+            current = opened.image
+            shrink = opened.shrink
+            if shareable && shrink == nil { context.remember(current, for: chain.sourceID) }
         }
 
         for index in next..<steps.count {
@@ -152,27 +158,111 @@ enum Evaluator {
             if let rule = step.skippedBy {
                 context.trace?.record(.operationSkipped(step.operation.name, rule))
             } else {
-                current = try apply(step.operation, to: current, context: context)
+                let reference = shrink.flatMap { index == $0.resizeIndex ? $0.reference : nil }
+                current = try apply(step.operation, to: current, reference: reference, context: context)
                 context.trace?.record(.operationLowered(step.operation.name))
             }
-            if shareable { context.remember(current, for: chain.steps[index].id) }
+            let sharesWrittenMeaning = shrink.map { index >= $0.resizeIndex } ?? true
+            if shareable && sharesWrittenMeaning { context.remember(current, for: chain.steps[index].id) }
         }
         return current
     }
 
-    private static func open(_ source: ImageSource, context: EvaluationContext, label: String) throws -> NativeImage {
-        let native: NativeImage
-        switch source {
-        case .file(let url, let options):
-            native = try NativeImage.open(path: url.path, options: options)
-        case .data(let data, let options):
-            native = try NativeImage.open(data: data, options: options)
-        }
-        context.trace?.record(.sourceOpened(label))
-        return try context.watch(native, label: label, sequential: source.options.access == .sequential)
+    /// A source opened at reduced size, and what the resize that follows needs.
+    private struct ShrinkOnLoad {
+        /// The planned step that resizes.
+        let resizeIndex: Int
+        /// The size the written pipeline sees at that step, before any shrink.
+        let reference: (width: Int, height: Int)
     }
 
-    private static func apply(_ operation: ImageOperation, to image: NativeImage, context: EvaluationContext) throws -> NativeImage {
+    /// Opens `source`, letting the decoder shrink it when the leading
+    /// operations allow (see ``PlannerRule/shrinkOnLoad``).
+    private static func open(
+        _ source: ImageSource,
+        planned steps: [PlannedStep],
+        context: EvaluationContext,
+        label: String
+    ) throws -> (image: NativeImage, shrink: ShrinkOnLoad?) {
+        let sequential = source.options.access == .sequential
+        var native = try openUnshrunk(source)
+        var shrink: ShrinkOnLoad?
+        var shrinkFactor: Int?
+
+        if context.planner.isEnabled(.shrinkOnLoad), source.options.page == nil, native.supportsDecoderShrink,
+           let plan = shrinkPlan(for: native, steps: steps) {
+            let reduced: NativeImage
+            switch source {
+            case .file(let url, let options): reduced = try NativeImage.open(path: url.path, options: options, decoderShrink: plan.factor)
+            case .data(let data, let options): reduced = try NativeImage.open(data: data, options: options, decoderShrink: plan.factor)
+            }
+            // The decoder may round a dimension up but never below what was
+            // asked; if it did, keep the full-size source rather than resize
+            // from fewer pixels than the written pipeline would have.
+            if reduced.width >= plan.minimum.width, reduced.height >= plan.minimum.height {
+                native = reduced
+                shrink = ShrinkOnLoad(resizeIndex: plan.resizeIndex, reference: plan.reference)
+                shrinkFactor = plan.factor
+            }
+        }
+        context.trace?.record(.sourceOpened(label))
+        if let shrinkFactor { context.trace?.record(.shrinkOnLoad(shrinkFactor)) }
+        return (try context.watch(native, label: label, sequential: sequential), shrink)
+    }
+
+    private static func openUnshrunk(_ source: ImageSource) throws -> NativeImage {
+        switch source {
+        case .file(let url, let options): try NativeImage.open(path: url.path, options: options)
+        case .data(let data, let options): try NativeImage.open(data: data, options: options)
+        }
+    }
+
+    /// Decides whether and how far the decoder may shrink `header`.
+    ///
+    /// Only `[autoOrient,] resize` may lead the pipeline. Shrinking changes
+    /// pixels that an earlier operation (blur, extract, rotate) would have
+    /// seen at full resolution, so any such operation rules it out.
+    private static func shrinkPlan(
+        for header: NativeImage,
+        steps: [PlannedStep]
+    ) -> (factor: Int, resizeIndex: Int, reference: (width: Int, height: Int), minimum: (width: Int, height: Int))? {
+        var index = 0
+        var oriented = false
+        if index < steps.count, steps[index].skippedBy == nil, case .autoOrient = steps[index].operation {
+            oriented = true
+            index += 1
+        }
+        guard index < steps.count, steps[index].skippedBy == nil, case .resize(let resize) = steps[index].operation else {
+            return nil
+        }
+
+        // The size the resize sees: orientations 5...8 swap the axes.
+        let turned = oriented && header.exifOrientation >= 5
+        let reference = turned ? (width: header.height, height: header.width) : (width: header.width, height: header.height)
+        let target = NativeImage.proportionalSize(
+            current: reference,
+            target: (resize.width, resize.height),
+            fit: resize.fit,
+            withoutEnlargement: resize.withoutEnlargement,
+            withoutReduction: resize.withoutReduction)
+
+        // Back in the source's own axes, which is what the decoder shrinks.
+        let needed = turned ? (width: target.height, height: target.width) : target
+        for factor in [8, 4, 2] where
+            ceilDiv(header.width, factor) >= needed.width && ceilDiv(header.height, factor) >= needed.height {
+            return (factor, index, reference, needed)
+        }
+        return nil
+    }
+
+    private static func ceilDiv(_ value: Int, _ divisor: Int) -> Int { (value + divisor - 1) / divisor }
+
+    private static func apply(
+        _ operation: ImageOperation,
+        to image: NativeImage,
+        reference: (width: Int, height: Int)? = nil,
+        context: EvaluationContext
+    ) throws -> NativeImage {
         switch operation {
         case .autoOrient:
             return try image.autoOrient()
@@ -186,7 +276,8 @@ enum Evaluator {
                 kernel: step.kernel,
                 withoutEnlargement: step.withoutEnlargement,
                 withoutReduction: step.withoutReduction,
-                background: try step.background.rgba8())
+                background: try step.background.rgba8(),
+                reference: reference)
 
         case .rotate(let degrees, let background, let interpolation):
             return try image.rotate(degrees: degrees, background: try background.rgba8(), interpolation: interpolation)

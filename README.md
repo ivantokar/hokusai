@@ -272,7 +272,7 @@ hokusai thumbnail --input photo.jpg --output thumb.jpg --width 400
 hokusai benchmark pipeline --input photo.jpg --sigma 50
 ```
 
-The optimized `thumbnail` CLI command currently uses the intentionally retained legacy thumbnail loader while its public 1.0 pipeline counterpart is designed.
+`hokusai thumbnail` is `autoOrient` and `resize` on the same public pipeline as the library. JPEG sources are shrunk by the decoder when the pipeline allows it (see `resize` in the changelog); nothing about the command line changes.
 
 ## 0.x migration
 
@@ -303,7 +303,7 @@ deliberate, tracked capability rather than an implied promise.
 - [x] Async `data()` and `write(to:)` terminals with FIFO admission and cancellation that stops running libvips work.
 - [x] Typed JPEG, PNG, WebP, AVIF, and single-page raster PDF output.
 - [x] Typed header metadata plus privacy-safe metadata removal by default.
-- [ ] [First-class pipeline thumbnails with shrink-on-load](https://github.com/ivantokar/hokusai/issues/20).
+- [x] [First-class pipeline thumbnails with shrink-on-load](https://github.com/ivantokar/hokusai/issues/20).
 - [ ] [Complete page, decoder-failure, and upload-safety input controls](https://github.com/ivantokar/hokusai/issues/21).
 - [ ] [Typed raw-pixel input and output](https://github.com/ivantokar/hokusai/issues/22).
 

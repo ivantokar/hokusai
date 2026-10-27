@@ -224,6 +224,37 @@ static inline VipsImage *swift_vips_open_buffer(const void *buf, size_t size, in
     return image;
 }
 
+/**
+ * @brief Open a JPEG file, letting the decoder shrink it by `shrink` (2, 4 or 8).
+ *
+ * Only call this for a source whose loader is already known to be a JPEG
+ * loader: other loaders reject the `shrink` argument.
+ */
+static inline VipsImage *swift_vips_open_file_shrink(const char *path, int sequential, int fail_on, int shrink, int revalidate) {
+    const VipsAccess access = sequential ? VIPS_ACCESS_SEQUENTIAL : VIPS_ACCESS_RANDOM;
+    if (revalidate) {
+        return vips_image_new_from_file(path, "access", access, "fail_on", fail_on, "shrink", shrink, "revalidate", TRUE, NULL);
+    }
+    return vips_image_new_from_file(path, "access", access, "fail_on", fail_on, "shrink", shrink, NULL);
+}
+
+/** @brief As swift_vips_open_buffer, for a JPEG source shrunk by the decoder. */
+static inline VipsImage *swift_vips_open_buffer_shrink(const void *buf, size_t size, int sequential, int fail_on, int shrink) {
+    VipsBlob *blob = vips_blob_copy(buf, size);
+    if (blob == NULL) {
+        return NULL;
+    }
+    VipsSource *source = vips_source_new_from_blob(blob);
+    vips_area_unref(VIPS_AREA(blob));
+    if (source == NULL) {
+        return NULL;
+    }
+    const VipsAccess access = sequential ? VIPS_ACCESS_SEQUENTIAL : VIPS_ACCESS_RANDOM;
+    VipsImage *image = vips_image_new_from_source(source, "", "access", access, "fail_on", fail_on, "shrink", shrink, NULL);
+    g_object_unref(source);
+    return image;
+}
+
 /** @brief The number of pages libvips reports for an image (1 when the loader has no pages). */
 static inline int swift_vips_image_n_pages(VipsImage *image) {
     return vips_image_get_n_pages(image);

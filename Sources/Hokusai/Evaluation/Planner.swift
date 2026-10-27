@@ -26,6 +26,16 @@ enum PlannerRule: String, CaseIterable, Sendable {
     /// and sources opened for `.sequential` access are never shared because
     /// one forward-only stream cannot serve two readers.
     case subplanMemoisation
+
+    /// A JPEG source whose first operation is `resize` (optionally after
+    /// `autoOrient`) is decoded at a reduced size when the result still has
+    /// at least the pixels the resize needs. The target size is computed from
+    /// the full-resolution header, so dimensions are exactly those of a normal
+    /// decode and resize; only pixel values may differ, within codec
+    /// tolerance. Any other operation before the resize, any other codec, an
+    /// explicit page, or a source node already built for another consumer in
+    /// the same evaluation disables it.
+    case shrinkOnLoad
 }
 
 /// Test and benchmark control over the planner. Production code uses
@@ -86,6 +96,8 @@ final class PlanTrace: @unchecked Sendable {
         case operationSkipped(String, PlannerRule)
         /// A previously built node was reused instead of rebuilt.
         case memoisationHit(String)
+        /// The decoder was asked to shrink the source by this factor.
+        case shrinkOnLoad(Int)
         /// The terminal sink: `memory <format>` or `file <format>`.
         case sinkSelected(String)
     }
