@@ -80,7 +80,7 @@ import CVips
     // MARK: - Extend
 
     @Test func extendTargetCanvasAnchorsEveryCompassPoint() throws {
-        let anchors: [(CanvasAnchor, Int, Int)] = [
+        let anchors: [(Gravity, Int, Int)] = [
             (.northWest, 0, 0), (.north, 40, 0), (.northEast, 80, 0),
             (.west, 0, 40), (.center, 40, 40), (.east, 80, 40),
             (.southWest, 0, 80), (.south, 40, 80), (.southEast, 80, 80),

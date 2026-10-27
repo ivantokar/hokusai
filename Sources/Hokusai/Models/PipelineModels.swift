@@ -42,8 +42,9 @@ public struct ImageSize: Hashable, Sendable {
     }
 }
 
-/// Anchor used to place an image inside an expanded canvas.
-public enum CanvasAnchor: Sendable {
+/// A compass point used to place one rectangle inside another: an image in
+/// an expanded canvas, or a layer on a base image.
+public enum Gravity: Sendable {
     case center, north, south, east, west
     case northWest, northEast, southWest, southEast
 }
@@ -267,30 +268,7 @@ public struct OutputInfo: Sendable, Equatable {
     }
 }
 
-/// A layer composited over a pipeline in the supplied order.
-public struct CompositeLayer: Sendable {
-    internal let source: Hokusai
-    public let x: Int
-    public let y: Int
-    public let blend: BlendMode
-    public let opacity: Double
-
-    /// Creates a layer from another immutable pipeline.
-    public init(_ image: Hokusai, x: Int = 0, y: Int = 0, blend: BlendMode = .over, opacity: Double = 1) {
-        self.source = image
-        self.x = x
-        self.y = y
-        self.blend = blend
-        self.opacity = opacity
-    }
-
-    /// Decodes in-memory data into a pipeline layer.
-    public init(data: Data, x: Int = 0, y: Int = 0, blend: BlendMode = .over, opacity: Double = 1) throws {
-        self.init(try Hokusai(data: data), x: x, y: y, blend: blend, opacity: opacity)
-    }
-}
-
-internal extension CanvasAnchor {
+internal extension Gravity {
     /// Calculates the top-left offset for the selected anchor inside a canvas.
     func offset(imageWidth: Int, imageHeight: Int, canvasWidth: Int, canvasHeight: Int) -> (x: Int, y: Int) {
         let horizontal = (canvasWidth - imageWidth) / 2

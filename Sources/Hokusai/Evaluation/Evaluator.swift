@@ -355,24 +355,19 @@ enum Evaluator {
         case .flatten(let background):
             return try image.flatten(background: try background.rgba8())
 
-        case .composite(let layers):
-            var result = image
+        case .composite(let layers, let space):
+            var native: [NativeLayer] = []
             for (index, layer) in layers.enumerated() {
                 let scope = "composite layer \(index + 1)"
-                let overlay: NativeImage
                 do {
-                    overlay = try build(layer.plan, context: context, scope: scope)
+                    let overlay = try build(layer.plan, context: context, scope: scope)
+                    native.append(NativeLayer(image: overlay, placement: layer.placement, blend: layer.blend, opacity: layer.opacity))
                 } catch let error as HokusaiError {
                     throw error.scoped(scope)
                 }
-                result = try result.composite(
-                    overlay: overlay,
-                    x: layer.x,
-                    y: layer.y,
-                    options: CompositeOptions(mode: layer.blend, opacity: layer.opacity)
-                )
             }
-            return result
+            context.trace?.record(.compositeBlended(layers: native.count))
+            return try image.composite(native, space: space)
 
         case .drawText(let text, let x, let y, let options):
             return try image.drawText(text, x: x, y: y, options: options)
