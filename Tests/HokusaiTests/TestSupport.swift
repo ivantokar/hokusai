@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import CVips
 @testable import Hokusai
 
 /// Shared fixture helpers for the Hokusai test suite.
@@ -80,4 +81,22 @@ extension HokusaiError {
         if case .decode = self { return true }
         return false
     }
+}
+
+/// Encodes raw 8-bit interleaved pixels as a PNG, so a test can state its
+/// pixels exactly instead of depending on a fixture file.
+func makePNG(width: Int, height: Int, bands: Int, pixels: [UInt8]) throws -> Data {
+    precondition(pixels.count == width * height * bands, "pixel count does not match the dimensions")
+    let image = pixels.withUnsafeBytes {
+        vips_image_new_from_memory_copy($0.baseAddress, pixels.count, Int32(width), Int32(height), Int32(bands), VIPS_FORMAT_UCHAR)
+    }
+    guard let image else { throw HokusaiError.invalidInput(reason: "could not build a test image") }
+    defer { g_object_unref(image) }
+    var buffer: UnsafeMutableRawPointer?
+    var length = 0
+    guard swift_vips_pngsave_buffer(image, &buffer, &length, 0, 0) == 0, let buffer else {
+        throw HokusaiError.invalidInput(reason: "could not encode a test image")
+    }
+    defer { g_free(buffer) }
+    return Data(bytes: buffer, count: length)
 }

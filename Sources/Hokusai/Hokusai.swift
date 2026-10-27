@@ -255,62 +255,162 @@ public struct Hokusai: Sendable {
         return appending(.trim(threshold: threshold))
     }
 
-    /// Applies a Gaussian blur with a positive pixel sigma.
+    /// Applies a Gaussian blur.
     ///
-    /// Larger sigma values blur a wider area and require more work.
-    public func blur(sigma: Double = 1) throws -> Self {
-        guard sigma.isFinite, sigma > 0 else {
-            throw HokusaiError.invalidOption(name: "sigma", reason: "must be a finite value greater than zero")
+    /// `blur()` is a mild blur (sigma 1) for the common case. `sigma` is the
+    /// blur radius in pixels. `precision` and `minAmplitude` tune the Gaussian
+    /// mask: a smaller `minAmplitude` gives a wider, more accurate mask. Pixels
+    /// are weighted by alpha, so transparent areas do not bleed colour.
+    public func blur(sigma: Double = 1, precision: BlurPrecision = .integer, minAmplitude: Double = 0.2) throws -> Self {
+        guard sigma.isFinite, sigma > 0, sigma <= 10_000 else {
+            throw HokusaiError.invalidOption(name: "sigma", reason: "must be a finite value above zero")
         }
-        return appending(.blur(sigma: sigma))
+        guard minAmplitude.isFinite, minAmplitude > 0, minAmplitude <= 10 else {
+            throw HokusaiError.invalidOption(name: "minAmplitude", reason: "must be a finite value above zero and at most 10")
+        }
+        return appending(.blur(sigma: sigma, precision: precision, minAmplitude: minAmplitude))
     }
 
-    /// Sharpens the pipeline using libvips' unsharp-mask operation.
+    /// Sharpens luminance with an unsharp mask. Alpha is untouched.
     public func sharpen(sigma: Double = 1) throws -> Self {
-        guard sigma.isFinite, sigma > 0 else {
-            throw HokusaiError.invalidOption(name: "sigma", reason: "must be a finite value greater than zero")
-        }
-        return appending(.sharpen(sigma: sigma))
+        try sharpen(SharpenOptions(sigma: sigma))
     }
 
-    /// Converts the pipeline to a single-channel grayscale image.
-    public func grayscale() throws -> Self {
+    /// Sharpens luminance with explicit controls. Alpha is untouched.
+    public func sharpen(_ options: SharpenOptions) throws -> Self {
+        try options.validate()
+        return appending(.sharpen(options))
+    }
+
+    /// Removes colour while keeping the image's RGB(A) layout.
+    ///
+    /// Luminance comes from libvips' sRGB conversion to black-and-white, which
+    /// works in linear light. Alpha is preserved. To produce a single colour
+    /// channel instead, use ``convert(to:)`` with ``ColorSpace/grayscale``.
+    public func grayscale() -> Self {
         appending(.grayscale)
     }
 
-    /// Maps source luminance into the supplied sRGB colour.
+    /// Maps luminance onto `color`: white becomes the tint and black stays black.
+    ///
+    /// The image is made grayscale first (see ``grayscale()``), so the result
+    /// is RGB. Existing alpha is preserved; the colour's own opacity is ignored.
     public func tint(_ color: Color) throws -> Self {
         _ = try color.rgba8()
         return appending(.tint(color))
     }
 
-    /// Normalizes contrast using libvips histogram normalization.
-    public func normalize() throws -> Self {
-        appending(.normalize)
+    /// Stretches contrast between two luminance percentiles.
+    ///
+    /// The darkest `lower` percent and brightest `100 - upper` percent of
+    /// pixels are clipped, and what remains is stretched to the full range.
+    /// One linear map is applied to every colour band, so hue is kept and
+    /// alpha is untouched. A flat image is returned unchanged. Requires an
+    /// 8- or 16-bit image.
+    public func normalize(lower: Double = 1, upper: Double = 99) throws -> Self {
+        guard lower.isFinite, upper.isFinite, lower >= 0, upper <= 100, lower < upper else {
+            throw HokusaiError.invalidOption(name: "percentiles", reason: "must satisfy 0 <= lower < upper <= 100")
+        }
+        return appending(.normalize(lower: lower, upper: upper))
+    }
+
+    /// Local contrast enhancement (CLAHE) on each colour band of an 8-bit image.
+    ///
+    /// `width` and `height` are the tile size in pixels and `maxSlope` limits
+    /// how much contrast a tile may gain (0 disables the limit, 3 is a common
+    /// choice). This is adaptive, not the global stretch of ``normalize(lower:upper:)``.
+    public func clahe(width: Int = 8, height: Int = 8, maxSlope: Int = 3) throws -> Self {
+        try Self.validate(dimension: width, name: "width")
+        try Self.validate(dimension: height, name: "height")
+        guard (0...100).contains(maxSlope) else {
+            throw HokusaiError.invalidOption(name: "maxSlope", reason: "must be in 0...100")
+        }
+        return appending(.clahe(width: width, height: height, maxSlope: maxSlope))
+    }
+
+    /// Applies `out = in ^ (1 / value)` to the colour bands: values above 1
+    /// brighten midtones. It runs exactly where it is written in the chain.
+    public func gamma(_ value: Double = 2.2) throws -> Self {
+        guard value.isFinite, value >= 0.1, value <= 10 else {
+            throw HokusaiError.invalidOption(name: "gamma", reason: "must be a finite value from 0.1 to 10")
+        }
+        return appending(.gamma(value))
+    }
+
+    /// Inverts colours. Alpha is inverted too only when `alpha` is true.
+    public func negate(alpha: Bool = false) -> Self {
+        appending(.negate(alpha: alpha))
+    }
+
+    /// Replaces each pixel with the median of its `size` × `size` neighbourhood.
+    public func median(size: Int = 3) throws -> Self {
+        guard (1...101).contains(size) else {
+            throw HokusaiError.invalidOption(name: "size", reason: "must be in 1...101")
+        }
+        return appending(.median(size: size))
+    }
+
+    /// Turns pixels at or above `level` (0...255) white and the rest black.
+    ///
+    /// With `grayscale` (the default) colour is first reduced to one luminance
+    /// channel, so the result is a single-channel mask. Without it each colour
+    /// band is thresholded on its own. Alpha is kept.
+    public func threshold(_ level: Double = 128, grayscale: Bool = true) throws -> Self {
+        guard level.isFinite, (0...255).contains(level) else {
+            throw HokusaiError.invalidOption(name: "level", reason: "must be in 0...255")
+        }
+        return appending(.threshold(level: level, grayscale: grayscale))
+    }
+
+    /// Adjusts brightness and saturation by multiplication and hue by rotation.
+    ///
+    /// Works in LCH: `brightness` scales lightness, `saturation` scales chroma
+    /// (both 1 for no change, 0 or more), and `hue` rotates by degrees.
+    public func modulate(brightness: Double = 1, saturation: Double = 1, hue: Double = 0) throws -> Self {
+        guard brightness.isFinite, brightness >= 0, brightness <= 100 else {
+            throw HokusaiError.invalidOption(name: "brightness", reason: "must be a finite value from 0 to 100")
+        }
+        guard saturation.isFinite, saturation >= 0, saturation <= 100 else {
+            throw HokusaiError.invalidOption(name: "saturation", reason: "must be a finite value from 0 to 100")
+        }
+        guard hue.isFinite, abs(hue) <= 3600 else {
+            throw HokusaiError.invalidOption(name: "hue", reason: "must be a finite number of degrees")
+        }
+        return appending(.modulate(brightness: brightness, saturation: saturation, hue: hue))
     }
 
     /// Converts the pipeline to a supported output colour space.
+    ///
+    /// ``ColorSpace/grayscale`` produces a single colour channel (plus alpha if
+    /// present); use ``grayscale()`` for a visual effect that keeps RGB.
     public func convert(to colorSpace: ColorSpace) throws -> Self {
         switch colorSpace {
         case .sRGB: appending(.convertToSRGB)
-        case .grayscale: appending(.grayscale)
+        case .grayscale: appending(.convertToGrayscale)
         }
     }
 
-    /// Adds an opaque alpha band when the pipeline does not already have one.
-    public func ensureAlpha() throws -> Self {
-        appending(.ensureAlpha)
+    /// Adds an alpha band of constant `opacity` (0...1) when there is none.
+    /// An existing alpha band is left as it is.
+    public func ensureAlpha(opacity: Double = 1) throws -> Self {
+        guard opacity.isFinite, (0...1).contains(opacity) else {
+            throw HokusaiError.invalidOption(name: "opacity", reason: "must be a finite value from 0 through 1")
+        }
+        return appending(.ensureAlpha(opacity: opacity))
     }
 
-    /// Flattens alpha onto a solid background colour.
+    /// Composites over a solid background colour and removes alpha.
+    /// Does nothing when there is no alpha.
     public func flatten(background: Color = .white) throws -> Self {
         _ = try background.rgba8()
         return appending(.flatten(background: background))
     }
 
-    /// Removes alpha by compositing the image over the supplied background.
-    public func removeAlpha(background: Color = .white) throws -> Self {
-        try flatten(background: background)
+    /// Drops the alpha band without compositing, so the colour of fully
+    /// transparent pixels shows. Use ``flatten(background:)`` to composite.
+    /// Does nothing when there is no alpha.
+    public func removeAlpha() -> Self {
+        appending(.removeAlpha)
     }
 
     /// Composites layers over the pipeline in array order.

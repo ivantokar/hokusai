@@ -4,6 +4,27 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed (effects)
+- **Breaking:** `normalize()` is now photographic contrast stretching,
+  `normalize(lower: 1, upper: 99)`: the luminance range between two
+  percentiles is stretched to the full range, with the same linear map on every
+  colour band, alpha untouched. It previously called `vips_hist_norm`, which
+  normalises a histogram image and is not an image operation.
+- **Breaking:** `removeAlpha()` takes no argument and drops the alpha band
+  without compositing. It used to flatten onto a background; that is still
+  `flatten(background:)`.
+- **Breaking:** `grayscale()` is a visual effect that keeps RGB(A) and alpha.
+  The single-colour-channel result is `convert(to: .grayscale)`, which also
+  keeps alpha as a second band.
+- `tint(_:)` preserves alpha instead of returning an opaque RGB image.
+- `blur` and `sharpen` run with alpha handled correctly: blur weights colour by
+  alpha so transparent pixels do not bleed. `blur` gained `precision` and
+  `minAmplitude`; `sharpen(_:)` takes a `SharpenOptions` (`sigma`, `flat`,
+  `jagged`, `threshold`, `maxBrightening`, `maxDarkening`).
+- `ensureAlpha(opacity:)` appends constant alpha of the given opacity.
+- `flatten` is a no-op without alpha and works for grey+alpha images.
+- `grayscale()`, `negate()` and `removeAlpha()` no longer throw.
+
 ### Fixed
 - `resize(fit: .contain)` and `extend(to:)` failed with a transform error on
   images without an alpha channel (for example JPEG) because the RGBA fill was
@@ -16,6 +37,10 @@ All notable changes to this project are documented in this file.
   AV1.
 
 ### Added
+- New effects: `gamma(_:)` (runs where written, never reordered around resize),
+  `negate(alpha:)`, `median(size:)`, `threshold(_:grayscale:)`,
+  `modulate(brightness:saturation:hue:)` (LCH), and `clahe(width:height:maxSlope:)`
+  (adaptive contrast per colour band, 8-bit).
 - Shrink-on-load behind the normal `resize`. When a JPEG file or `Data` source
   starts with `resize` (optionally after `autoOrient`) and the decoded image
   would still have at least the pixels the resize needs, the decoder shrinks it

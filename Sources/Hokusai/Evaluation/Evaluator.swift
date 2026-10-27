@@ -307,33 +307,53 @@ enum Evaluator {
             }
             return try image.crop(left: Int(left), top: Int(top), width: Int(width), height: Int(height))
 
-        case .blur(let sigma):
-            return try image.applying("blur") { swift_vips_gaussblur($0, $1, sigma) }
+        case .blur(let sigma, let precision, let minAmplitude):
+            return try image.gaussianBlur(sigma: sigma, precision: precision, minAmplitude: minAmplitude)
 
-        case .sharpen(let sigma):
-            return try image.applying("sharpen") { swift_vips_sharpen($0, $1, sigma) }
+        case .sharpen(let options):
+            return try image.sharpen(options)
 
         case .grayscale:
-            return try image.applying("grayscale") { swift_vips_colourspace_bw($0, $1) }
+            return try image.grayscaleEffect()
+
+        case .convertToGrayscale:
+            return try image.convertToGrayscale()
 
         case .tint(let color):
-            let rgba = try color.rgba8()
-            return try image.applying("tint") { swift_vips_tint($0, $1, rgba[0], rgba[1], rgba[2]) }
+            return try image.tint(try color.rgba8())
 
-        case .normalize:
-            return try image.applying("normalize") { swift_vips_hist_norm($0, $1) }
+        case .normalize(let lower, let upper):
+            return try image.normalize(lower: lower, upper: upper)
+
+        case .clahe(let width, let height, let maxSlope):
+            return try image.clahe(width: width, height: height, maxSlope: maxSlope)
+
+        case .gamma(let value):
+            return try image.gamma(value)
+
+        case .negate(let alpha):
+            return try image.negate(alpha: alpha)
+
+        case .median(let size):
+            return try image.median(size: size)
+
+        case .threshold(let level, let grayscale):
+            return try image.threshold(level: level, grayscale: grayscale)
+
+        case .modulate(let brightness, let saturation, let hue):
+            return try image.modulate(brightness: brightness, saturation: saturation, hue: hue)
 
         case .convertToSRGB:
             return try image.applying("convert to sRGB") { swift_vips_colourspace_srgb($0, $1) }
 
-        case .ensureAlpha:
-            if image.hasAlpha { return image }
-            return try image.applying("ensure alpha") { swift_vips_addalpha($0, $1) }
+        case .ensureAlpha(let opacity):
+            return try image.ensureAlpha(opacity: opacity)
+
+        case .removeAlpha:
+            return try image.removeAlpha()
 
         case .flatten(let background):
-            return try withNativeColor(background, operation: "flatten") { area in
-                try image.applying("flatten") { swift_vips_flatten($0, $1, area) }
-            }
+            return try image.flatten(background: try background.rgba8())
 
         case .composite(let layers):
             var result = image
@@ -360,21 +380,6 @@ enum Evaluator {
     }
 
     // MARK: - Helpers
-
-    /// Passes a native RGBA array to `body` and releases it afterwards.
-    private static func withNativeColor<T>(
-        _ color: Color,
-        operation: String,
-        _ body: (UnsafeMutablePointer<VipsArrayDouble>) throws -> T
-    ) throws -> T {
-        let rgba = try color.rgba8()
-        let area = rgba.withUnsafeBufferPointer { swift_vips_array_double_new($0.baseAddress, Int32($0.count)) }
-        guard let area else {
-            throw HokusaiError.allocationFailed(operation)
-        }
-        defer { vips_area_unref(UnsafeMutablePointer(mutating: UnsafeRawPointer(area).assumingMemoryBound(to: VipsArea.self))) }
-        return try body(area)
-    }
 
     /// An encoder ready to run against any sink.
     enum SelectedEncoder {
