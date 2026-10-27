@@ -46,7 +46,7 @@ dependencies: [
 ]
 ```
 
-Add `Hokusai` to your target dependencies. Optional products are `HokusaiNIO` for `ByteBuffer` bridging and `HokusaiLegacy` for temporary 0.x migration support.
+Add `Hokusai` to your target dependencies. The optional product `HokusaiNIO` bridges SwiftNIO `ByteBuffer`.
 
 ## Quick start
 
@@ -277,17 +277,18 @@ hokusai benchmark pipeline --input photo.jpg --sigma 50
 
 `hokusai thumbnail` is `autoOrient` and `resize` on the same public pipeline as the library. JPEG sources are shrunk by the decoder when the pipeline allows it (see `resize` in the changelog); nothing about the command line changes.
 
-## 0.x migration
+## Migrating from 0.x and 1.x
 
-| 0.x adapter API | 1.0 pipeline API |
+| Removed API | Pipeline API |
 | --- | --- |
 | `Hokusai.image(from: path)` | `Hokusai(url: URL(fileURLWithPath: path))` |
 | `Hokusai.image(from: data)` | `Hokusai(data: data)` |
 | `image.resize(...).toFile(path)` | `try await pipeline.resize(...).write(to: URL(...))` |
 | `image.crop(...)` | `pipeline.extract(x:y:width:height:)` |
+| `Hokusai.thumbnail(from:width:)` | `pipeline.resize(width:height:fit:)`; JPEG sources are shrunk by the decoder |
 | `image.toBuffer(...)` | Select `.jpeg()` / `.png()` / `.webp()` / `.avif()`, then `try await .data()` |
 
-Import `HokusaiLegacy` only as a temporary adapter during migration.
+The 0.x `HokusaiImage` handle, the static loaders and thumbnails, the synchronous `toBuffer`/`toFile` terminals and the `HokusaiLegacy` product are removed in 2.0.
 
 ## 1.0 ergonomics roadmap
 

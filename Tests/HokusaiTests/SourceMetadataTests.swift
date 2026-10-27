@@ -109,9 +109,9 @@ import Testing
         #expect(image.sourceByteSize == expected)
     }
 
-    @Test func aLegacyHandleHasNoEncodedSource() throws {
-        let handle = try Hokusai.image(from: loadFixtureData(named: "landscape-asym", ext: "jpg"))
-        #expect(try handle.metadata().sourceByteSize == nil)
+    @Test func aGeneratedSourceHasNoEncodedSize() async throws {
+        let metadata = try await Hokusai.text("Hi").metadata()
+        #expect(metadata.sourceByteSize == nil)
     }
 
     // MARK: - Pages versus animation

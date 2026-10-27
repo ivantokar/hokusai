@@ -17,27 +17,17 @@ enum CLIParser {
         }
     }
 
-    /// Parses a legacy resize kernel, defaulting unknown values to Lanczos3.
-    static func parseKernel(_ value: String) -> Kernel {
-        switch value.lowercased() {
-        case "nearest": return .nearest
-        case "linear": return .linear
-        case "cubic": return .cubic
-        case "mitchell": return .mitchell
-        case "lanczos2": return .lanczos2
-        default: return .lanczos3
-        }
-    }
-
-    /// Adapts the legacy kernel parser for the immutable pipeline API.
+    /// Parses a resize kernel name, defaulting unknown values to Lanczos3.
     static func parsePipelineKernel(_ value: String) -> ResizeKernel {
-        switch parseKernel(value) {
-        case .nearest: .nearest
-        case .linear: .linear
-        case .cubic: .cubic
-        case .mitchell: .mitchell
-        case .lanczos2: .lanczos2
-        case .lanczos3: .lanczos3
+        switch value.lowercased() {
+        case "nearest": .nearest
+        case "linear": .linear
+        case "cubic": .cubic
+        case "mitchell": .mitchell
+        case "lanczos2": .lanczos2
+        case "mks2013": .mks2013
+        case "mks2021": .mks2021
+        default: .lanczos3
         }
     }
 
