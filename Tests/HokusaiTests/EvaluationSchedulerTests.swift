@@ -172,7 +172,10 @@ import Testing
     @Test func runningEvaluationStopsAndThrowsCancellationError() async throws {
         let (error, latency) = try await cancelWhileRunning(expensivePipeline())
         #expect(error is CancellationError)
-        #expect(latency < 1)
+        // Uncancelled, this pipeline runs for tens of seconds on CI, so any
+        // bound well below that proves the cancellation was honoured. A tight
+        // bound only measured runner speed (#76).
+        #expect(latency < 10)
     }
 
     @Test func cancelledPipelineCanBeEvaluatedAgain() async throws {
