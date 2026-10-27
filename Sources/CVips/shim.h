@@ -332,6 +332,69 @@ static inline int swift_vips_similarity_background(VipsImage *in, VipsImage **ou
     return vips_similarity(in, out, "angle", angle, "background", background, NULL);
 }
 
+// MARK: - Effects (modern evaluator)
+
+static inline int swift_vips_gaussblur_full(VipsImage *in, VipsImage **out, double sigma, int precision, double min_ampl) {
+    return vips_gaussblur(in, out, sigma, "precision", (VipsPrecision) precision, "min_ampl", min_ampl, NULL);
+}
+
+/** @brief Unsharp mask with every libvips control: x1 flat/jaggy threshold, y2/y3 limits, m1/m2 slopes. */
+static inline int swift_vips_sharpen_full(
+    VipsImage *in, VipsImage **out, double sigma, double x1, double y2, double y3, double m1, double m2
+) {
+    return vips_sharpen(in, out, "sigma", sigma, "x1", x1, "y2", y2, "y3", y3, "m1", m1, "m2", m2, NULL);
+}
+
+/** @brief The value below which `percent` percent of an 8- or 16-bit single-band image's pixels lie. */
+static inline int swift_vips_percent(VipsImage *in, double percent, int *threshold) {
+    return vips_percent(in, percent, threshold, NULL);
+}
+
+static inline int swift_vips_min(VipsImage *in, double *out) {
+    return vips_min(in, out, NULL);
+}
+
+static inline int swift_vips_max(VipsImage *in, double *out) {
+    return vips_max(in, out, NULL);
+}
+
+static inline int swift_vips_linear_array(VipsImage *in, VipsImage **out, const double *a, const double *b, int n) {
+    return vips_linear(in, out, a, b, n, NULL);
+}
+
+/** @brief out = (in / max) ^ (1 / exponent) * max. */
+static inline int swift_vips_gamma(VipsImage *in, VipsImage **out, double exponent) {
+    return vips_gamma(in, out, "exponent", exponent, NULL);
+}
+
+static inline int swift_vips_invert(VipsImage *in, VipsImage **out) {
+    return vips_invert(in, out, NULL);
+}
+
+static inline int swift_vips_median(VipsImage *in, VipsImage **out, int size) {
+    return vips_median(in, out, size, NULL);
+}
+
+static inline int swift_vips_hist_local(VipsImage *in, VipsImage **out, int width, int height, int max_slope) {
+    return vips_hist_local(in, out, width, height, "max_slope", max_slope, NULL);
+}
+
+static inline int swift_vips_moreeq_const1(VipsImage *in, VipsImage **out, double c) {
+    return vips_moreeq_const1(in, out, c, NULL);
+}
+
+static inline int swift_vips_premultiply(VipsImage *in, VipsImage **out) {
+    return vips_premultiply(in, out, NULL);
+}
+
+static inline int swift_vips_unpremultiply(VipsImage *in, VipsImage **out) {
+    return vips_unpremultiply(in, out, NULL);
+}
+
+static inline int swift_vips_cast(VipsImage *in, VipsImage **out, int format) {
+    return vips_cast(in, out, (VipsBandFormat) format, NULL);
+}
+
 // MARK: - Geometry (modern evaluator)
 
 /// Embeds `in` in a larger canvas. `background` is only read for
@@ -510,10 +573,6 @@ static inline int swift_vips_sharpen(VipsImage *in, VipsImage **out, double sigm
     return vips_sharpen(in, out, "sigma", sigma, NULL);
 }
 
-static inline int swift_vips_hist_norm(VipsImage *in, VipsImage **out) {
-    return vips_hist_norm(in, out, NULL);
-}
-
 static inline int swift_vips_addalpha(VipsImage *in, VipsImage **out) {
     return vips_addalpha(in, out, NULL);
 }
@@ -662,25 +721,6 @@ static inline int swift_vips_colourspace_bw(VipsImage *in, VipsImage **out) {
 
 static inline int swift_vips_colourspace_srgb(VipsImage *in, VipsImage **out) {
     return vips_colourspace(in, out, VIPS_INTERPRETATION_sRGB, NULL);
-}
-
-/** @brief Convert luminance to an sRGB tint; output is an opaque RGB image. */
-static inline int swift_vips_tint(VipsImage *in, VipsImage **out, double red, double green, double blue) {
-    VipsImage *grey = NULL;
-    VipsImage *rgb = NULL;
-    double scale[] = { red / 255.0, green / 255.0, blue / 255.0 };
-    double offset[] = { 0, 0, 0 };
-    if (vips_colourspace(in, &grey, VIPS_INTERPRETATION_B_W, NULL) != 0) {
-        return -1;
-    }
-    if (vips_colourspace(grey, &rgb, VIPS_INTERPRETATION_sRGB, NULL) != 0) {
-        g_object_unref(grey);
-        return -1;
-    }
-    int result = vips_linear(rgb, out, scale, offset, 3, NULL);
-    g_object_unref(rgb);
-    g_object_unref(grey);
-    return result;
 }
 
 static inline int swift_vips_jpegsave(VipsImage *in, const char *filename, int quality, int interlace, int strip) {

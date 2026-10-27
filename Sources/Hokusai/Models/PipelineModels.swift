@@ -81,6 +81,65 @@ public enum Interpolation: String, Sendable, CaseIterable {
     case nearest, bilinear, bicubic, lbb, nohalo, vsqbs
 }
 
+/// Accuracy of the Gaussian mask used by ``Hokusai/blur(sigma:precision:minAmplitude:)``.
+public enum BlurPrecision: String, Sendable, CaseIterable {
+    /// Integer arithmetic: fastest, and exact for 8-bit images.
+    case integer
+    /// Floating-point arithmetic.
+    case float
+    /// A fast approximation of the mask.
+    case approximate
+}
+
+/// Controls for ``Hokusai/sharpen(_:)``, an unsharp mask on luminance.
+///
+/// The defaults are libvips' own, with a `sigma` of 1. Edges steeper than
+/// `threshold` count as jagged and are sharpened by `jagged`; flatter areas
+/// by `flat`. `maxBrightening` and `maxDarkening` cap how far a pixel may move.
+public struct SharpenOptions: Hashable, Sendable {
+    /// Radius of the Gaussian used to find detail, in pixels. Must be above zero.
+    public var sigma: Double
+    /// Sharpening strength applied to flat areas (libvips `m1`).
+    public var flat: Double
+    /// Sharpening strength applied to jagged edges (libvips `m2`).
+    public var jagged: Double
+    /// Difference that separates flat areas from jagged edges (libvips `x1`).
+    public var threshold: Double
+    /// The most a pixel may brighten (libvips `y2`).
+    public var maxBrightening: Double
+    /// The most a pixel may darken (libvips `y3`).
+    public var maxDarkening: Double
+
+    public init(
+        sigma: Double = 1,
+        flat: Double = 0,
+        jagged: Double = 3,
+        threshold: Double = 2,
+        maxBrightening: Double = 10,
+        maxDarkening: Double = 20
+    ) {
+        self.sigma = sigma
+        self.flat = flat
+        self.jagged = jagged
+        self.threshold = threshold
+        self.maxBrightening = maxBrightening
+        self.maxDarkening = maxDarkening
+    }
+
+    func validate() throws {
+        guard sigma.isFinite, sigma > 0, sigma <= 10_000 else {
+            throw HokusaiError.invalidOption(name: "sigma", reason: "must be a finite value above zero")
+        }
+        let others: [(String, Double)] = [
+            ("flat", flat), ("jagged", jagged), ("threshold", threshold),
+            ("maxBrightening", maxBrightening), ("maxDarkening", maxDarkening),
+        ]
+        for (name, value) in others where !(value.isFinite && value >= 0 && value <= 1_000_000) {
+            throw HokusaiError.invalidOption(name: name, reason: "must be a finite value from 0 to 1000000")
+        }
+    }
+}
+
 /// A 2×2 linear transform: `x' = a·x + b·y`, `y' = c·x + d·y`.
 public struct AffineMatrix: Hashable, Sendable {
     public var a: Double

@@ -117,13 +117,21 @@ enum ImageOperation: Sendable {
     case extendEdges(top: Int, left: Int, bottom: Int, right: Int, mode: ExtendMode)
     case affine(AffineStep)
     case trim(threshold: Double)
-    case blur(sigma: Double)
-    case sharpen(sigma: Double)
+    case blur(sigma: Double, precision: BlurPrecision = .integer, minAmplitude: Double = 0.2)
+    case sharpen(SharpenOptions)
     case grayscale
+    case convertToGrayscale
     case tint(Color)
-    case normalize
+    case normalize(lower: Double, upper: Double)
+    case clahe(width: Int, height: Int, maxSlope: Int)
+    case gamma(Double)
+    case negate(alpha: Bool)
+    case median(size: Int)
+    case threshold(level: Double, grayscale: Bool)
+    case modulate(brightness: Double, saturation: Double, hue: Double)
     case convertToSRGB
-    case ensureAlpha
+    case ensureAlpha(opacity: Double = 1)
+    case removeAlpha
     case flatten(background: Color)
     case composite([LayerStep])
     case drawText(String, x: Int, y: Int, options: TextOptions)
@@ -143,10 +151,18 @@ enum ImageOperation: Sendable {
         case .blur: "blur"
         case .sharpen: "sharpen"
         case .grayscale: "grayscale"
+        case .convertToGrayscale: "convert to grayscale"
         case .tint: "tint"
         case .normalize: "normalize"
+        case .clahe: "clahe"
+        case .gamma: "gamma"
+        case .negate: "negate"
+        case .median: "median"
+        case .threshold: "threshold"
+        case .modulate: "modulate"
         case .convertToSRGB: "convert to sRGB"
         case .ensureAlpha: "ensure alpha"
+        case .removeAlpha: "remove alpha"
         case .flatten: "flatten"
         case .composite: "composite layer"
         case .drawText: "draw text"
