@@ -304,12 +304,11 @@ enum Evaluator {
         case .affine(let step):
             return try image.affine(step)
 
-        case .trim(let threshold):
-            var left: Int32 = 0, top: Int32 = 0, width: Int32 = 0, height: Int32 = 0
-            guard swift_vips_find_trim(image.pointer, &left, &top, &width, &height, threshold) == 0 else {
-                throw HokusaiError.nativeTransform("trim")
-            }
-            return try image.crop(left: Int(left), top: Int(top), width: Int(width), height: Int(height))
+        case .trim(let options):
+            return try image.trimmed(options)
+
+        case .smartCrop(let width, let height, let strategy):
+            return try image.smartCrop(width: min(width, image.width), height: min(height, image.height), strategy: strategy)
 
         case .blur(let sigma, let precision, let minAmplitude):
             return try image.gaussianBlur(sigma: sigma, precision: precision, minAmplitude: minAmplitude)

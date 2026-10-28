@@ -576,15 +576,27 @@ static inline int swift_vips_dilate_round(VipsImage *in, VipsImage **out, int ra
     return result;
 }
 
+/**
+ * @brief Finds the bounding box of content against `background` (`count`
+ * values, one per colour band). A box with zero width means no content.
+ */
 static inline int swift_vips_find_trim(
     VipsImage *in,
     int *left,
     int *top,
     int *width,
     int *height,
-    double threshold
+    double threshold,
+    const double *background,
+    int count,
+    int line_art
 ) {
-    return vips_find_trim(in, left, top, width, height, "threshold", threshold, NULL);
+    VipsArrayDouble *array = vips_array_double_new(background, count);
+    int result = vips_find_trim(
+        in, left, top, width, height,
+        "threshold", threshold, "background", array, "line_art", line_art ? TRUE : FALSE, NULL);
+    vips_area_unref((VipsArea *) array);
+    return result;
 }
 
 static inline int swift_vips_linear1(VipsImage *in, VipsImage **out, double a, double b) {

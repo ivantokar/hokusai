@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added (content-aware transforms, #36)
+- `trim(_ options: TrimOptions)` with an explicit `TrimBackground` (`.topLeft`
+  by default, or `.color(_)`), `lineArt` mode and a `margin` of background to
+  keep, clamped to the image. An image that is all background is left
+  unchanged instead of being cropped to nothing. `trim(threshold:)` is
+  unchanged and now also uses the top-left pixel as the background (libvips
+  alone assumes white).
+- `smartCrop(width:height:strategy:)` crops to the most interesting region at
+  the current resolution (`SmartCropStrategy`: `.attention`, `.entropy`);
+  sizes larger than the image are clamped. `resize(... position: .attention /
+  .entropy)` shares the same step.
+- All pixel analysis still happens while the pipeline is evaluated, in
+  written order, never while it is built.
+
 ### Added (encoders, #23)
 - Typed `heif(...)` (explicit `HEIFCompression`: HEVC or AV1), `tiff(...)` and
   still `gif(...)` encoders, with `.heic`/`.heif`/`.tif`/`.tiff`/`.gif`
