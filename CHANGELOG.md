@@ -4,6 +4,31 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed (CLI as a thin client, #48)
+- The command code moved from the executable into a `HokusaiCommandLine`
+  target that depends only on the public `Hokusai` module. It is split into
+  argument words, option groups, planning (format resolution, encoder
+  construction, thumbnail), presentation (reporting, error translation) and
+  commands; `HokusaiCLI` is only the entry point.
+- Arguments are strict: unknown `--fit`, `--kernel`, `--align` and `--crop`
+  words and malformed, non-finite or out-of-range colours fail instead of
+  falling back to a default or being clamped.
+- Ranges (dimensions, quality, effort) are validated by Hokusai, not repeated
+  in the CLI.
+- Routine commands no longer call `Hokusai.initialize()`; only `info` does, as
+  a fail-fast diagnostic.
+- `convert` builds the typed public encoders, so TIFF, GIF and HEIF are
+  available, keeps the library default for omitted flags, refuses a `--format`
+  that contradicts the output extension, and applies Hokusai's default
+  metadata policy unless `--strip-metadata` is given.
+- `text` separates `--font` (family) from `--font-file` and refuses options
+  that would be silently ignored (a stroke colour without a width, one shadow
+  offset, a shadow opacity outside 0...1). `--shadow-offset-*` are integers.
+- Failures are worded from `HokusaiError` cases; `--verbose` adds the native
+  diagnostic. Cancellation exits with 130.
+- `hokusai benchmark pipeline` measures one frozen runtime configuration per
+  process; JSON output keeps its field names.
+
 ### Changed (support baseline, #49)
 - Package lower bounds follow what CI tests: swift-nio 2.90, ArgumentParser 1.7.
 - `RuntimeCapabilities.cairoVersion`; `hokusai info` prints it.

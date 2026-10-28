@@ -13,3 +13,19 @@ if $BIN thumbnail --input "$FIXTURE" --output "$OUT/bad.jpg" --width 0; then
     echo "expected non-zero exit for invalid width" >&2
     exit 1
 fi
+
+# Typos fail loudly instead of falling back to a default.
+for bad in "--fit bogus" "--kernel nope"; do
+    if $BIN resize --input "$FIXTURE" --output "$OUT/bad.png" --width 50 $bad; then
+        echo "expected non-zero exit for: $bad" >&2
+        exit 1
+    fi
+done
+if $BIN convert --input "$FIXTURE" --output "$OUT/mismatch.jpg" --format webp; then
+    echo "expected non-zero exit for a format/extension mismatch" >&2
+    exit 1
+fi
+test ! -e "$OUT/mismatch.jpg"
+
+$BIN convert --input "$FIXTURE" --output "$OUT/converted.png"
+$BIN inspect --input "$OUT/converted.png"

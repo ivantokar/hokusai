@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 @testable import Hokusai
-@testable import HokusaiCLI
 
 /// Output metadata policy (#24). Outputs are read back through `metadata()`,
 /// so every assertion is about what the encoded bytes actually carry.
@@ -268,18 +267,5 @@ import Testing
             #expect(metadata.orientation == nil || metadata.orientation == .up)
             #expect((metadata.width, metadata.height) == (1, 1))
         }
-    }
-
-    // MARK: - CLI contract
-
-    @Test func theCLIAppliesTheLibraryDefaultUnlessAskedToStrip() throws {
-        let input = try loadFixtureData(named: "pixel", ext: "png")
-        func configured(strip: Bool) throws -> Hokusai {
-            try CLIParser.configurePipelineOutput(
-                Hokusai(data: input), format: .png, quality: nil, compression: nil,
-                progressive: false, stripMetadata: strip, lossless: false, effort: nil)
-        }
-        #expect(try configured(strip: false).terminal.metadataPolicy == .default)
-        #expect(try configured(strip: true).terminal.metadataPolicy == .removeAll)
     }
 }
