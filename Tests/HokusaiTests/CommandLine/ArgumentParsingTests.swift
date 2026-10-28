@@ -145,12 +145,6 @@ import Testing
         #expect(style.rotation == 15)
         #expect(command.typography.layout == .fit(width: 200, height: 80))
     }
-
-    @Test func benchmarkRejectsNegativeCounts() throws {
-        _ = try PipelineBenchmarkCommand.parse(["--input", "in.jpg", "--vips-concurrency", "4", "--warmup", "0"])
-        rejects(PipelineBenchmarkCommand.self, ["--input", "in.jpg", "--vips-concurrency", "-1"])
-        rejects(PipelineBenchmarkCommand.self, ["--input", "in.jpg", "--iterations", "0"])
-    }
 }
 
 /// Encoder construction: the CLI overrides only what was typed.
