@@ -29,3 +29,9 @@ test ! -e "$OUT/mismatch.jpg"
 
 $BIN convert --input "$FIXTURE" --output "$OUT/converted.png"
 $BIN inspect --input "$OUT/converted.png"
+
+# The benchmark harness launches one fresh worker process per cell.
+$BIN benchmark run --input "$FIXTURE" --workloads thumbnail-jpeg --evaluations 1,2 --vips-concurrency 1,auto \
+    --json-output "$OUT/bench.json"
+$BIN benchmark compare "$OUT/bench.json" "$OUT/bench.json"
+grep -q '"schemaVersion" : 1' "$OUT/bench.json"

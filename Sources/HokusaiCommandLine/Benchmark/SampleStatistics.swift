@@ -2,47 +2,48 @@ import Foundation
 
 /// Descriptive statistics over one set of millisecond samples.
 ///
-/// Field names are the JSON schema of the benchmark output.
-struct SampleStatistics: Encodable, Equatable {
+/// A percentile is reported only when the sample count can support it; a
+/// five-sample run has no meaningful p99, so it is `nil` rather than a
+/// fabricated number. Field names are part of the result schema.
+struct SampleStatistics: Codable, Equatable {
+    let count: Int
     let meanMs: Double
-    let medianMs: Double
     let minMs: Double
     let maxMs: Double
-    let p90Ms: Double
-    let p95Ms: Double
     let stdDevMs: Double
-    let opsPerSecond: Double
+    let p50Ms: Double?
+    let p90Ms: Double?
+    let p95Ms: Double?
+    let p99Ms: Double?
 
-    /// Computes percentiles and dispersion. Empty input yields zeroes.
+    /// Fewest samples at which each percentile is reported.
+    enum MinimumSamples {
+        static let p50 = 1
+        static let p90 = 10
+        static let p95 = 20
+        static let p99 = 100
+    }
+
     init(samplesMs: [Double]) {
         let sorted = samplesMs.sorted()
-        let count = max(1, sorted.count)
-        let mean = sorted.reduce(0, +) / Double(count)
+        count = sorted.count
+        let mean = sorted.isEmpty ? 0 : sorted.reduce(0, +) / Double(sorted.count)
 
-        func percentile(_ p: Double) -> Double {
-            guard !sorted.isEmpty else { return 0 }
+        func percentile(_ p: Double, minimum: Int) -> Double? {
+            guard sorted.count >= minimum, !sorted.isEmpty else { return nil }
             let rank = Int((p * Double(sorted.count - 1)).rounded())
             return sorted[min(max(rank, 0), sorted.count - 1)]
         }
 
-        let median: Double
-        if sorted.isEmpty {
-            median = 0
-        } else if sorted.count.isMultiple(of: 2) {
-            median = (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2
-        } else {
-            median = sorted[sorted.count / 2]
-        }
+        let variance = sorted.isEmpty ? 0 : sorted.reduce(0.0) { $0 + ($1 - mean) * ($1 - mean) } / Double(sorted.count)
 
-        let variance = sorted.reduce(0.0) { $0 + ($1 - mean) * ($1 - mean) } / Double(count)
-
-        self.meanMs = mean
-        self.medianMs = median
-        self.minMs = sorted.first ?? 0
-        self.maxMs = sorted.last ?? 0
-        self.p90Ms = percentile(0.90)
-        self.p95Ms = percentile(0.95)
-        self.stdDevMs = sqrt(max(variance, 0))
-        self.opsPerSecond = mean > 0 ? 1000 / mean : 0
+        meanMs = mean
+        minMs = sorted.first ?? 0
+        maxMs = sorted.last ?? 0
+        stdDevMs = sqrt(max(variance, 0))
+        p50Ms = percentile(0.50, minimum: MinimumSamples.p50)
+        p90Ms = percentile(0.90, minimum: MinimumSamples.p90)
+        p95Ms = percentile(0.95, minimum: MinimumSamples.p95)
+        p99Ms = percentile(0.99, minimum: MinimumSamples.p99)
     }
 }

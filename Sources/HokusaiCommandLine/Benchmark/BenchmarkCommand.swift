@@ -1,10 +1,11 @@
 import ArgumentParser
 
-/// Groups benchmark subcommands so their output and options share one namespace.
+/// Groups the benchmark subcommands: `run` orchestrates, `worker` is the
+/// process `run` launches, and `compare` reads two results.
 struct BenchmarkCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "benchmark",
-        abstract: "Measure operation performance.",
-        subcommands: [PipelineBenchmarkCommand.self]
+        abstract: "Measure performance in process-isolated workers.",
+        subcommands: [BenchmarkRunCommand.self, BenchmarkWorkerCommand.self, BenchmarkCompareCommand.self]
     )
 }

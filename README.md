@@ -305,7 +305,8 @@ hokusai resize --input photo.jpg --output social.webp --width 1200 --height 630 
 hokusai convert --input photo.jpg --output photo.avif --quality 60
 hokusai thumbnail --input photo.jpg --output thumb.jpg --width 400
 hokusai text --input photo.jpg --output captioned.png --text "Hokusai" --color 255,255,255
-hokusai benchmark pipeline --input photo.jpg --sigma 50
+hokusai benchmark run --input photo.jpg --workloads blur-webp --evaluations 1,2,4 --vips-concurrency 1,auto --json-output result.json
+hokusai benchmark compare base.json result.json
 ```
 
 The command line is a client of the public API and adds no image processing of its own. Each command parses its arguments, builds an ordinary Hokusai pipeline, and reports the result. The code lives in `HokusaiCommandLine`, which depends only on the public `Hokusai` module; the `hokusai` executable is just its entry point.
@@ -315,7 +316,8 @@ The command line is a client of the public API and adds no image processing of i
 - **Metadata.** Without a flag, Hokusai's default policy applies unchanged. `--strip-metadata` is the deliberate remove-everything policy.
 - **`thumbnail`** is `autoOrient` (unless `--no-rotate`) followed by `resize`, with the library's semantics. JPEG sources may be shrunk by the decoder when the pipeline allows it (see `resize` in the changelog); nothing about the command line changes.
 - **`inspect`** reports the source file's metadata, and only notes that EXIF, ICC, XMP and IPTC blocks exist.
-- **`benchmark`** runs in one process with one frozen runtime configuration. To compare `--vips-concurrency` values, run one process per value.
+- **`benchmark run`** sweeps the two independent concurrency dimensions, `--evaluations` (how many evaluations run at once) and `--vips-concurrency` (threads inside each), and launches a **fresh worker process per cell**, so every measurement has its own frozen runtime configuration and no cache or runtime state leaks between cells. Each concurrent request reads its own copy of the input, so libvips' operation cache cannot make requests look cheaper than they are. `--profile quick` is a local smoke run; `--profile stable` takes enough samples for tail latency, and a percentile the sample count cannot support is reported as `n/a` rather than invented. `--json-output` writes a versioned result (commit, Swift, OS, CPU, libvips and Cairo versions, runtime settings, input SHA-256, raw samples, throughput, encoded bytes, active/queued high-water, peak RSS). Workloads: `thumbnail-jpeg`, `cover-webp`, `blur-webp`, `resize-png`, `pdf-a4`.
+- **`benchmark compare`** matches cells of two results and flags a change in median latency only when it exceeds both a relative and an absolute threshold. It is advisory, always exits zero, and warns when the two runs came from different native stacks. Absolute milliseconds are not portable; compare base and candidate on the same machine.
 - **Failures** are one line built from the error's case. `--verbose` adds the native diagnostic when there is one.
 
 ## Migrating from 0.x and 1.x

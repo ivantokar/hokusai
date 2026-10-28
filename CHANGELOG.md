@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added (benchmark harness, #50)
+- `hokusai benchmark run` replaces `benchmark pipeline`. It sweeps
+  `--evaluations` x `--vips-concurrency` and starts a fresh worker process for
+  every cell, so each measurement has one frozen runtime configuration.
+  Concurrent requests use separate copies of the input to keep libvips'
+  operation cache out of the result. Profiles `quick` and `stable`; percentiles
+  the sample count cannot support are omitted.
+- Versioned JSON result (schema 1): commit, Swift, OS, CPU, libvips, Cairo,
+  runtime settings, cache policy, input SHA-256, raw samples, p50/p90/p95/p99,
+  throughput, encoded bytes, active/queued high-water and peak RSS.
+- `hokusai benchmark compare` reports per-cell deltas, flags only changes that
+  exceed both a relative and an absolute threshold, and warns when the native
+  stacks differ. It is advisory.
+- Workloads: `thumbnail-jpeg`, `cover-webp`, `blur-webp`, `resize-png`,
+  `pdf-a4`.
+
 ### Changed (CLI as a thin client, #48)
 - The command code moved from the executable into a `HokusaiCommandLine`
   target that depends only on the public `Hokusai` module. It is split into
