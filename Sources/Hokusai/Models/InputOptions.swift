@@ -17,11 +17,11 @@ import Foundation
 ///     )
 /// )
 /// ```
-public struct InputOptions: Sendable, Equatable {
-    /// How libvips may order pixel reads. ``AccessMode/random`` is the safe default.
-    public var access: AccessMode
+public struct InputOptions: Sendable, Hashable {
+    /// How libvips may order pixel reads. ``InputOptions/AccessMode/random`` is the safe default.
+    public var access: InputOptions.AccessMode
 
-    /// When decoder problems become errors. Defaults to ``DecodeFailureLevel/warning``.
+    /// When decoder problems become errors. Defaults to ``InputOptions/DecodeFailureLevel/warning``.
     public var failOn: DecodeFailureLevel
 
     /// Zero-based page to load from a multi-page source such as a TIFF or PDF.
@@ -55,7 +55,7 @@ public struct InputOptions: Sendable, Equatable {
         self.revalidate = revalidate
     }
 
-    /// Streaming input with otherwise default options. See ``AccessMode/sequential``.
+    /// Streaming input with otherwise default options. See ``InputOptions/AccessMode/sequential``.
     public static let sequential = InputOptions(access: .sequential)
 
     /// Rejects values that cannot be applied, before any source is touched.
@@ -67,64 +67,66 @@ public struct InputOptions: Sendable, Equatable {
     }
 }
 
-/// Access-pattern hint for libvips image loading.
-///
-/// libvips loads images lazily in both modes: opening an image reads only the
-/// header (dimensions, bands, metadata), and pixels are decoded on first
-/// access. The access mode is a *hint* telling libvips in which order the
-/// pipeline will request pixels, which changes how the decode is managed:
-///
-/// - ``random``: The default. Pixels may be requested in any order. For
-///   formats whose decoders cannot seek (JPEG, PNG, WebP, ...), libvips
-///   decodes the whole image on first pixel access — into a memory buffer for
-///   smaller images or a temporary disk file for larger ones (controlled by
-///   libvips' `vips-disc-threshold`, 100 MB by default). Formats with native
-///   random-access layouts (tiled TIFF, FITS, OpenSlide, VIPS `.v`) are read
-///   directly without a full decode.
-///
-/// - ``sequential``: Pixels are requested strictly top-to-bottom. libvips
-///   streams the decode and keeps only a small window of recent scanlines in
-///   memory, which lowers peak memory for large sources in single-pass
-///   pipelines (e.g. load → resize → save). Requests *ahead* of the current
-///   read position are satisfied by decoding forward; requests *behind* the
-///   cached window cannot be satisfied and fail — there is no silent fallback
-///   to random access. Operations that need out-of-order pixel access
-///   (rotation by non-90° angles, flips, smart crop, some compositing) may
-///   therefore fail in this mode. Because the failure comes from reading the
-///   source, it is reported as ``HokusaiError/decode(_:)``.
-///
-/// ## Practical guidance
-///
-/// - Neither mode changes *what* is decoded, only how the decode is buffered.
-///   Downscaling a JPEG via `resize` fully decodes the source in both modes.
-/// - Use sequential access only when you have measured that peak memory is a
-///   problem and the pipeline is genuinely single-pass and top-to-bottom.
-///   In our benchmarks, sequential access made heavily downscaled JPEG
-///   pipelines significantly slower than the default.
-public enum AccessMode: Sendable {
-    /// Pixels may be read in any order. Safe for all operations.
-    case random
-    /// Forward-only streaming decode with a small line window. Lower peak
-    /// memory for linear pipelines; operations that need out-of-order pixel
-    /// access fail.
-    case sequential
-}
+extension InputOptions {
+    /// Access-pattern hint for libvips image loading.
+    ///
+    /// libvips loads images lazily in both modes: opening an image reads only the
+    /// header (dimensions, bands, metadata), and pixels are decoded on first
+    /// access. The access mode is a *hint* telling libvips in which order the
+    /// pipeline will request pixels, which changes how the decode is managed:
+    ///
+    /// - ``random``: The default. Pixels may be requested in any order. For
+    ///   formats whose decoders cannot seek (JPEG, PNG, WebP, ...), libvips
+    ///   decodes the whole image on first pixel access — into a memory buffer for
+    ///   smaller images or a temporary disk file for larger ones (controlled by
+    ///   libvips' `vips-disc-threshold`, 100 MB by default). Formats with native
+    ///   random-access layouts (tiled TIFF, FITS, OpenSlide, VIPS `.v`) are read
+    ///   directly without a full decode.
+    ///
+    /// - ``sequential``: Pixels are requested strictly top-to-bottom. libvips
+    ///   streams the decode and keeps only a small window of recent scanlines in
+    ///   memory, which lowers peak memory for large sources in single-pass
+    ///   pipelines (e.g. load → resize → save). Requests *ahead* of the current
+    ///   read position are satisfied by decoding forward; requests *behind* the
+    ///   cached window cannot be satisfied and fail — there is no silent fallback
+    ///   to random access. Operations that need out-of-order pixel access
+    ///   (rotation by non-90° angles, flips, smart crop, some compositing) may
+    ///   therefore fail in this mode. Because the failure comes from reading the
+    ///   source, it is reported as ``HokusaiError/decode(_:)``.
+    ///
+    /// ## Practical guidance
+    ///
+    /// - Neither mode changes *what* is decoded, only how the decode is buffered.
+    ///   Downscaling a JPEG via `resize` fully decodes the source in both modes.
+    /// - Use sequential access only when you have measured that peak memory is a
+    ///   problem and the pipeline is genuinely single-pass and top-to-bottom.
+    ///   In our benchmarks, sequential access made heavily downscaled JPEG
+    ///   pipelines significantly slower than the default.
+    public enum AccessMode: Sendable {
+        /// Pixels may be read in any order. Safe for all operations.
+        case random
+        /// Forward-only streaming decode with a small line window. Lower peak
+        /// memory for linear pipelines; operations that need out-of-order pixel
+        /// access fail.
+        case sequential
+    }
 
-/// When a decoder problem becomes an error.
-///
-/// Levels are cumulative, from most permissive to strictest. A source that is
-/// rejected fails with ``HokusaiError/decode(_:)`` when the pipeline is
-/// evaluated, because decoders report most problems only while reading pixels.
-public enum DecodeFailureLevel: Sendable, Equatable {
-    /// Never fail on decoder problems; decode as much as possible.
-    case none
-    /// Fail when the source is truncated.
-    case truncated
-    /// Fail on truncation and on decoder errors.
-    case error
-    /// Fail on truncation, errors, and decoder warnings. The default, and the
-    /// most likely to reject slightly malformed but viewable images.
-    case warning
+    /// When a decoder problem becomes an error.
+    ///
+    /// Levels are cumulative, from most permissive to strictest. A source that is
+    /// rejected fails with ``HokusaiError/decode(_:)`` when the pipeline is
+    /// evaluated, because decoders report most problems only while reading pixels.
+    public enum DecodeFailureLevel: Sendable, Equatable {
+        /// Never fail on decoder problems; decode as much as possible.
+        case none
+        /// Fail when the source is truncated.
+        case truncated
+        /// Fail on truncation and on decoder errors.
+        case error
+        /// Fail on truncation, errors, and decoder warnings. The default, and the
+        /// most likely to reject slightly malformed but viewable images.
+        case warning
+    }
 }
 
 /// Defensive bounds on an input, checked before expensive pixel evaluation.
@@ -133,7 +135,7 @@ public enum DecodeFailureLevel: Sendable, Equatable {
 /// sized to stop decompression bombs while accepting ordinary photographs;
 /// servers should tighten them to their own upload policy. Native codec safety
 /// limits stay in force regardless of these values.
-public struct InputLimits: Sendable, Equatable {
+public struct InputLimits: Sendable, Hashable {
     /// Default for ``maxBytes``: 512 MiB of encoded data.
     public static let defaultMaxBytes = 512 * 1024 * 1024
 

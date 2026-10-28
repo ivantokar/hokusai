@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Availability is runtime-dependent for some formats because it follows the
 /// linked libvips build. The 1.0 pipeline currently exposes a smaller typed
-/// output subset; see ``OutputFormat``.
+/// output subset; see ``Encoder``.
 public enum ImageFormat: String, CaseIterable, Sendable {
     case jpeg = "jpeg"
     case png = "png"

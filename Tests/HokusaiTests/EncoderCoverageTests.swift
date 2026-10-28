@@ -252,7 +252,7 @@ import Testing
 
     @Test func aMissingFormatIsReportedAsUnsupportedNotAsANativeFailure() throws {
         let none = RuntimeCapabilities(libvipsVersion: "test", inputFormats: [], outputFormats: [.jpeg], textRendering: false)
-        for format in [OutputFormat.tiff(), .gif(), .heif()] {
+        for format in [Encoder.tiff(), .gif(), .heif()] {
             #expect(throws: HokusaiError.self) {
                 try Evaluator.selectEncoder(format, TerminalConfig(), capabilities: none)
             }

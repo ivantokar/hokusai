@@ -5,7 +5,7 @@ import Foundation
 /// Exact coordinates and gravity are two spellings of the same thing: the
 /// position of the layer's top-left corner. Positions may be negative or
 /// reach past the base; libvips clips the layer to the base.
-public enum Placement: Sendable, Equatable {
+public enum Placement: Sendable, Hashable {
     /// The layer's top-left corner at exactly (`x`, `y`).
     case at(x: Int, y: Int)
     /// The layer anchored to a compass point of the base.

@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed (API surface, #51)
+- `OutputFormat` is now the `Encoder` value type with static factories
+  (`.jpeg(_:)`, `.webp(_:)`, ...), and `encode(as:)` is `encode(using:)`.
+  Encoder identity (`ImageFormat`) and configuration are separate, and new
+  encoders can be added without breaking exhaustive switches.
+- `AccessMode` and `DecodeFailureLevel` are nested as
+  `InputOptions.AccessMode` and `InputOptions.DecodeFailureLevel`.
+- `autoOrient()`, `flip()` and `flop()` no longer `throw`: they take no
+  arguments that can be invalid.
+- Option and placement value types are `Hashable`.
+- `Scripts/check-api.sh <ref>` reports public API changes against a git ref
+  with `swift-api-digester`, for release preparation.
+
 ### Documented (multi-page and animation, #27)
 - The 2.0 contract is one page in, one page out: `InputOptions.page` selects a
   frame or page (limits apply to it alone), page count is never animation, and
@@ -28,7 +41,7 @@ All notable changes to this project are documented in this file.
 ### Added (encoders, #23)
 - Typed `heif(...)` (explicit `HEIFCompression`: HEVC or AV1), `tiff(...)` and
   still `gif(...)` encoders, with `.heic`/`.heif`/`.tif`/`.tiff`/`.gif`
-  extension inference in `write(to:)`. `OutputFormat` gains `.heif`, `.tiff`
+  extension inference in `write(to:)`. `Encoder` gains `.heif`, `.tiff`
   and `.gif`; SVG is rejected as an output.
 - Curated options with typed values and no raw native integers: JPEG
   `chromaSubsampling` and `optimizeCoding`; PNG `palette` (`PNGPalette`);
@@ -61,7 +74,7 @@ All notable changes to this project are documented in this file.
   `PNGOptions.interlaced`). JPEG keeps `progressive`.
 - **Breaking:** `Hokusai.vipsVersion` and `Hokusai.version` are removed; the
   libvips version is `Hokusai.capabilities().libvipsVersion`.
-- `OutputFormat`, the four encoder option structs and `Output` are `Equatable`.
+- `Encoder`, the four encoder option structs and `Output` are `Equatable`.
 
 ### Removed (legacy API, #32)
 - **Breaking:** `HokusaiImage`, `ImageBackend`, `ImageData`, `BackendType` and

@@ -24,7 +24,7 @@ enum Evaluator {
     }
 
     /// Evaluates `plan` and returns encoded bytes.
-    static func encode(_ plan: ImagePlan, _ terminal: TerminalConfig, as format: OutputFormat, context: EvaluationContext) throws -> Output {
+    static func encode(_ plan: ImagePlan, _ terminal: TerminalConfig, as format: Encoder, context: EvaluationContext) throws -> Output {
         let encoder = try selectEncoder(format, terminal)
         return try classifyingSourceFailures(in: context) {
             let image = try context.sink(for: build(plan, context: context, scope: nil))
@@ -44,7 +44,7 @@ enum Evaluator {
     }
 
     /// Evaluates `plan` and writes it to a local file.
-    static func write(_ plan: ImagePlan, _ terminal: TerminalConfig, as format: OutputFormat, to url: URL, context: EvaluationContext) throws -> OutputInfo {
+    static func write(_ plan: ImagePlan, _ terminal: TerminalConfig, as format: Encoder, to url: URL, context: EvaluationContext) throws -> OutputInfo {
         let encoder = try selectEncoder(format, terminal)
         return try classifyingSourceFailures(in: context) {
             let image = try context.sink(for: build(plan, context: context, scope: nil))
@@ -388,7 +388,7 @@ enum Evaluator {
     /// Both terminals call this before any work, so a missing encoder gives
     /// the same typed error whether the destination is memory or a file.
     static func selectEncoder(
-        _ format: OutputFormat,
+        _ format: Encoder,
         _ terminal: TerminalConfig,
         capabilities: @autoclosure () throws -> RuntimeCapabilities = try VipsRuntime.capabilities()
     ) throws -> SelectedEncoder {
@@ -396,16 +396,16 @@ enum Evaluator {
         guard available.canEncode(format.imageFormat) else {
             throw HokusaiError.unsupported(feature: "encoding \(format.imageFormat.rawValue)", reason: "not available in this libvips build")
         }
-        if case .png(let options) = format, options.palette != nil, !available.pngPalette {
+        if case .png(let options) = format.kind, options.palette != nil, !available.pngPalette {
             throw HokusaiError.unsupported(
                 feature: "palette PNG", reason: "this libvips build has no palette quantiser (libimagequant or quantizr)")
         }
-        if case .heif(let options) = format, !available.canEncode(options.compression) {
+        if case .heif(let options) = format.kind, !available.canEncode(options.compression) {
             throw HokusaiError.unsupported(
                 feature: "encoding HEIF with \(options.compression == .hevc ? "HEVC" : "AV1")",
                 reason: "this libheif build has no encoder and decoder for that codec")
         }
-        if case .pdf(let options) = format {
+        if case .pdf(let options) = format.kind {
             return .pdf(options)
         }
         guard let encoder = NativeEncoder(format: format, metadata: terminal.metadataPolicy) else {

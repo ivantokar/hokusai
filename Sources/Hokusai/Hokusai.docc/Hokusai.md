@@ -30,6 +30,9 @@ produces its selected frame, not an animation.
 - ``Hokusai/init(data:options:)``
 - ``Hokusai/init(url:options:)``
 - ``InputOptions``
+- ``InputOptions/AccessMode``
+- ``InputOptions/DecodeFailureLevel``
+- ``InputLimits``
 
 ### Transforming an image
 
@@ -43,5 +46,8 @@ produces its selected frame, not an animation.
 - ``Hokusai/jpeg(quality:progressive:)``
 - ``Hokusai/png(compressionLevel:interlaced:)``
 - ``Hokusai/webp(quality:effort:lossless:)``
+- ``Hokusai/encode(using:)``
+- ``Encoder``
+- ``Hokusai/metadataPolicy(_:)``
 - ``Hokusai/data()``
 - ``Hokusai/write(to:)``

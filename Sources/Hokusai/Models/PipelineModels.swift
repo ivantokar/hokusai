@@ -72,7 +72,7 @@ public enum ResizeKernel: Sendable {
 }
 
 /// How a canvas or transform fills pixels outside the source image.
-public enum ExtendMode: Sendable, Equatable {
+public enum ExtendMode: Sendable, Hashable {
     /// Fills with a colour. Use ``Color/transparent`` for transparent padding.
     case background(Color)
     /// Repeats the nearest edge pixel outwards.
@@ -193,25 +193,48 @@ public struct AffineArea: Hashable, Sendable {
 }
 
 /// Portable colour spaces supported by the first Hokusai pipeline release.
-public enum ColorSpace: Sendable, Equatable {
+public enum ColorSpace: Sendable, Hashable {
     case sRGB
     case grayscale
 }
 
-/// Typed output encoder configuration.
-public enum OutputFormat: Sendable, Equatable {
-    case jpeg(JPEGOptions = .init())
-    case png(PNGOptions = .init())
-    case webp(WebPOptions = .init())
-    case avif(AVIFOptions = .init())
-    case heif(HEIFOptions = .init())
-    case tiff(TIFFOptions = .init())
-    case gif(GIFOptions = .init())
-    case pdf(PDFOptions = .init())
+/// A typed output encoder: which format to write and how.
+///
+/// Encoders are values built with a static factory, so new encoders can be
+/// added without breaking code that switches over a closed enumeration. The
+/// fluent methods (`jpeg(quality:)`, `webp(options:)`, ...) are the usual way
+/// to select one; ``Hokusai/encode(using:)`` takes a prebuilt value.
+///
+/// ```swift
+/// let delivery: Encoder = .webp(WebPOptions(quality: 82))
+/// let output = try await image.encode(using: delivery).data()
+/// ```
+public struct Encoder: Sendable, Hashable {
+    enum Kind: Sendable, Hashable {
+        case jpeg(JPEGOptions)
+        case png(PNGOptions)
+        case webp(WebPOptions)
+        case avif(AVIFOptions)
+        case heif(HEIFOptions)
+        case tiff(TIFFOptions)
+        case gif(GIFOptions)
+        case pdf(PDFOptions)
+    }
 
-    /// The metadata format corresponding to this encoder choice.
+    let kind: Kind
+
+    public static func jpeg(_ options: JPEGOptions = .init()) -> Encoder { Encoder(kind: .jpeg(options)) }
+    public static func png(_ options: PNGOptions = .init()) -> Encoder { Encoder(kind: .png(options)) }
+    public static func webp(_ options: WebPOptions = .init()) -> Encoder { Encoder(kind: .webp(options)) }
+    public static func avif(_ options: AVIFOptions = .init()) -> Encoder { Encoder(kind: .avif(options)) }
+    public static func heif(_ options: HEIFOptions = .init()) -> Encoder { Encoder(kind: .heif(options)) }
+    public static func tiff(_ options: TIFFOptions = .init()) -> Encoder { Encoder(kind: .tiff(options)) }
+    public static func gif(_ options: GIFOptions = .init()) -> Encoder { Encoder(kind: .gif(options)) }
+    public static func pdf(_ options: PDFOptions = .init()) -> Encoder { Encoder(kind: .pdf(options)) }
+
+    /// The format this encoder writes, as reported by metadata and ``OutputInfo``.
     public var imageFormat: ImageFormat {
-        switch self {
+        switch kind {
         case .jpeg: .jpeg
         case .png: .png
         case .webp: .webp
@@ -225,7 +248,7 @@ public enum OutputFormat: Sendable, Equatable {
 }
 
 /// Encoded bytes and the stable facts measured from the evaluated output.
-public struct Output: Sendable, Equatable {
+public struct Output: Sendable, Hashable {
     public let data: Data
     public let info: OutputInfo
 }
@@ -235,7 +258,7 @@ public struct Output: Sendable, Equatable {
 /// `width` and `height` are the pixel dimensions of the encoded image. For PDF
 /// they are the pixels of the embedded raster (after any downsampling), and
 /// ``pdf`` carries the physical page geometry.
-public struct OutputInfo: Sendable, Equatable {
+public struct OutputInfo: Sendable, Hashable {
     public let format: ImageFormat
     public let width: Int
     public let height: Int

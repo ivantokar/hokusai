@@ -21,9 +21,9 @@ import Foundation
 /// Retention is limited by the target format. A family a format cannot carry
 /// is simply absent from its output (for example, WebP has no IPTC block and no
 /// density), and the README lists what each format keeps.
-public struct MetadataPolicy: Sendable, Equatable {
+public struct MetadataPolicy: Sendable, Hashable {
     /// Whether a metadata family is carried into the output.
-    public enum Action: Sendable, Equatable {
+    public enum Action: Sendable, Hashable {
         case preserve
         case remove
     }

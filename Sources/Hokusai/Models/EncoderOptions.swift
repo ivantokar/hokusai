@@ -5,7 +5,7 @@ import Foundation
 // otherwise. Raw native values never appear here.
 
 /// Chroma subsampling for lossy encoders.
-public enum ChromaSubsampling: Sendable, Equatable {
+public enum ChromaSubsampling: Sendable, Hashable {
     /// The encoder decides: subsampled at lower qualities, full resolution at high ones.
     case automatic
     /// 4:2:0, the smaller choice.
@@ -15,14 +15,14 @@ public enum ChromaSubsampling: Sendable, Equatable {
 }
 
 /// Bit depth of AVIF and HEIF colour channels.
-public enum HEIFBitDepth: Int, Sendable, Equatable {
+public enum HEIFBitDepth: Int, Sendable, Hashable {
     case eight = 8
     case ten = 10
     case twelve = 12
 }
 
 /// JPEG encoder settings. Quality uses libvips' 0...100 convention.
-public struct JPEGOptions: Sendable, Equatable {
+public struct JPEGOptions: Sendable, Hashable {
     public var quality: Int
     /// Progressive (interlaced) scans.
     public var progressive: Bool
@@ -43,7 +43,7 @@ public struct JPEGOptions: Sendable, Equatable {
 
 /// Palette (indexed) PNG output. It changes the colour representation, so it
 /// is opt-in and takes more time than full-colour output.
-public struct PNGPalette: Sendable, Equatable {
+public struct PNGPalette: Sendable, Hashable {
     /// Quantisation quality, `0...100`.
     public var quality: Int
     /// Dithering amount, `0...1`.
@@ -62,7 +62,7 @@ public struct PNGPalette: Sendable, Equatable {
 }
 
 /// PNG encoder settings. Compression level follows libvips' 0...9 convention.
-public struct PNGOptions: Sendable, Equatable {
+public struct PNGOptions: Sendable, Hashable {
     public var compressionLevel: Int
     /// Adam7 interlacing: the image appears progressively while loading.
     public var interlaced: Bool
@@ -77,12 +77,12 @@ public struct PNGOptions: Sendable, Equatable {
 }
 
 /// The WebP encoder tuning a source type.
-public enum WebPPreset: Sendable, Equatable, CaseIterable {
+public enum WebPPreset: Sendable, Hashable, CaseIterable {
     case `default`, picture, photo, drawing, icon, text
 }
 
 /// WebP encoder settings for lossy/lossless output and encoder effort.
-public struct WebPOptions: Sendable, Equatable {
+public struct WebPOptions: Sendable, Hashable {
     public var quality: Int
     /// CPU effort, `0...6`.
     public var effort: Int
@@ -111,7 +111,7 @@ public struct WebPOptions: Sendable, Equatable {
 }
 
 /// AVIF (AV1 in a HEIF container) encoder settings. The codec is always AV1.
-public struct AVIFOptions: Sendable, Equatable {
+public struct AVIFOptions: Sendable, Hashable {
     public var quality: Int
     /// CPU effort, `0...9`.
     public var effort: Int
@@ -132,7 +132,7 @@ public struct AVIFOptions: Sendable, Equatable {
 }
 
 /// The codec inside a HEIF container.
-public enum HEIFCompression: Sendable, Equatable, CaseIterable {
+public enum HEIFCompression: Sendable, Hashable, CaseIterable {
     /// HEVC, the codec behind `.heic` files.
     case hevc
     /// AV1; ``AVIFOptions`` is the same codec with a name of its own.
@@ -140,7 +140,7 @@ public enum HEIFCompression: Sendable, Equatable, CaseIterable {
 }
 
 /// HEIF encoder settings with an explicit codec. Never inferred from a filename.
-public struct HEIFOptions: Sendable, Equatable {
+public struct HEIFOptions: Sendable, Hashable {
     public var compression: HEIFCompression
     public var quality: Int
     /// CPU effort, `0...9`.
@@ -163,17 +163,17 @@ public struct HEIFOptions: Sendable, Equatable {
 }
 
 /// TIFF compression schemes libvips can write.
-public enum TIFFCompression: Sendable, Equatable, CaseIterable {
+public enum TIFFCompression: Sendable, Hashable, CaseIterable {
     case none, jpeg, deflate, packBits, ccittFax4, lzw, webp, zstd, jpeg2000
 }
 
 /// The predictor applied before deflate, LZW or zstd compression.
-public enum TIFFPredictor: Sendable, Equatable, CaseIterable {
+public enum TIFFPredictor: Sendable, Hashable, CaseIterable {
     case none, horizontal, floatingPoint
 }
 
 /// Tile layout of a TIFF.
-public struct TIFFTiling: Sendable, Equatable {
+public struct TIFFTiling: Sendable, Hashable {
     public var width: Int
     public var height: Int
     /// Adds reduced-resolution levels, for deep-zoom style viewers.
@@ -187,7 +187,7 @@ public struct TIFFTiling: Sendable, Equatable {
 }
 
 /// TIFF encoder settings.
-public struct TIFFOptions: Sendable, Equatable {
+public struct TIFFOptions: Sendable, Hashable {
     public var compression: TIFFCompression
     /// Quality for `jpeg`, `webp` and `jpeg2000` compression, `1...100`.
     public var quality: Int
@@ -210,7 +210,7 @@ public struct TIFFOptions: Sendable, Equatable {
 }
 
 /// Still (single-frame) GIF encoder settings. Animation belongs to multi-page support.
-public struct GIFOptions: Sendable, Equatable {
+public struct GIFOptions: Sendable, Hashable {
     /// Dithering amount, `0...1`.
     public var dither: Double
     /// Quantisation effort, `1...10`.
