@@ -56,7 +56,7 @@ struct ThumbnailCommand: AsyncParsableCommand {
         let position = try CLIParser.parseThumbnailPosition(crop)
         let fit: ResizeFit = position == nil ? .inside : .cover
         let source = try Hokusai(url: URL(fileURLWithPath: input))
-        let oriented = noRotate ? source : try source.autoOrient()
+        let oriented = noRotate ? source : source.autoOrient()
         let image = try oriented.resize(width: width, height: height, fit: fit, position: position ?? .center)
         let info = try await image.write(to: URL(fileURLWithPath: output))
 

@@ -235,7 +235,7 @@ import Testing
         let reconfigured = try image.png().webp(quality: 70).metadataPolicy(.preserveAll).metadataPolicy(.default)
 
         #expect(reconfigured.terminal.metadataPolicy == .default)
-        if case .webp(let options)? = reconfigured.terminal.encoder {
+        if case .webp(let options)? = reconfigured.terminal.encoder?.kind {
             #expect(options.quality == 70)
         } else {
             Issue.record("expected the last encoder to win")

@@ -36,7 +36,22 @@ import Hokusai
 
     @Test func encoderSelectionIsConfigurationAndComparable() throws {
         #expect(PNGOptions(interlaced: true) != PNGOptions())
-        #expect(OutputFormat.jpeg(JPEGOptions(quality: 70)) == .jpeg(JPEGOptions(quality: 70)))
+        #expect(Encoder.jpeg(JPEGOptions(quality: 70)) == .jpeg(JPEGOptions(quality: 70)))
+    }
+
+    @Test func aPrebuiltEncoderIsSelectedWithEncodeUsing() async throws {
+        let delivery: Encoder = .png(PNGOptions(compressionLevel: 3))
+        let output = try await Hokusai(data: loadFixtureData(named: "pixel", ext: "png")).encode(using: delivery).data()
+        #expect(output.info.format == delivery.imageFormat)
+    }
+
+    @Test func configurationValuesAreHashable() {
+        let placements: Set<Placement> = [.at(x: 1, y: 2), .gravity(.center), .at(x: 1, y: 2)]
+        #expect(placements.count == 2)
+        let encoders: Set<Encoder> = [.webp(), .webp(), .jpeg()]
+        #expect(encoders.count == 2)
+        let options = InputOptions(access: InputOptions.AccessMode.sequential, failOn: InputOptions.DecodeFailureLevel.truncated)
+        #expect(Set([options, options]).count == 1)
     }
 
     @Test func runtimeAndCapabilitiesAreTheProcessLevelSurface() throws {

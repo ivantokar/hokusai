@@ -174,7 +174,7 @@ import Testing
         let fake = RuntimeCapabilities(libvipsVersion: "test", inputFormats: [.jpeg], outputFormats: [.jpeg, .png], textRendering: false)
         let terminal = TerminalConfig()
 
-        for format in [OutputFormat.webp(), .avif(), .pdf()] {
+        for format in [Encoder.webp(), .avif(), .pdf()] {
             do {
                 _ = try Evaluator.selectEncoder(format, terminal, capabilities: fake)
                 Issue.record("expected \(format.imageFormat) to be unsupported")

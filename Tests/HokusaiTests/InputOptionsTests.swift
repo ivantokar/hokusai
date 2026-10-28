@@ -72,8 +72,8 @@ import CVips
 
     // MARK: - Decoder failure policy
 
-    @Test(arguments: [DecodeFailureLevel.none, .truncated, .error, .warning])
-    func failureLevelsAreAppliedToTruncatedJPEG(level: DecodeFailureLevel) async throws {
+    @Test(arguments: [InputOptions.DecodeFailureLevel.none, .truncated, .error, .warning])
+    func failureLevelsAreAppliedToTruncatedJPEG(level: InputOptions.DecodeFailureLevel) async throws {
         let data = try loadFixtureData(named: "truncated", ext: "jpg")
         let pipeline = try Hokusai(data: data, options: InputOptions(failOn: level)).png()
         let error = await terminalError { try await pipeline.data() }
@@ -89,8 +89,8 @@ import CVips
         }
     }
 
-    @Test(arguments: [DecodeFailureLevel.none, .truncated, .error, .warning])
-    func failureLevelsAreAppliedToBadChecksumPNG(level: DecodeFailureLevel) async throws {
+    @Test(arguments: [InputOptions.DecodeFailureLevel.none, .truncated, .error, .warning])
+    func failureLevelsAreAppliedToBadChecksumPNG(level: InputOptions.DecodeFailureLevel) async throws {
         let data = try loadFixtureData(named: "corrupt-crc", ext: "png")
         let pipeline = try Hokusai(data: data, options: InputOptions(failOn: level)).png()
         let error = await terminalError { try await pipeline.data() }

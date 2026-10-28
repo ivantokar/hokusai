@@ -29,8 +29,8 @@ enum NativeEncoder {
     case gif(GIFOptions, metadata: MetadataPolicy)
 
     /// The lowering for `format`, or `nil` for PDF.
-    init?(format: OutputFormat, metadata: MetadataPolicy) {
-        switch format {
+    init?(format: Encoder, metadata: MetadataPolicy) {
+        switch format.kind {
         case .jpeg(let options): self = .jpeg(options, metadata: metadata)
         case .png(let options): self = .png(options, metadata: metadata)
         case .webp(let options): self = .webp(options, metadata: metadata)

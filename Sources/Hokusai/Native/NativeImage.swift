@@ -270,7 +270,7 @@ extension NativeImage {
     }
 }
 
-extension DecodeFailureLevel {
+extension InputOptions.DecodeFailureLevel {
     /// The matching `VipsFailOn` value.
     var vipsValue: Int32 {
         switch self {

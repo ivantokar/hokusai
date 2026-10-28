@@ -82,7 +82,7 @@ public struct Hokusai: Sendable {
     // MARK: - Pipeline transformations
 
     /// Applies the source EXIF orientation before later transformations.
-    public func autoOrient() throws -> Self {
+    public func autoOrient() -> Self {
         appending(.autoOrient)
     }
 
@@ -142,10 +142,10 @@ public struct Hokusai: Sendable {
     }
 
     /// Mirrors the image vertically using familiar image-processing terminology.
-    public func flip() throws -> Self { appending(.flip) }
+    public func flip() -> Self { appending(.flip) }
 
     /// Mirrors the image horizontally using familiar image-processing terminology.
-    public func flop() throws -> Self { appending(.flop) }
+    public func flop() -> Self { appending(.flop) }
 
     /// Extracts a rectangle from the current image.
     ///
@@ -482,7 +482,7 @@ public struct Hokusai: Sendable {
     ///
     /// Selecting a second encoder replaces the first; no bytes are produced
     /// until ``data()`` or ``write(to:)`` is called.
-    public func encode(as format: OutputFormat) throws -> Self {
+    public func encode(using format: Encoder) throws -> Self {
         try Self.validate(output: format)
         var terminal = terminal
         terminal.encoder = format
@@ -493,39 +493,39 @@ public struct Hokusai: Sendable {
     ///
     /// Chroma subsampling and Huffman optimisation are in ``JPEGOptions``.
     public func jpeg(quality: Int = 80, progressive: Bool = false) throws -> Self {
-        try encode(as: .jpeg(.init(quality: quality, progressive: progressive)))
+        try encode(using: .jpeg(.init(quality: quality, progressive: progressive)))
     }
 
     /// Selects JPEG output from a full options value.
-    public func jpeg(options: JPEGOptions) throws -> Self { try encode(as: .jpeg(options)) }
+    public func jpeg(options: JPEGOptions) throws -> Self { try encode(using: .jpeg(options)) }
 
     /// Selects PNG output with a compression level from 0 through 9, and
     /// optional Adam7 interlacing.
     public func png(compressionLevel: Int = 6, interlaced: Bool = false) throws -> Self {
-        try encode(as: .png(.init(compressionLevel: compressionLevel, interlaced: interlaced)))
+        try encode(using: .png(.init(compressionLevel: compressionLevel, interlaced: interlaced)))
     }
 
     /// Selects PNG output from a full options value, including palette mode.
-    public func png(options: PNGOptions) throws -> Self { try encode(as: .png(options)) }
+    public func png(options: PNGOptions) throws -> Self { try encode(using: .png(options)) }
 
     /// Selects WebP output.
     ///
     /// `effort` trades CPU time for compression efficiency; `lossless` changes
     /// the encoder mode rather than merely increasing quality.
     public func webp(quality: Int = 80, effort: Int = 4, lossless: Bool = false) throws -> Self {
-        try encode(as: .webp(.init(quality: quality, effort: effort, lossless: lossless)))
+        try encode(using: .webp(.init(quality: quality, effort: effort, lossless: lossless)))
     }
 
     /// Selects WebP output from a full options value.
-    public func webp(options: WebPOptions) throws -> Self { try encode(as: .webp(options)) }
+    public func webp(options: WebPOptions) throws -> Self { try encode(using: .webp(options)) }
 
     /// Selects AVIF output.
     public func avif(quality: Int = 50, effort: Int = 4, lossless: Bool = false) throws -> Self {
-        try encode(as: .avif(.init(quality: quality, effort: effort, lossless: lossless)))
+        try encode(using: .avif(.init(quality: quality, effort: effort, lossless: lossless)))
     }
 
     /// Selects AVIF output from a full options value. The codec is always AV1.
-    public func avif(options: AVIFOptions) throws -> Self { try encode(as: .avif(options)) }
+    public func avif(options: AVIFOptions) throws -> Self { try encode(using: .avif(options)) }
 
     /// Selects HEIF output with an explicit codec (HEVC by default, as in `.heic`).
     ///
@@ -533,22 +533,22 @@ public struct Hokusai: Sendable {
     /// ``RuntimeCapabilities/canEncode(_:)-(HEIFCompression)``. It is reported
     /// when the pipeline is evaluated.
     public func heif(compression: HEIFCompression = .hevc, quality: Int = 50, lossless: Bool = false) throws -> Self {
-        try encode(as: .heif(.init(compression: compression, quality: quality, lossless: lossless)))
+        try encode(using: .heif(.init(compression: compression, quality: quality, lossless: lossless)))
     }
 
     /// Selects HEIF output from a full options value.
-    public func heif(options: HEIFOptions) throws -> Self { try encode(as: .heif(options)) }
+    public func heif(options: HEIFOptions) throws -> Self { try encode(using: .heif(options)) }
 
     /// Selects TIFF output with the given compression.
     public func tiff(compression: TIFFCompression = .none, quality: Int = 75) throws -> Self {
-        try encode(as: .tiff(.init(compression: compression, quality: quality)))
+        try encode(using: .tiff(.init(compression: compression, quality: quality)))
     }
 
     /// Selects TIFF output from a full options value, including tiling and BigTIFF.
-    public func tiff(options: TIFFOptions) throws -> Self { try encode(as: .tiff(options)) }
+    public func tiff(options: TIFFOptions) throws -> Self { try encode(using: .tiff(options)) }
 
     /// Selects still GIF output. Animation is not part of this encoder.
-    public func gif(options: GIFOptions = GIFOptions()) throws -> Self { try encode(as: .gif(options)) }
+    public func gif(options: GIFOptions = GIFOptions()) throws -> Self { try encode(using: .gif(options)) }
 
     /// Configures a one-page Cairo PDF document from the current image pipeline.
     ///
@@ -562,7 +562,7 @@ public struct Hokusai: Sendable {
         maxEffectiveDPI: Double? = nil,
         metadata: PDFDocumentMetadata? = nil
     ) throws -> Self {
-        try encode(as: .pdf(PDFOptions(
+        try encode(using: .pdf(PDFOptions(
             pageSize: pageSize, margins: margins, anchor: anchor,
             background: background, maxEffectiveDPI: maxEffectiveDPI, metadata: metadata)))
     }
@@ -610,7 +610,7 @@ public struct Hokusai: Sendable {
     /// owned bytes and the actual encoded dimensions, format, and byte count.
     public func data() async throws -> Output {
         guard let format = terminal.encoder else {
-            throw HokusaiError.invalidOption(name: "output format", reason: "call jpeg(), png(), webp(), avif(), pdf(), or encode(as:) before data()")
+            throw HokusaiError.invalidOption(name: "output format", reason: "call jpeg(), png(), webp(), avif(), pdf(), or encode(using:) before data()")
         }
         let plan = plan, terminal = terminal
         return try await EvaluationScheduler.shared.run { context in
@@ -647,7 +647,7 @@ public struct Hokusai: Sendable {
         }
     }
 
-    private static func validate(output: OutputFormat) throws {
+    private static func validate(output: Encoder) throws {
         func range(_ name: String, _ value: Int, _ bounds: ClosedRange<Int>) throws {
             guard bounds.contains(value) else {
                 throw HokusaiError.invalidOption(name: name, reason: "must be in \(bounds.lowerBound)...\(bounds.upperBound)")
@@ -656,7 +656,7 @@ public struct Hokusai: Sendable {
         func unit(_ name: String, _ value: Double) throws {
             guard value.isFinite, (0...1).contains(value) else { throw HokusaiError.invalidOption(name: name, reason: "must be in 0...1") }
         }
-        switch output {
+        switch output.kind {
         case .jpeg(let options):
             try range("quality", options.quality, 1...100)
         case .png(let options):
@@ -696,7 +696,7 @@ public struct Hokusai: Sendable {
         }
     }
 
-    private static func outputFormat(from url: URL) throws -> OutputFormat {
+    private static func outputFormat(from url: URL) throws -> Encoder {
         guard let format = ImageFormat.from(fileExtension: url.pathExtension) else {
             throw HokusaiError.invalidOption(name: "output URL", reason: "use a supported image extension or select an encoder")
         }

@@ -5,7 +5,7 @@ import Foundation
 /// A page size says how big the page is. Fixed paper sizes carry no
 /// resolution: the embedded raster's effective DPI follows from its pixel
 /// size and the area it is placed in (see ``PDFOptions/maxEffectiveDPI``).
-public enum PDFPageSize: Sendable, Equatable {
+public enum PDFPageSize: Sendable, Hashable {
     /// A page sized from the raster: its pixel dimensions at `dpi`, plus any
     /// margins. `dpi` must be finite and greater than zero.
     case image(dpi: Double = 72)
@@ -21,13 +21,13 @@ public enum PDFPageSize: Sendable, Equatable {
 }
 
 /// Orientation of a fixed paper size.
-public enum PDFPageOrientation: Sendable, Equatable {
+public enum PDFPageOrientation: Sendable, Hashable {
     case portrait
     case landscape
 }
 
 /// Space kept free around the placed raster, in points.
-public struct PDFMargins: Sendable, Equatable {
+public struct PDFMargins: Sendable, Hashable {
     public var top: Double
     public var leading: Double
     public var bottom: Double
@@ -53,7 +53,7 @@ public struct PDFMargins: Sendable, Equatable {
 ///
 /// Nothing is copied from the source image's EXIF, XMP, or IPTC; only what is
 /// set here is written.
-public struct PDFDocumentMetadata: Sendable, Equatable {
+public struct PDFDocumentMetadata: Sendable, Hashable {
     public var title: String?
     public var author: String?
     public var subject: String?
@@ -88,7 +88,7 @@ public struct PDFDocumentMetadata: Sendable, Equatable {
 /// so it is not selectable, and an input PDF that is rasterised and written
 /// again loses its vector content, links, and structure. Vector documents are
 /// a separate surface.
-public struct PDFOptions: Sendable, Equatable {
+public struct PDFOptions: Sendable, Hashable {
     /// The page size. Defaults to a page that fits the raster at 72 DPI.
     public var pageSize: PDFPageSize
 
@@ -129,7 +129,7 @@ public struct PDFOptions: Sendable, Equatable {
 }
 
 /// Page facts for a PDF output.
-public struct PDFOutputDetails: Sendable, Equatable {
+public struct PDFOutputDetails: Sendable, Hashable {
     /// The number of pages written.
     public let pageCount: Int
 

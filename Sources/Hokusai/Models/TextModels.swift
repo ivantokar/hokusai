@@ -1,7 +1,7 @@
 import Foundation
 
 /// The text of a ``Hokusai/text(_:layout:style:)`` source.
-public enum TextContent: Sendable, Equatable, ExpressibleByStringLiteral {
+public enum TextContent: Sendable, Hashable, ExpressibleByStringLiteral {
     /// Literal text. Characters Pango would read as markup are escaped, so
     /// any caller string is safe to render.
     case plain(String)
@@ -23,7 +23,7 @@ public enum TextContent: Sendable, Equatable, ExpressibleByStringLiteral {
 }
 
 /// How lines are broken when a width is given.
-public enum TextWrap: Sendable, Equatable {
+public enum TextWrap: Sendable, Hashable {
     /// Breaks between words.
     case word
     /// Breaks between characters.
@@ -42,7 +42,7 @@ public enum TextAlignment: String, Sendable {
 }
 
 /// The size of the text box.
-public enum TextLayout: Sendable, Equatable {
+public enum TextLayout: Sendable, Hashable {
     /// As large as the text needs. Lines break only at newlines.
     case natural
     /// Wraps lines to `width` pixels at the style's font size and DPI.
@@ -55,7 +55,7 @@ public enum TextLayout: Sendable, Equatable {
 }
 
 /// An outline drawn around the glyphs.
-public struct TextStroke: Sendable, Equatable {
+public struct TextStroke: Sendable, Hashable {
     public var color: Color
     /// Outline thickness in pixels, `0 < width ≤ 64`.
     public var width: Double
@@ -67,7 +67,7 @@ public struct TextStroke: Sendable, Equatable {
 }
 
 /// A soft drop shadow behind the glyphs.
-public struct TextShadow: Sendable, Equatable {
+public struct TextShadow: Sendable, Hashable {
     public var offsetX: Int
     public var offsetY: Int
     /// Gaussian sigma of the shadow's softness in pixels, `0...64`.
@@ -84,7 +84,7 @@ public struct TextShadow: Sendable, Equatable {
 }
 
 /// Typography for generated text.
-public struct TextStyle: Sendable, Equatable {
+public struct TextStyle: Sendable, Hashable {
     /// Pango font family and style without a size, for example `"Helvetica Bold"`.
     public var font: String
     /// A local TTF or OTF file made available to `font` for this render.
