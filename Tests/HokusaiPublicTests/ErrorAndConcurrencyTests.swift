@@ -11,21 +11,24 @@ import Testing
         do { try await body(); return nil } catch { return error }
     }
 
+    // `#expect { } throws: { }` crashes the Swift 6.0 compiler, so these use do/catch.
     @Test func emptyDataIsInvalidInput() {
-        #expect {
-            try Hokusai(data: Data())
-        } throws: { error in
-            if case HokusaiError.invalidInput = error { return true }
-            return false
+        do {
+            _ = try Hokusai(data: Data())
+            Issue.record("expected empty data to be rejected")
+        } catch HokusaiError.invalidInput {
+        } catch {
+            Issue.record("expected invalidInput, got \(error)")
         }
     }
 
     @Test func aRemoteURLIsInvalidInput() {
-        #expect {
-            try Hokusai(url: URL(string: "https://example.com/a.png")!)
-        } throws: { error in
-            if case HokusaiError.invalidInput = error { return true }
-            return false
+        do {
+            _ = try Hokusai(url: URL(string: "https://example.com/a.png")!)
+            Issue.record("expected a remote URL to be rejected")
+        } catch HokusaiError.invalidInput {
+        } catch {
+            Issue.record("expected invalidInput, got \(error)")
         }
     }
 
