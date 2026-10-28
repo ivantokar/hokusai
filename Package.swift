@@ -84,5 +84,11 @@ let package = Package(
                 .copy("Fixtures")
             ]
         ),
+        // PURPOSE: Black-box suite. Imports only the public Hokusai module (no
+        // @testable, no CVips) so it can verify documented behaviour alone.
+        .testTarget(
+            name: "HokusaiPublicTests",
+            dependencies: ["Hokusai"]
+        ),
     ]
 )
