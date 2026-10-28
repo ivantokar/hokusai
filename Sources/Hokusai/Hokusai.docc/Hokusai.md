@@ -15,6 +15,14 @@ safe branch of the same source recipe; transforms return a new value. Blocking
 libvips evaluation happens only in ``Hokusai/data()`` and
 ``Hokusai/write(to:)``, never on Swift's cooperative executor.
 
+## Pages and animation
+
+A pipeline reads one page or frame, chosen with ``InputOptions/page``, and
+every encoder writes one image. Page count describes structure and is never
+treated as animation: ``ImageMetadata/animation`` exists only when the source
+carries frame timing. Transforming and re-encoding an animated GIF or WebP
+produces its selected frame, not an animation.
+
 ## Topics
 
 ### Creating a pipeline
