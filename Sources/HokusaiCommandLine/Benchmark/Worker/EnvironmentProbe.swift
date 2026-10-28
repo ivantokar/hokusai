@@ -33,10 +33,12 @@ enum EnvironmentProbe {
     /// Peak resident set size of this process.
     static var peakResidentBytes: Int {
         var usage = rusage()
-        guard getrusage(RUSAGE_SELF, &usage) == 0 else { return 0 }
         #if os(macOS)
+        guard getrusage(RUSAGE_SELF, &usage) == 0 else { return 0 }
         return Int(usage.ru_maxrss)          // bytes
         #else
+        // Glibc imports RUSAGE_SELF as the `__rusage_who` enum.
+        guard getrusage(RUSAGE_SELF.rawValue, &usage) == 0 else { return 0 }
         return Int(usage.ru_maxrss) * 1024   // kilobytes
         #endif
     }
