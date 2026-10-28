@@ -156,7 +156,7 @@ let image = try Hokusai(
 - **When bytes are copied.** `Hokusai(data:)` keeps your `Data` (copy-on-write) and does no native work; mutating or releasing your own value afterwards is safe. The bytes are copied into libvips-owned storage when the terminal opens the source. Opening reads only the image header and builds a lazy source; pixels are decoded as the pipeline needs them. A missing file, corrupt data, or an exceeded limit is reported by the terminal.
 - **Decoder failure level** (`failOn`): `.none` decodes whatever it can; `.truncated` fails on truncated files; `.error` also fails on decoder errors; `.warning` (the default, as in Sharp) also fails on decoder warnings, so it rejects slightly malformed but viewable images. Failures are `HokusaiError.decode`. Choose the level that matches how strict your application must be.
 - **Access** (`access`): `.random` (default) allows any pixel order. `.sequential` streams top to bottom with lower peak memory for single-pass pipelines; operations that read out of order may fail with a decode error. Measure before using it: for heavily downscaled JPEGs it was slower in our benchmarks.
-- **Pages** (`page`): selects exactly one zero-based page (TIFF, PDF, GIF, WebP, ...). Without it you get the first page. A page beyond the file's page count is an `invalidOption`; selecting a page other than 0 in a single-page format is `unsupported`. Page ranges, all-page loading, and animation are not supported yet.
+- **Pages** (`page`): selects exactly one zero-based page (TIFF, PDF, GIF, WebP, ...). Without it you get the first page. A page beyond the file's page count is an `invalidOption`; selecting a page other than 0 in a single-page format is `unsupported`. Page ranges, all-page loading, and animation are not supported; see [Multi-page and animation](#multi-page-and-animation).
 - **Limits** (`limits`): `maxBytes` (default 512 MiB) is checked before `Data` is copied and against a file's size; `maxPixels` (default 268,402,689, i.e. 16383 × 16383) and `maxChannels` (default 8) are checked from the header before any pixels are decoded. Exceeding one throws `HokusaiError.resource`. Tighten them to your upload policy; native codec safety limits always remain in force.
 - **Freshness** (`revalidate`): libvips caches recent file opens, so a file replaced at the same path may be served from cache. `revalidate: true` bypasses the cache for that open. It has no effect on `Data`, and Hokusai keeps no cache of its own.
 
@@ -181,6 +181,16 @@ let badge = try Hokusai.text("SALE", layout: .fit(width: 300, height: 120)).png(
 ```
 
 Core operations include resize, extract, rotate, auto-orient, composite, blur, sharpen, trim (with background, line-art and margin controls), smart crop, tint, flatten/remove alpha, metadata inspection, and typed JPEG/PNG/WebP/AVIF output.
+
+## Multi-page and animation
+
+Hokusai reads **one page at a time** and writes **one page at a time**. This is the contract for 2.0:
+
+- **Input.** `InputOptions.page` selects one zero-based page or frame of a TIFF, GIF, animated WebP, PDF (when libvips has poppler), or similar source. Without it you get the first. Pixel limits (`maxPixels`) apply to that selected page, so a hundred-frame GIF costs one frame of pixels. There is no all-pages or range option; asking for one is not expressible, and a page beyond the end fails with `invalidOption("page")`.
+- **Metadata.** `pages.count` and `pages.height` describe document structure and are never taken to mean animation. `animation` (loop count, per-frame delays) exists only when the source carries frame timing, and `isAnimated` is derived from it, so a three-page TIFF is multi-page but not animated. `metadata()` always describes the source header, whichever page you selected.
+- **Output.** Every encoder writes a single image. An animated GIF or WebP that is transformed and encoded again produces its selected frame only (not an animation), and `Hokusai(data: output.data).metadata().pages.count` is 1. `pdf()` writes one raster page.
+
+**Decision: animated and multi-page output is no-go for the 2.0 core.** Processing every frame multiplies the cost of a single image: libvips holds the frames of a multi-page image stacked in one tall image, so memory is roughly `frames × width × height × bands` bytes (a 100-frame 1000×1000 RGBA GIF is about 400 MB decoded) and each operation runs once per frame. Offering it would need a frame budget alongside `maxPixels`, per-frame handling for every operation (resize, composite, text), and delay and loop encoding. That is a separate, additive feature rather than something the pipeline should do implicitly; it is tracked as follow-up work, and page selection is the supported way to work with individual frames today.
 
 ## PDF output
 
@@ -317,7 +327,7 @@ deliberate, tracked capability rather than an implied promise.
 - [ ] [Statistics and granular EXIF, ICC, XMP, orientation, and density controls](https://github.com/ivantokar/hokusai/issues/24).
 - [ ] [Gravity placement and a broader typed blend-mode set](https://github.com/ivantokar/hokusai/issues/25).
 - [ ] [A staged set of advanced transforms](https://github.com/ivantokar/hokusai/issues/26), beginning with common server-side operations rather than a generic native wrapper.
-- [ ] [A documented multi-page and animation contract](https://github.com/ivantokar/hokusai/issues/27).
+- [x] [A documented multi-page and animation contract](https://github.com/ivantokar/hokusai/issues/27).
 
 ### Server operation and migration
 

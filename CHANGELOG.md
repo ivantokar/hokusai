@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Documented (multi-page and animation, #27)
+- The 2.0 contract is one page in, one page out: `InputOptions.page` selects a
+  frame or page (limits apply to it alone), page count is never animation, and
+  every encoder writes a single image. Animated and multi-page output is a
+  documented no-go for the core, with the memory and CPU reasoning in the
+  README. Page selection is now fixture-tested for GIF, animated WebP and TIFF.
+
 ### Added (content-aware transforms, #36)
 - `trim(_ options: TrimOptions)` with an explicit `TrimBackground` (`.topLeft`
   by default, or `.color(_)`), `lineArt` mode and a `margin` of background to

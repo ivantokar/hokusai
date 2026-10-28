@@ -26,8 +26,11 @@ public struct InputOptions: Sendable, Equatable {
 
     /// Zero-based page to load from a multi-page source such as a TIFF or PDF.
     ///
-    /// `nil` loads the first page. Exactly one page is ever loaded; page
-    /// ranges, all-page loading, and animation are not supported yet.
+    /// `nil` loads the first page. Exactly one page is ever loaded, and
+    /// ``InputLimits/maxPixels`` applies to it alone; page ranges, all-page
+    /// loading, and animation output are not supported. A page beyond the
+    /// end is ``HokusaiError/invalidOption(name:reason:)``, and selecting a
+    /// page other than 0 in a single-page format is ``HokusaiError/unsupported(feature:reason:)``.
     public var page: Int?
 
     /// Defensive limits checked before expensive pixel evaluation.
