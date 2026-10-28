@@ -50,12 +50,21 @@ import Testing
     // MARK: - Outputs are one page
 
     @Test func transformingAnAnimationKeepsOnlyTheSelectedFrame() async throws {
-        let output = try await Hokusai(url: url("animated", "gif")).resize(width: 8, fit: .fill).gif().data()
+        let output = try await Hokusai(url: url("animated", "webp")).resize(width: 8, fit: .fill).webp().data()
         let described = try await Hokusai(data: output.data).metadata()
 
         #expect(described.pages.count == 1)
         #expect(!described.isAnimated)
         #expect(output.info.width == 8)
+    }
+
+    @Test(.enabled(if: (try? Hokusai.capabilities().canEncode(.gif)) ?? false, "GIF encoding not available in this libvips build"))
+    func reencodingAnAnimatedGIFProducesOneFrame() async throws {
+        let output = try await Hokusai(url: url("animated", "gif")).resize(width: 8, fit: .fill).gif().data()
+        let described = try await Hokusai(data: output.data).metadata()
+
+        #expect(described.pages.count == 1)
+        #expect(!described.isAnimated)
     }
 
     @Test func aPagedDocumentEncodesToASinglePageImage() async throws {
