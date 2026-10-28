@@ -78,6 +78,37 @@ import Testing
         #expect(capabilities.outputFormats.isSubset(of: [.jpeg, .png, .webp, .avif, .heif, .tiff, .gif, .pdf]))
     }
 
+    // MARK: - Blocked loaders
+
+    @Test func loadersAreSplitIntoUsableBlockedAndAbsent() {
+        let loaders: [(ImageFormat, String)] = [(.jpeg, "jpegload"), (.pdf, "pdfload"), (.svg, "svgload"), (.gif, "gifload")]
+        let result = classifyLoaders(loaders, exists: { $0 != "gifload" }, isBlocked: { $0 == "pdfload" || $0 == "svgload" })
+
+        #expect(result.usable == [.jpeg])
+        #expect(result.blocked == [.pdf, .svg])
+        // GIF has no loader in this build, so it is neither usable nor blocked.
+        #expect(!result.usable.contains(.gif) && !result.blocked.contains(.gif))
+    }
+
+    @Test func blockingIsOffByDefaultAndPartOfTheConfiguration() {
+        #expect(RuntimeConfiguration().blockUntrustedOperations == false)
+        #expect(RuntimeConfiguration(blockUntrustedOperations: true) != RuntimeConfiguration())
+    }
+
+    /// The process-level switch cannot be flipped in a running test process, so
+    /// CI runs this test a second time with `VIPS_BLOCK_UNTRUSTED=1`, which
+    /// libvips reads at start-up.
+    @Test func blockedFormatsAreReportedSeparatelyFromAbsentOnes() throws {
+        let capabilities = try Hokusai.capabilities()
+        #expect(capabilities.blockedInputFormats.isDisjoint(with: capabilities.inputFormats))
+        if ProcessInfo.processInfo.environment["VIPS_BLOCK_UNTRUSTED"] != nil {
+            #expect(!capabilities.blockedInputFormats.isEmpty, "untrusted loaders should be reported as blocked")
+            #expect(capabilities.canDecode(.jpeg))
+        } else {
+            #expect(capabilities.blockedInputFormats.isEmpty)
+        }
+    }
+
     @Test(.enabled(if: (try? Hokusai.capabilities().canEncode(.avif)) ?? false, "AVIF not available in this libvips build"))
     func advertisedAVIFOutputActuallyEncodes() async throws {
         let output = try await Hokusai(data: loadFixtureData(named: "pixel", ext: "png")).avif().data()
