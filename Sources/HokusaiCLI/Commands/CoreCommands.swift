@@ -24,6 +24,7 @@ struct InfoCommand: AsyncParsableCommand {
         prompt.panel("Runtime", items: [
             ("libvips", capabilities.libvipsVersion),
             ("Input formats", list(capabilities.inputFormats)),
+            ("Blocked input", list(capabilities.blockedInputFormats)),
             ("Output formats", list(capabilities.outputFormats)),
             ("Text rendering", capabilities.textRendering ? "yes" : "no"),
             ("Max evaluations", "\(status.maxConcurrentEvaluations)"),

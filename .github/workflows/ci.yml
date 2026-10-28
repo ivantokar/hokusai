@@ -75,6 +75,9 @@ jobs:
       - name: Test
         run: swift test
 
+      - name: Test with untrusted loaders blocked
+        run: VIPS_BLOCK_UNTRUSTED=1 swift test --filter blockedFormatsAreReportedSeparatelyFromAbsentOnes
+
       - name: Build CLI (release)
         run: swift build -c release --product hokusai
 
@@ -114,6 +117,9 @@ jobs:
 
       - name: Test
         run: swift test
+
+      - name: Test with untrusted loaders blocked
+        run: VIPS_BLOCK_UNTRUSTED=1 swift test --filter blockedFormatsAreReportedSeparatelyFromAbsentOnes
 
       - name: Build CLI (release)
         run: swift build -c release --product hokusai

@@ -88,7 +88,11 @@ public struct TextStyle: Sendable, Hashable {
     /// Pango font family and style without a size, for example `"Helvetica Bold"`.
     public var font: String
     /// A local TTF or OTF file made available to `font` for this render.
-    /// Needs a libvips built with fontconfig.
+    /// Needs a libvips built with fontconfig. libvips reports a file it cannot
+    /// load, or a build without fontconfig, only as a warning and then renders
+    /// with the named `font`, so this support is not part of
+    /// ``RuntimeCapabilities`` and a wrong file is not an error. Hokusai checks
+    /// that the file exists and is readable.
     public var fontFile: URL?
     /// Font size in points at `dpi`, `1...2000`.
     public var fontSize: Int

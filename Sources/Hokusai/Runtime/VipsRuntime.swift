@@ -44,6 +44,7 @@ enum VipsRuntime {
         if let threads = configuration.vipsConcurrency.fixedValue {
             swift_vips_concurrency_set(Int32(threads))
         }
+        if configuration.blockUntrustedOperations { swift_vips_block_untrusted(1) }
         lock.withLock { initialized = true }
         return .success(())
     }()
@@ -83,7 +84,8 @@ enum VipsRuntime {
             (.jpeg, "jpegload"), (.png, "pngload"), (.webp, "webpload"), (.gif, "gifload"),
             (.tiff, "tiffload"), (.heif, "heifload"), (.pdf, "pdfload"), (.svg, "svgload"),
         ]
-        var inputs = Set(loaders.filter { exists($0.1) }.map(\.0))
+        let (usable, blocked) = classifyLoaders(loaders, exists: exists, isBlocked: { swift_vips_operation_blocked($0) != 0 })
+        var inputs = usable
 
         var outputs = Set<ImageFormat>()
         if exists("jpegsave") { outputs.insert(.jpeg) }
@@ -115,11 +117,23 @@ enum VipsRuntime {
             libvipsVersion: vips_version_string().map { String(cString: $0) } ?? "unknown",
             inputFormats: inputs,
             outputFormats: outputs,
+            blockedInputFormats: blocked,
             textRendering: exists("text"),
             heifCompressions: heifCompressions,
             pngPalette: exists("pngsave") && swift_vips_png_palette_probe() == 0
         )
     }
+}
+
+/// Splits the loaders libvips has into those that can run and those it blocks.
+func classifyLoaders(
+    _ loaders: [(ImageFormat, String)], exists: (String) -> Bool, isBlocked: (String) -> Bool
+) -> (usable: Set<ImageFormat>, blocked: Set<ImageFormat>) {
+    var usable = Set<ImageFormat>(), blocked = Set<ImageFormat>()
+    for (format, operation) in loaders where exists(operation) {
+        if isBlocked(operation) { blocked.insert(format) } else { usable.insert(format) }
+    }
+    return (usable, blocked)
 }
 
 /// The configure-once, freeze-on-first-use rule, kept free of global state so

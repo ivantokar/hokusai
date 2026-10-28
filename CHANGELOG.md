@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added (runtime, #28)
+- `RuntimeConfiguration.blockUntrustedOperations` (startup only, default off)
+  blocks the libvips loaders marked untrusted: PDF, SVG, ImageMagick and
+  OpenSlide.
+- `RuntimeCapabilities.blockedInputFormats` separates formats that are
+  blocked from formats that are absent; `hokusai info` prints it.
+- Documented decisions: libvips cache controls are not exposed (no benchmark
+  supports a typed default), and font-file loading is not a capability because
+  libvips only warns when it cannot load a font file.
+
 ### Changed (API surface, #51)
 - `OutputFormat` is now the `Encoder` value type with static factories
   (`.jpeg(_:)`, `.webp(_:)`, ...), and `encode(as:)` is `encode(using:)`.

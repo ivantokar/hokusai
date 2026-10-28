@@ -36,11 +36,24 @@ public struct RuntimeConfiguration: Sendable, Hashable {
     /// `.automatic` keeps libvips' own default.
     public var vipsConcurrency: ConcurrencyLimit
 
+    /// Refuses to run the libvips loaders that parse complex or
+    /// attacker-influenced formats: PDF (poppler), SVG, ImageMagick and
+    /// OpenSlide. Defaults to `false`.
+    ///
+    /// Turn this on for services that decode uploads from untrusted users. A
+    /// source in a blocked format then fails as ``HokusaiError/decode(_:)``, and
+    /// ``RuntimeCapabilities/blockedInputFormats`` lists what was turned off.
+    /// PDF *output* is Cairo and is unaffected. JPEG, PNG, WebP, GIF, TIFF and
+    /// HEIF loaders are not marked untrusted by libvips.
+    public var blockUntrustedOperations: Bool
+
     public init(
         maxConcurrentEvaluations: ConcurrencyLimit = .automatic,
         maxQueuedEvaluations: Int? = nil,
-        vipsConcurrency: ConcurrencyLimit = .automatic
+        vipsConcurrency: ConcurrencyLimit = .automatic,
+        blockUntrustedOperations: Bool = false
     ) {
+        self.blockUntrustedOperations = blockUntrustedOperations
         self.maxConcurrentEvaluations = maxConcurrentEvaluations
         self.maxQueuedEvaluations = maxQueuedEvaluations
         self.vipsConcurrency = vipsConcurrency
@@ -88,8 +101,14 @@ public struct RuntimeCapabilities: Sendable, Hashable {
     /// The linked libvips version, for example `8.18.5`.
     public let libvipsVersion: String
 
-    /// Formats the linked libvips can decode.
+    /// Formats the linked libvips can decode and is allowed to.
     public let inputFormats: Set<ImageFormat>
+
+    /// Formats this build can decode but that are switched off by
+    /// ``RuntimeConfiguration/blockUntrustedOperations``. Absent and blocked
+    /// are different problems: a blocked format is a deployment choice, an
+    /// absent one needs a different libvips build.
+    public let blockedInputFormats: Set<ImageFormat>
 
     /// Formats Hokusai's typed encoders can produce with this build.
     ///
@@ -112,8 +131,10 @@ public struct RuntimeCapabilities: Sendable, Hashable {
 
     init(
         libvipsVersion: String, inputFormats: Set<ImageFormat>, outputFormats: Set<ImageFormat>,
+        blockedInputFormats: Set<ImageFormat> = [],
         textRendering: Bool, heifCompressions: Set<HEIFCompression> = [], pngPalette: Bool = false
     ) {
+        self.blockedInputFormats = blockedInputFormats
         self.libvipsVersion = libvipsVersion
         self.inputFormats = inputFormats
         self.outputFormats = outputFormats

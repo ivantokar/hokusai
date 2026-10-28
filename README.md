@@ -230,13 +230,18 @@ Runtime settings are process-wide and belong in application startup:
 try Hokusai.configure(.init(
     maxConcurrentEvaluations: .fixed(4),  // pipelines evaluated at once
     maxQueuedEvaluations: 64,             // waiting pipelines before .resource
-    vipsConcurrency: .fixed(2)            // libvips threads per image computation
+    vipsConcurrency: .fixed(2),           // libvips threads per image computation
+    blockUntrustedOperations: true        // refuse PDF, SVG, ImageMagick and OpenSlide input
 ))
 ```
 
 `configure(_:)` may be called once. Configuration freezes at the first `initialize()`, `capabilities()`, or `data()`/`write(to:)`; building pipelines does not freeze it. Later calls throw.
 
 The two concurrency settings are different resources. `maxConcurrentEvaluations` limits how many whole pipelines Hokusai runs at once, which bounds memory and latency; extra evaluations wait in FIFO order as suspended tasks. `vipsConcurrency` sets how many libvips worker threads one image computation may use. With both `.automatic`, Hokusai currently admits one evaluation per active processor and libvips uses its own default; these defaults will be tuned from benchmarks before the major release. `maxQueuedEvaluations` (unbounded by default) rejects new work with `HokusaiError.resource` (kind `.queuedEvaluations`) instead of retaining more source bytes in memory.
+
+**Untrusted input.** `blockUntrustedOperations` turns on libvips' own switch for loaders it marks untrusted (poppler PDF, SVG, ImageMagick, OpenSlide). Turn it on for services that decode uploads from strangers; a source in a blocked format then fails as `decode`. JPEG, PNG, WebP, GIF, TIFF and HEIF are not affected, and neither is `pdf()` output, which is Cairo. libvips reads `VIPS_BLOCK_UNTRUSTED` too, so setting that environment variable has the same effect.
+
+**Cache controls are deliberately not exposed.** libvips' operation cache (`vips_cache_set_max`, `set_max_mem`) can help or hurt depending on the workload, and Hokusai has no benchmark that justifies a typed default or a safe range. Leave libvips' defaults, or set `VIPS_CACHE_MAX`-style environment variables yourself, until that evidence exists.
 
 ### Capabilities and status
 
@@ -248,7 +253,7 @@ let status = Hokusai.runtimeStatus
 print(status.queuedEvaluations, status.activeEvaluations)
 ```
 
-Codec availability depends on how libvips was built, not on Hokusai's package dependencies. AVIF is verified by encoding and decoding a tiny image. PDF input (libvips `pdfload`) and PDF output (Cairo) are reported separately. `hokusai info` prints the same report.
+Codec availability depends on how libvips was built, not on Hokusai's package dependencies. AVIF is verified by encoding and decoding a tiny image. PDF input (libvips `pdfload`) and PDF output (Cairo) are reported separately, and `blockedInputFormats` lists formats the build can decode but `blockUntrustedOperations` has switched off, so "absent" and "blocked" are not confused. Font-file loading (`TextStyle.fontFile`) is not reported because libvips only warns when it cannot load one, so it cannot be probed reliably. `hokusai info` prints the same report.
 
 `runtimeStatus` never initializes libvips. Its counters describe Hokusai's evaluation scheduler; they do not measure libvips worker threads or memory allocated by codec libraries.
 

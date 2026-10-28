@@ -58,6 +58,26 @@ static inline int swift_vips_operation_exists(const char *nickname) {
 }
 
 /**
+ * @brief Whether the named operation exists but libvips refuses to run it,
+ * because untrusted operations are blocked or it was blocked individually.
+ */
+static inline int swift_vips_operation_blocked(const char *nickname) {
+    VipsOperation *operation = vips_operation_new(nickname);
+    if (!operation) {
+        vips_error_clear();
+        return 0;
+    }
+    int blocked = (vips_operation_get_flags(operation) & VIPS_OPERATION_BLOCKED) != 0;
+    g_object_unref(operation);
+    return blocked;
+}
+
+/** @brief Blocks every operation libvips marks untrusted (PDF, SVG, ImageMagick, OpenSlide loaders). */
+static inline void swift_vips_block_untrusted(int state) {
+    vips_block_untrusted_set(state ? TRUE : FALSE);
+}
+
+/**
  * @brief Encode and fully decode a tiny AV1 HEIF image.
  *
  * Returns 0 when both an encoder and a decoder for the codec (AV1 when `av1` is
