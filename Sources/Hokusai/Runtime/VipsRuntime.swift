@@ -115,6 +115,7 @@ enum VipsRuntime {
 
         return RuntimeCapabilities(
             libvipsVersion: vips_version_string().map { String(cString: $0) } ?? "unknown",
+            cairoVersion: cairo_version_string().map { String(cString: $0) } ?? "unknown",
             inputFormats: inputs,
             outputFormats: outputs,
             blockedInputFormats: blocked,

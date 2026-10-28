@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed (support baseline, #49)
+- Package lower bounds follow what CI tests: swift-nio 2.90, ArgumentParser 1.7.
+- `RuntimeCapabilities.cairoVersion`; `hokusai info` prints it.
+- CI jobs declare the capabilities their native install must provide
+  (`HOKUSAI_EXPECT_CAPABILITIES`), so a missing codec fails the job instead of
+  skipping tests. README documents the support matrix and the distro libvips
+  reality (Debian 13 / Ubuntu 25.10 or newer, or build libvips).
+
 ### Added (runtime, #28)
 - `RuntimeConfiguration.blockUntrustedOperations` (startup only, default off)
   blocks the libvips loaders marked untrusted: PDF, SVG, ImageMagick and

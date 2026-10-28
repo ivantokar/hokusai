@@ -109,6 +109,38 @@ import Testing
         }
     }
 
+    /// Optional codecs are skipped elsewhere only after asking for capabilities.
+    /// A job that installs them lists what it expects in `HOKUSAI_EXPECT_CAPABILITIES`
+    /// (comma separated), so a broken native install fails CI instead of
+    /// turning every optional test into a silent skip.
+    @Test func capabilitiesTheJobPromisedArePresent() throws {
+        let expected = (ProcessInfo.processInfo.environment["HOKUSAI_EXPECT_CAPABILITIES"] ?? "")
+            .split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+        let capabilities = try Hokusai.capabilities()
+        for name in expected {
+            switch name {
+            case "text": #expect(capabilities.textRendering, "text rendering")
+            case "pdfInput": #expect(capabilities.canDecode(.pdf), "PDF input")
+            case "pdfOutput": #expect(capabilities.canEncode(.pdf), "PDF output")
+            case "svgInput": #expect(capabilities.canDecode(.svg), "SVG input")
+            case "avif": #expect(capabilities.canEncode(.avif) && capabilities.canDecode(.avif), "AVIF")
+            case "heif": #expect(capabilities.canEncode(.heif), "HEIF")
+            case "gif": #expect(capabilities.canEncode(.gif), "GIF output")
+            case "tiff": #expect(capabilities.canEncode(.tiff), "TIFF output")
+            case "palette": #expect(capabilities.pngPalette, "palette PNG")
+            case "": break
+            default: Issue.record("unknown capability '\(name)' in HOKUSAI_EXPECT_CAPABILITIES")
+            }
+        }
+    }
+
+    @Test func cairoVersionIsReported() throws {
+        let version = try Hokusai.capabilities().cairoVersion
+        #expect(version != "unknown")
+        let parts = version.split(separator: ".").compactMap { Int($0) }
+        #expect(parts.count >= 3 && (parts[0], parts[1]) >= (1, 16))
+    }
+
     @Test(.enabled(if: (try? Hokusai.capabilities().canEncode(.avif)) ?? false, "AVIF not available in this libvips build"))
     func advertisedAVIFOutputActuallyEncodes() async throws {
         let output = try await Hokusai(data: loadFixtureData(named: "pixel", ext: "png")).avif().data()

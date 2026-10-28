@@ -26,11 +26,13 @@ jobs:
             swift: "6.0"
             distro: jammy # Cairo 1.16.0
             vips: "8.16.1"
+            expect: "text,pdfInput,pdfOutput,svgInput,tiff"
             extra-packages: ""
           - name: current
             swift: "6.4"
             distro: noble
             vips: "8.18.7"
+            expect: "text,pdfInput,pdfOutput,svgInput,avif,heif,gif,tiff,palette"
             extra-packages: >-
               libjxl-dev libhwy-dev libimagequant-dev libcgif-dev
               libheif-plugin-aomenc libheif-plugin-dav1d
@@ -39,6 +41,9 @@ jobs:
       PKG_CONFIG_PATH: /opt/vips/lib/pkgconfig
       LD_LIBRARY_PATH: /opt/vips/lib
       EXPECTED_SWIFT: ${{ matrix.swift }}
+      # Capabilities this job's native install must provide; the test fails
+      # instead of skipping when one is missing.
+      HOKUSAI_EXPECT_CAPABILITIES: ${{ matrix.expect }}
     steps:
       - uses: actions/checkout@v4
 
@@ -89,6 +94,7 @@ jobs:
     runs-on: macos-26
     env:
       EXPECTED_SWIFT: "6.4"
+      HOKUSAI_EXPECT_CAPABILITIES: "text,pdfInput,pdfOutput,svgInput,avif,heif,gif,tiff"
     steps:
       - uses: actions/checkout@v4
 

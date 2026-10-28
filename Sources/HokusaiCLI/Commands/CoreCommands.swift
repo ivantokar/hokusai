@@ -23,6 +23,7 @@ struct InfoCommand: AsyncParsableCommand {
         prompt.header("Hokusai CLI")
         prompt.panel("Runtime", items: [
             ("libvips", capabilities.libvipsVersion),
+            ("Cairo", capabilities.cairoVersion),
             ("Input formats", list(capabilities.inputFormats)),
             ("Blocked input", list(capabilities.blockedInputFormats)),
             ("Output formats", list(capabilities.outputFormats)),

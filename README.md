@@ -24,14 +24,30 @@ Required:
 # macOS
 brew install vips cairo pkg-config
 
-# Debian 13+ / Ubuntu 25.04+ (distro libvips 8.16+)
+# Debian 13 / Ubuntu 25.10+ (distro libvips 8.16+)
 sudo apt update
 sudo apt install libvips-dev libcairo2-dev pkg-config
 ```
 
-Ubuntu 24.04 and Debian 12 ship libvips older than 8.16; on those releases
-build libvips from a [release tarball](https://github.com/libvips/libvips/releases)
-(see `.github/scripts/install-libvips.sh` for the configuration CI uses).
+Ubuntu 24.04 LTS (libvips 8.15) and Debian 12 ship libvips older than 8.16, so
+`apt install libvips-dev` is not enough there: build libvips from a
+[release tarball](https://github.com/libvips/libvips/releases) (see
+`.github/scripts/install-libvips.sh` for the configuration CI uses).
+
+What CI proves on every pull request:
+
+| Job | Swift | libvips | Cairo | Purpose |
+| --- | --- | --- | --- | --- |
+| Linux baseline | 6.0 | 8.16.1 | 1.16 | The minimum contract builds and passes |
+| Linux current | 6.4 | 8.18.7 | current | Newest toolchain and native stack, with HEIF/AVIF, JPEG XL, palette PNG, PDF and SVG input, and text |
+| macOS current | 6.4 | Homebrew | Homebrew | macOS with the same suite |
+
+Each job prints the versions it used and fails if they are below the baseline,
+and the current jobs list the capabilities they must have, so a broken native
+install fails instead of silently skipping optional tests. libvips 8.17 and
+newer add capabilities (for example the Magic Kernel resize kernels) that
+Hokusai reports instead of assuming. Hokusai links libvips and Cairo only;
+codecs, Pango and fontconfig come with whatever libvips build you install.
 
 Build-dependent capabilities depend on how libvips was compiled, not on
 Hokusai's package dependencies: HEIF/AVIF, JPEG XL, JPEG 2000, PDF input, SVG,
