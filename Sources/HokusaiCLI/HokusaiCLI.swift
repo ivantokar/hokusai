@@ -1,28 +1,10 @@
-import Foundation
-import ArgumentParser
-import Hokusai
-import Prompt
+import HokusaiCommandLine
 
-/// Entry point for the first-party Hokusai command-line tool.
-///
-/// Commands deliberately use only public Hokusai APIs. The process-global
-/// libvips runtime remains active for the command's lifetime, and output is
-/// intended for an operator reading it in a terminal.
+/// The `hokusai` executable: only the process entry point. Everything the
+/// command does lives in `HokusaiCommandLine`.
 @main
-struct HokusaiCLI: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "hokusai",
-        abstract: "First-party CLI for testing Hokusai image operations and benchmarks.",
-        subcommands: [
-            InfoCommand.self,
-            InspectCommand.self,
-            ResizeCommand.self,
-            ThumbnailCommand.self,
-            ConvertCommand.self,
-            RotateCommand.self,
-            CropCommand.self,
-            TextCommand.self,
-            BenchmarkCommand.self,
-        ]
-    )
+struct HokusaiCLI {
+    static func main() async {
+        await HokusaiRootCommand.main()
+    }
 }

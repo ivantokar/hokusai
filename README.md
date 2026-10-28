@@ -299,14 +299,24 @@ Branch on the case, not on message text. `FailureContext` carries a Hokusai-owne
 ## CLI
 
 ```bash
+hokusai info
 hokusai inspect --input photo.jpg
 hokusai resize --input photo.jpg --output social.webp --width 1200 --height 630 --fit cover
-hokusai convert --input photo.jpg --output photo.pdf
+hokusai convert --input photo.jpg --output photo.avif --quality 60
 hokusai thumbnail --input photo.jpg --output thumb.jpg --width 400
+hokusai text --input photo.jpg --output captioned.png --text "Hokusai" --color 255,255,255
 hokusai benchmark pipeline --input photo.jpg --sigma 50
 ```
 
-`hokusai thumbnail` is `autoOrient` and `resize` on the same public pipeline as the library. JPEG sources are shrunk by the decoder when the pipeline allows it (see `resize` in the changelog); nothing about the command line changes.
+The command line is a client of the public API and adds no image processing of its own. Each command parses its arguments, builds an ordinary Hokusai pipeline, and reports the result. The code lives in `HokusaiCommandLine`, which depends only on the public `Hokusai` module; the `hokusai` executable is just its entry point.
+
+- **Strict arguments.** An unknown `--fit`, `--kernel`, `--align` or `--crop` word, or a colour (`r,g,b[,a]`, each 0...255) that is malformed, not finite or out of range, is an error, never a default or a clamp. Numeric ranges such as quality and dimensions are validated by Hokusai itself, so the CLI and the library cannot disagree.
+- **`convert`** writes the public encoder set (JPEG, PNG, WebP, AVIF, HEIF, TIFF, GIF, PDF). An encoder the linked libvips lacks is reported as unsupported; `hokusai info` lists what is available. SVG is input only. `--format` that contradicts the output extension is refused rather than written under a misleading name.
+- **Metadata.** Without a flag, Hokusai's default policy applies unchanged. `--strip-metadata` is the deliberate remove-everything policy.
+- **`thumbnail`** is `autoOrient` (unless `--no-rotate`) followed by `resize`, with the library's semantics. JPEG sources may be shrunk by the decoder when the pipeline allows it (see `resize` in the changelog); nothing about the command line changes.
+- **`inspect`** reports the source file's metadata, and only notes that EXIF, ICC, XMP and IPTC blocks exist.
+- **`benchmark`** runs in one process with one frozen runtime configuration. To compare `--vips-concurrency` values, run one process per value.
+- **Failures** are one line built from the error's case. `--verbose` adds the native diagnostic when there is one.
 
 ## Migrating from 0.x and 1.x
 

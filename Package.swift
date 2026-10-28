@@ -53,13 +53,20 @@ let package = Package(
             name: "Hokusai",
             dependencies: ["CVips", "CCairo"]
         ),
-        .executableTarget(
-            name: "HokusaiCLI",
+        // PURPOSE: Everything the `hokusai` command does. Depends on the public
+        // Hokusai module only, so a command cannot reach the native layer.
+        .target(
+            name: "HokusaiCommandLine",
             dependencies: [
                 "Hokusai",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Prompt", package: "prompt"),
             ]
+        ),
+        // PURPOSE: The `hokusai` executable: a process entry point only.
+        .executableTarget(
+            name: "HokusaiCLI",
+            dependencies: ["HokusaiCommandLine"]
         ),
         .target(
             name: "HokusaiNIO",
@@ -75,7 +82,7 @@ let package = Package(
             dependencies: [
                 "Hokusai",
                 "HokusaiNIO",
-                "HokusaiCLI",
+                "HokusaiCommandLine",
                 "CVips",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "NIOCore", package: "swift-nio"),
