@@ -101,6 +101,10 @@ public struct RuntimeCapabilities: Sendable, Hashable {
     /// The linked libvips version, for example `8.18.5`.
     public let libvipsVersion: String
 
+    /// The linked Cairo version, for example `1.18.0`. Cairo writes PDF output;
+    /// it is independent of libvips.
+    public let cairoVersion: String
+
     /// Formats the linked libvips can decode and is allowed to.
     public let inputFormats: Set<ImageFormat>
 
@@ -130,10 +134,11 @@ public struct RuntimeCapabilities: Sendable, Hashable {
     public func canEncode(_ compression: HEIFCompression) -> Bool { heifCompressions.contains(compression) }
 
     init(
-        libvipsVersion: String, inputFormats: Set<ImageFormat>, outputFormats: Set<ImageFormat>,
+        libvipsVersion: String, cairoVersion: String = "unknown", inputFormats: Set<ImageFormat>, outputFormats: Set<ImageFormat>,
         blockedInputFormats: Set<ImageFormat> = [],
         textRendering: Bool, heifCompressions: Set<HEIFCompression> = [], pngPalette: Bool = false
     ) {
+        self.cairoVersion = cairoVersion
         self.blockedInputFormats = blockedInputFormats
         self.libvipsVersion = libvipsVersion
         self.inputFormats = inputFormats
