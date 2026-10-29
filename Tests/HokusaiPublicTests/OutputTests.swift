@@ -33,6 +33,27 @@ import Testing
         #expect(memory.info.width == info.width && memory.info.height == info.height)
     }
 
+    /// Lossy and palette encoders cannot be compared to a source, but both sinks
+    /// must hand back the same decodable image.
+    @Test(arguments: [("jpg", ImageFormat.jpeg), ("gif", .gif), ("heic", .heif), ("avif", .avif)])
+    func lossyOutputsAgreeAcrossSinks(ext: String, format: ImageFormat) async throws {
+        guard isEnabled(format) else { return }
+        let url = temporaryURL("lossy.\(ext)")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let pipeline = try source.pipeline().encode(using: Encoder(format))
+        let memory = try await pipeline.data()
+        let info = try await pipeline.write(to: url)
+        let file = try Data(contentsOf: url)
+
+        #expect(memory.info.format == format && info.format == format)
+        #expect(memory.info.byteCount == memory.data.count && info.byteCount == file.count)
+        #expect(memory.info.width == 24 && info.width == 24)
+        #expect(memory.info.height == 16 && info.height == 16)
+        // Same encoder, same input: the two sinks must produce the same pixels.
+        expectPixels(try await rasterize(encoded: file), match: try await rasterize(encoded: memory.data))
+    }
+
     @Test func byteCountEqualsTheBytesActuallyProduced() async throws {
         let url = temporaryURL("count.png")
         defer { try? FileManager.default.removeItem(at: url) }
@@ -131,14 +152,18 @@ import Testing
     }
 }
 
-private extension Encoder {
+extension Encoder {
     /// The default-configured encoder for a format.
     init(_ format: ImageFormat) {
         switch format {
         case .png: self = .png()
         case .tiff: self = .tiff()
         case .webp: self = .webp()
-        default: self = .jpeg()
+        case .jpeg, .svg: self = .jpeg()
+        case .gif: self = .gif()
+        case .avif: self = .avif()
+        case .heif: self = .heif()
+        case .pdf: self = .pdf()
         }
     }
 }
