@@ -7,7 +7,7 @@ guarantee broke.
 | --- | --- | --- | --- |
 | A. Public semantics | `HokusaiPublicTests` | `Hokusai` and the other public products (`HokusaiNIO`) | Documented behaviour: operation semantics and order, orientation, sink parity, typed errors, limits, cancellation, `Sendable` |
 | B. Internal | `HokusaiTests` | `@testable Hokusai`, `CVips` | Planner traces, optimiser equivalence, native lifetime, capability mapping, the private scheduler, CLI parsing |
-| C. Process / stress / benchmark | `HokusaiProcessTests` | nothing; it launches `HokusaiProcessProbe` | Runtime variants that freeze process-global configuration, scheduler capacity sweeps, overload, cancellation, blocked loaders, memory growth. Sanitizers and benchmarks are still open |
+| C. Process / stress / benchmark | `HokusaiProcessTests` | nothing; it launches `HokusaiProcessProbe` | Runtime variants that freeze process-global configuration, scheduler capacity sweeps, overload, cancellation, blocked loaders, memory growth. Sanitizers run in a separate non-gating workflow; benchmarks are still open |
 
 Rules of thumb:
 
@@ -40,6 +40,12 @@ a fresh process per scenario and reads its `key=value` report. Add a scenario
 to the probe and a test that runs it; never freeze configuration inside the
 test process. `HOKUSAI_STRESS_ITERATIONS` lengthens the memory test, and
 `HOKUSAI_PROBE` points at a probe binary when the default lookup fails.
+
+Sanitizers (`.github/workflows/sanitizers.yml`) run the whole suite under
+AddressSanitizer and ThreadSanitizer on Linux. The workflow is never a PR gate;
+the ThreadSanitizer job is informative until native-library false positives are
+understood. Run it on a branch with `gh workflow run sanitizers.yml --ref <branch>`
+once the file is on the default branch, or let a PR that edits it trigger it.
 
 Still open under #50: fresh-process runtime variants, sanitizer jobs, the
 benchmark harness (base-versus-candidate on one runner, memory and
