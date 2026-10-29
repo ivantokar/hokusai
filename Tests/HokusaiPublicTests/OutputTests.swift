@@ -38,6 +38,8 @@ import Testing
     @Test(arguments: [("jpg", ImageFormat.jpeg), ("gif", .gif), ("heic", .heif), ("avif", .avif)])
     func lossyOutputsAgreeAcrossSinks(ext: String, format: ImageFormat) async throws {
         guard isEnabled(format) else { return }
+        // The default HEIF encoder is HEVC, which a libheif build may lack.
+        if format == .heif, !((try? Hokusai.capabilities().canEncode(HEIFCompression.hevc)) ?? false) { return }
         let url = temporaryURL("lossy.\(ext)")
         defer { try? FileManager.default.removeItem(at: url) }
 
