@@ -15,6 +15,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/sanitizers.yml
+      - .github/tsan.supp
 
 concurrency:
   group: sanitizers-${{ github.ref }}
@@ -39,7 +40,9 @@ jobs:
       # Lengthens the resident-memory test; 300 is the pull request default.
       HOKUSAI_STRESS_ITERATIONS: "3000"
       ASAN_OPTIONS: detect_leaks=0:abort_on_error=0
-      TSAN_OPTIONS: halt_on_error=0:second_deadlock_stack=1
+      # Sanitizers inflate resident memory (ASan quarantines freed blocks), so
+      # the growth bound of the memory test is skipped; its other checks stay.
+      HOKUSAI_SANITIZED: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -67,7 +70,9 @@ jobs:
 
       - name: Test with ${{ matrix.sanitizer }} sanitizer
         shell: bash # explicit bash enables pipefail, so a failing test fails the step despite `tee`
-        run: swift test --sanitize=${{ matrix.sanitizer }} 2>&1 | tee sanitizer.log
+        run: |
+          export TSAN_OPTIONS="halt_on_error=0:second_deadlock_stack=1:suppressions=$GITHUB_WORKSPACE/.github/tsan.supp"
+          swift test --sanitize=${{ matrix.sanitizer }} 2>&1 | tee sanitizer.log
 
       - name: Summarise sanitizer reports
         if: always()
