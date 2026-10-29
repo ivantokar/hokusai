@@ -92,10 +92,15 @@ let package = Package(
             ]
         ),
         // PURPOSE: Black-box suite. Imports only the public Hokusai module (no
-        // @testable, no CVips) so it can verify documented behaviour alone.
+        // @testable, no CVips) so it can verify documented behaviour alone. It may
+        // import the other public products, such as HokusaiNIO.
         .testTarget(
             name: "HokusaiPublicTests",
-            dependencies: ["Hokusai"],
+            dependencies: [
+                "Hokusai",
+                "HokusaiNIO",
+                .product(name: "NIOCore", package: "swift-nio"),
+            ],
             resources: [
                 .copy("Fixtures")
             ]
