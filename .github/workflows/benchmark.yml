@@ -1,0 +1,128 @@
+name: Benchmark
+
+# Advisory (#50): base versus candidate on one runner, so the numbers share a
+# machine, a toolchain and a libvips. It is never a required check and it
+# never fails on a slowdown: `benchmark compare` always exits zero and absolute
+# milliseconds are not portable. Latency and peak resident memory are compared;
+# time to first byte needs the streaming API (#45/#46) and is not measured yet.
+#
+# Runs are ordered base, candidate, candidate, base. The two base runs also
+# compare against each other, which shows how noisy this runner is: treat a
+# regression as real only when it appears in both pairs and exceeds that noise.
+on:
+  pull_request:
+    branches:
+      - release/2.0
+    paths:
+      - Sources/**
+      - Package.swift
+      - .github/workflows/benchmark.yml
+
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    name: Base vs candidate (Swift 6.4, libvips 8.18.7)
+    runs-on: ubuntu-latest
+    container: swift:6.4-noble
+    env:
+      VIPS_PREFIX: /opt/vips
+      PKG_CONFIG_PATH: /opt/vips/lib/pkgconfig
+      LD_LIBRARY_PATH: /opt/vips/lib
+      WORKLOADS: thumbnail-jpeg,cover-webp,blur-webp
+      EVALUATIONS: "1,4"
+    steps:
+      - name: Check out the candidate
+        uses: actions/checkout@v4
+        with:
+          path: candidate
+
+      - name: Check out the base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+
+      # Same native setup as the "Linux current" job in ci.yml.
+      - name: Install native build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            curl ca-certificates xz-utils zstd meson ninja-build pkg-config build-essential \
+            libglib2.0-dev libexpat1-dev libjpeg-dev libpng-dev libwebp-dev \
+            libtiff-dev libgif-dev libexif-dev liblcms2-dev libcairo2-dev \
+            libpango1.0-dev librsvg2-dev libpoppler-glib-dev libheif-dev \
+            libarchive-dev libfftw3-dev liborc-0.4-dev fonts-dejavu-core \
+            libjxl-dev libhwy-dev libimagequant-dev libcgif-dev \
+            libheif-plugin-aomenc libheif-plugin-dav1d
+
+      - name: Restore libvips build
+        uses: actions/cache@v4
+        with:
+          path: /opt/vips
+          key: vips-8.18.7-noble-${{ hashFiles('candidate/.github/scripts/install-libvips.sh') }}
+
+      - name: Install libvips 8.18.7
+        run: candidate/.github/scripts/install-libvips.sh "8.18.7" "$VIPS_PREFIX"
+
+      - name: Build the base CLI
+        working-directory: base
+        run: swift build -c release --product hokusai
+
+      - name: Build the candidate CLI
+        working-directory: candidate
+        run: swift build -c release --product hokusai
+
+      # A deterministic 3000x2000 JPEG (seeded noise), so both sides read the same bytes.
+      - name: Make the benchmark input
+        run: |
+          export PATH="$VIPS_PREFIX/bin:$PATH"
+          vips gaussnoise noise.v 3000 2000 --seed 1 --mean 128 --sigma 40
+          vips cast noise.v grey.v uchar
+          vips copy grey.v bw.v --interpretation b-w
+          vips colourspace bw.v rgb.v srgb
+          vips jpegsave rgb.v bench.jpg --Q 85
+          sha256sum bench.jpg
+
+      - name: Measure
+        shell: bash
+        run: |
+          set -eo pipefail
+          measure() { # <checkout> <result>
+            "$1/.build/release/hokusai" benchmark run --input bench.jpg --workloads "$WORKLOADS" \
+              --evaluations "$EVALUATIONS" --profile stable --json-output "$2"
+          }
+          measure base base-1.json
+          measure candidate candidate-1.json
+          measure candidate candidate-2.json
+          measure base base-2.json
+
+      - name: Compare
+        if: always()
+        shell: bash
+        run: |
+          compare() { "candidate/.build/release/hokusai" benchmark compare "$1" "$2"; }
+          {
+            echo "## Benchmark: ${{ github.event.pull_request.base.sha }} (base) vs ${{ github.sha }} (candidate)"
+            echo
+            echo "Advisory. Absolute numbers belong to this runner; read the deltas."
+            echo
+            echo "### Pair 1 (base, then candidate)"
+            echo '```'; compare base-1.json candidate-1.json; echo '```'
+            echo "### Pair 2 (candidate, then base)"
+            echo '```'; compare base-2.json candidate-2.json; echo '```'
+            echo "### Noise floor (base against base)"
+            echo '```'; compare base-1.json base-2.json; echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            base-*.json
+            candidate-*.json
+          retention-days: 30

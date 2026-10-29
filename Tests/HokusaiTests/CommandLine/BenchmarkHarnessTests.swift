@@ -112,7 +112,7 @@ import Testing
         }
     }
 
-    static func cell(_ settings: WorkerSettings, p50: Double = 10, requestsPerSecond: Double = 100, libvips: String = "8.16.1") -> CellMeasurement {
+    static func cell(_ settings: WorkerSettings, p50: Double = 10, requestsPerSecond: Double = 100, libvips: String = "8.16.1", peakResidentBytes: Int = 1) -> CellMeasurement {
         let samples = Array(repeating: p50, count: 10)
         return CellMeasurement(
             schemaVersion: BenchmarkSchema.version, workload: settings.workload,
@@ -127,7 +127,7 @@ import Testing
             requestsPerIteration: settings.requests,
             latencyMs: SampleStatistics(samplesMs: samples), latencySamplesMs: samples, batchMs: [1],
             requestsPerSecond: requestsPerSecond, encodedBytes: 1,
-            activeEvaluationsHighWater: 1, queuedEvaluationsHighWater: 0, peakResidentBytes: 1)
+            activeEvaluationsHighWater: 1, queuedEvaluationsHighWater: 0, peakResidentBytes: peakResidentBytes)
     }
 
     @Test func eachCellGetsItsOwnFreshWorkerAndTheResultsAreCollectedInOrder() async throws {
@@ -170,11 +170,11 @@ import Testing
 
     // MARK: - Comparison
 
-    private func run(p50: Double, libvips: String = "8.16.1") -> BenchmarkRun {
+    private func run(p50: Double, libvips: String = "8.16.1", residentBytes: Int = 1) -> BenchmarkRun {
         let settings = WorkerSettings(workload: "blur-webp", input: "x", profile: .quick, evaluations: 2, vipsConcurrency: .automatic, requests: 4)
         return BenchmarkRun(
             schemaVersion: 1, generatedAt: "", gitCommit: "", hokusaiVersion: "", profile: "quick",
-            cells: [Self.cell(settings, p50: p50, libvips: libvips)])
+            cells: [Self.cell(settings, p50: p50, libvips: libvips, peakResidentBytes: residentBytes)])
     }
 
     @Test func aChangeNeedsBothARelativeAndAnAbsoluteDeltaToBeFlagged() {
@@ -195,5 +195,23 @@ import Testing
 
         let different = ResultComparison(base: run(p50: 100), candidate: run(p50: 100, libvips: "8.18.7"))
         #expect(different.warnings.contains { $0.contains("libvips") })
+    }
+
+    @Test func peakMemoryIsJudgedByItsOwnRelativeAndAbsoluteBounds() {
+        let mib = 1_048_576
+        func memory(_ base: Int, _ candidate: Int) -> ResultComparison.Verdict {
+            ResultComparison(base: run(p50: 100, residentBytes: base * mib), candidate: run(p50: 100, residentBytes: candidate * mib)).rows[0].memoryVerdict
+        }
+        #expect(memory(200, 400) == .regression)
+        // 50% more but only 5 MiB: noise on a small process.
+        #expect(memory(10, 15) == .unchanged)
+        // 40 MiB more but only 4%: noise on a large process.
+        #expect(memory(1000, 1040) == .unchanged)
+        #expect(memory(400, 200) == .improvement)
+
+        let stricter = ResultComparison.Thresholds(memoryRelative: 0.01, memoryAbsoluteBytes: 1)
+        let flagged = ResultComparison(base: run(p50: 100, residentBytes: 1000 * mib), candidate: run(p50: 100, residentBytes: 1040 * mib), thresholds: stricter)
+        #expect(flagged.rows[0].memoryVerdict == .regression)
+        #expect(flagged.rows[0].verdict == .unchanged, "latency and memory are judged separately")
     }
 }
