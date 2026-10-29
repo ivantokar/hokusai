@@ -45,7 +45,8 @@ import Testing
         #expect(contains(before.exif, "hokusai") && contains(before.xmp, "hokusai"))
         #expect(contains(before.iptc, "hokusai fixture"))
         #expect(before.iccProfile != nil)
-        #expect(before.sourceByteSize == (try fixtureData(named: "metadata-rich", ext: "jpg")).count)
+        let fileSize = try fixtureData(named: "metadata-rich", ext: "jpg").count
+        #expect(before.sourceByteSize == fileSize)
     }
 
     @Test func aMultiPageFileIsNotAnAnimation() async throws {
@@ -188,7 +189,8 @@ import Testing
 
             let memory = try await pipeline.data()
             try await pipeline.write(to: url)
-            #expect(memory.data == (try Data(contentsOf: url)))
+            let file = try Data(contentsOf: url)
+            #expect(memory.data == file)
         }
     }
 

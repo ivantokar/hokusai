@@ -119,12 +119,14 @@ import Testing
 
     @Test func multiplyScreenDifferenceAndAddOnKnownColours() async throws {
         let base: [UInt8] = [200, 100, 50, 255], layer: [UInt8] = [100, 200, 50, 255]
-        #expect(close(rgb(try await blend(.multiply, base: base, layer: layer), 0, 0), [78, 78, 10]))
-        #expect(close(rgb(try await blend(.screen, base: base, layer: layer), 0, 0), [222, 222, 90]))
-        #expect(close(rgb(try await blend(.difference, base: base, layer: layer), 0, 0), [100, 100, 0]))
-        #expect(close(rgb(try await blend(.add, base: base, layer: layer), 0, 0), [255, 255, 100]))
-        #expect(close(rgb(try await blend(.darken, base: base, layer: layer), 0, 0), [100, 100, 50]))
-        #expect(close(rgb(try await blend(.lighten, base: base, layer: layer), 0, 0), [200, 200, 50]))
+        let expectations: [(BlendMode, [Int])] = [
+            (.multiply, [78, 78, 10]), (.screen, [222, 222, 90]), (.difference, [100, 100, 0]),
+            (.add, [255, 255, 100]), (.darken, [100, 100, 50]), (.lighten, [200, 200, 50]),
+        ]
+        for (mode, expected) in expectations {
+            let result = try await blend(mode, base: base, layer: layer)
+            #expect(close(rgb(result, 0, 0), expected), "\(mode)")
+        }
     }
 
     @Test func porterDuffModesKeepTheRightSide() async throws {
@@ -140,7 +142,8 @@ import Testing
             #expect(try await blend(mode, base: Self.white, layer: Self.red).pixel(0, 0)[3] == 0, "\(mode)")
         }
         // `in` keeps the layer where the base is present.
-        #expect(rgb(try await blend(.in, base: Self.white, layer: Self.red), 0, 0) == [255, 0, 0])
+        let layerIn = try await blend(.in, base: Self.white, layer: Self.red)
+        #expect(rgb(layerIn, 0, 0) == [255, 0, 0])
     }
 
     // MARK: - Tiling
