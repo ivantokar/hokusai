@@ -35,7 +35,8 @@ import Testing
         let log = StartLog()
 
         let holder = Task { try await scheduler.run { _ in log.record(0); gate.wait() } }
-        try await waitUntil { scheduler.active == 1 }
+        // The slot is taken before the closure runs, so wait for its start itself.
+        try await waitUntil { scheduler.active == 1 && log.values == [0] }
 
         var waiters: [Task<Void, Error>] = []
         for id in 1...20 {
