@@ -1,0 +1,94 @@
+name: Sanitizers
+
+# Non-gating (#50): AddressSanitizer and ThreadSanitizer over the whole suite,
+# including the fresh-process tests, on the current Linux toolchain. It is never
+# a required PR check: native libraries can produce false positives, and a
+# flaky gate is worse than none. It runs nightly, on demand, and on a pull
+# request that edits this file so the file itself is exercised.
+#
+# Schedules only fire on the default branch. For release/2.0, run it by hand:
+#   gh workflow run sanitizers.yml --ref release/2.0
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/sanitizers.yml
+      - .github/tsan.supp
+
+concurrency:
+  group: sanitizers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: ${{ matrix.sanitizer }} (Swift 6.4, libvips 8.18.7)
+    runs-on: ubuntu-latest
+    container: swift:6.4-noble
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address, thread]
+    # ThreadSanitizer cannot see inside uninstrumented libvips and glib, so its
+    # reports are informative until the false positives are understood.
+    continue-on-error: ${{ matrix.sanitizer == 'thread' }}
+    env:
+      VIPS_PREFIX: /opt/vips
+      PKG_CONFIG_PATH: /opt/vips/lib/pkgconfig
+      LD_LIBRARY_PATH: /opt/vips/lib
+      # Lengthens the resident-memory test; 300 is the pull request default.
+      HOKUSAI_STRESS_ITERATIONS: "3000"
+      ASAN_OPTIONS: detect_leaks=0:abort_on_error=0
+      # Sanitizers inflate resident memory (ASan quarantines freed blocks), so
+      # the growth bound of the memory test is skipped; its other checks stay.
+      HOKUSAI_SANITIZED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same native setup as the "Linux current" job in ci.yml.
+      - name: Install native build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            curl ca-certificates xz-utils zstd meson ninja-build pkg-config build-essential \
+            libglib2.0-dev libexpat1-dev libjpeg-dev libpng-dev libwebp-dev \
+            libtiff-dev libgif-dev libexif-dev liblcms2-dev libcairo2-dev \
+            libpango1.0-dev librsvg2-dev libpoppler-glib-dev libheif-dev \
+            libarchive-dev libfftw3-dev liborc-0.4-dev fonts-dejavu-core \
+            libjxl-dev libhwy-dev libimagequant-dev libcgif-dev \
+            libheif-plugin-aomenc libheif-plugin-dav1d
+
+      - name: Restore libvips build
+        uses: actions/cache@v4
+        with:
+          path: /opt/vips
+          key: vips-8.18.7-noble-${{ hashFiles('.github/scripts/install-libvips.sh') }}
+
+      - name: Install libvips 8.18.7
+        run: .github/scripts/install-libvips.sh "8.18.7" "$VIPS_PREFIX"
+
+      - name: Test with ${{ matrix.sanitizer }} sanitizer
+        shell: bash # explicit bash enables pipefail, so a failing test fails the step despite `tee`
+        run: |
+          export TSAN_OPTIONS="halt_on_error=0:second_deadlock_stack=1:suppressions=$GITHUB_WORKSPACE/.github/tsan.supp"
+          swift test --sanitize=${{ matrix.sanitizer }} 2>&1 | tee sanitizer.log
+
+      - name: Summarise sanitizer reports
+        if: always()
+        run: |
+          {
+            echo "### ${{ matrix.sanitizer }} sanitizer"
+            echo
+            echo "Reports: $(grep -cE 'ERROR: AddressSanitizer|WARNING: ThreadSanitizer' sanitizer.log || true)"
+            echo
+            grep -E 'SUMMARY: (Address|Thread)Sanitizer' sanitizer.log | sort | uniq -c | sort -rn | head -20 || true
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-${{ matrix.sanitizer }}
+          path: sanitizer.log
+          retention-days: 14

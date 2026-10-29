@@ -117,6 +117,8 @@ import Testing
         #expect(result.status == 0, "\(result.errorOutput)")
         #expect(result.integer("failed") == 0)
         #expect(result.integer("finalActive") == 0 && result.integer("finalQueued") == 0)
+        // Sanitizers inflate resident memory, so only a plain run is bounded.
+        guard ProcessInfo.processInfo.environment["HOKUSAI_SANITIZED"] == nil else { return }
         let growth = try #require(result.integer("growthBytes"))
         #expect(growth < 256 * 1024 * 1024, "resident memory grew by \(growth / 1_048_576) MiB over \(iterations) evaluations")
     }

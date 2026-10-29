@@ -1,0 +1,10 @@
+# ThreadSanitizer suppressions (#50). Keep this list short and justified.
+#
+# The file sink in Sources/CVips/shim.h is filled in by the evaluating thread,
+# then handed to libvips, whose worker threads run its write callback. The
+# handoff and the serialisation of successive writes go through libvips and GLib
+# mutexes, which are not instrumented, so ThreadSanitizer sees the sink's fields
+# touched by two threads with no ordering. Every report in the first run was
+# this one pattern and none implicates Hokusai's own synchronisation.
+race:swift_vips_file_sink_open
+race:swift_vips_file_sink_write
