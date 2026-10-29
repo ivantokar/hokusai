@@ -26,6 +26,11 @@ Rules of thumb:
 - Optional codecs (GIF, AVIF, HEIF, ...) are skipped only after asking
   `Hokusai.capabilities()`. A missing baseline capability must fail.
 
+Layer B no longer repeats layer A: the content-aware and multi-page suites
+that only asserted public behaviour were removed once their layer A versions
+landed. One test stays in B (`trimHandlesGreyImages`) because it needs a
+single-band input that layer A's RGBA helpers cannot build.
+
 Still open under #50: fresh-process runtime variants, sanitizer jobs, the
 benchmark harness (base-versus-candidate on one runner, memory and
 time-to-first-byte), and the streaming/backpressure and vector-PDF suites that
