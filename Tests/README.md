@@ -5,7 +5,7 @@ guarantee broke.
 
 | Layer | Target | Imports | Owns |
 | --- | --- | --- | --- |
-| A. Public semantics | `HokusaiPublicTests` | `Hokusai` only | Documented behaviour: operation semantics and order, orientation, sink parity, typed errors, limits, cancellation, `Sendable` |
+| A. Public semantics | `HokusaiPublicTests` | `Hokusai` and the other public products (`HokusaiNIO`) | Documented behaviour: operation semantics and order, orientation, sink parity, typed errors, limits, cancellation, `Sendable` |
 | B. Internal | `HokusaiTests` | `@testable Hokusai`, `CVips` | Planner traces, optimiser equivalence, native lifetime, capability mapping, the private scheduler, CLI parsing |
 | C. Process / stress / benchmark | not yet | — | Runtime variants that freeze process-global configuration, sanitizers, benchmarks |
 
@@ -30,6 +30,10 @@ Layer B no longer repeats layer A: the content-aware and multi-page suites
 that only asserted public behaviour were removed once their layer A versions
 landed. One test stays in B (`trimHandlesGreyImages`) because it needs a
 single-band input that layer A's RGBA helpers cannot build.
+
+`PipelineAPITests` and `LifecycleConcurrencyTests` are gone: tests with a
+layer A twin were dropped, the rest moved to `LifecycleAndInteropTests`
+(initialization, shared-source concurrency, source ownership, NIO, AVIF).
 
 Still open under #50: fresh-process runtime variants, sanitizer jobs, the
 benchmark harness (base-versus-candidate on one runner, memory and
