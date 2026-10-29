@@ -77,6 +77,12 @@ let package = Package(
             ]
         ),
         // PURPOSE: Test target (library, CVips mapping, and CLI argument parsing)
+        // PURPOSE: Fresh-process scenario runner for the process-level tests
+        // (#50, layer C). Not a product; it imports only the public module.
+        .executableTarget(
+            name: "HokusaiProcessProbe",
+            dependencies: ["Hokusai"]
+        ),
         .testTarget(
             name: "HokusaiTests",
             dependencies: [
@@ -104,6 +110,12 @@ let package = Package(
             resources: [
                 .copy("Fixtures")
             ]
+        ),
+        // PURPOSE: Layer C. Each test starts HokusaiProcessProbe as a fresh
+        // process, because runtime configuration freezes at first use.
+        .testTarget(
+            name: "HokusaiProcessTests",
+            dependencies: ["HokusaiProcessProbe"]
         ),
     ]
 )

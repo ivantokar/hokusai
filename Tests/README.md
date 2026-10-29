@@ -7,7 +7,7 @@ guarantee broke.
 | --- | --- | --- | --- |
 | A. Public semantics | `HokusaiPublicTests` | `Hokusai` and the other public products (`HokusaiNIO`) | Documented behaviour: operation semantics and order, orientation, sink parity, typed errors, limits, cancellation, `Sendable` |
 | B. Internal | `HokusaiTests` | `@testable Hokusai`, `CVips` | Planner traces, optimiser equivalence, native lifetime, capability mapping, the private scheduler, CLI parsing |
-| C. Process / stress / benchmark | not yet | — | Runtime variants that freeze process-global configuration, sanitizers, benchmarks |
+| C. Process / stress / benchmark | `HokusaiProcessTests` | nothing; it launches `HokusaiProcessProbe` | Runtime variants that freeze process-global configuration, scheduler capacity sweeps, overload, cancellation, blocked loaders, memory growth. Sanitizers and benchmarks are still open |
 
 Rules of thumb:
 
@@ -34,6 +34,12 @@ single-band input that layer A's RGBA helpers cannot build.
 `PipelineAPITests` and `LifecycleConcurrencyTests` are gone: tests with a
 layer A twin were dropped, the rest moved to `LifecycleAndInteropTests`
 (initialization, shared-source concurrency, source ownership, NIO, AVIF).
+
+Layer C starts `HokusaiProcessProbe` (an executable target, not a product) as
+a fresh process per scenario and reads its `key=value` report. Add a scenario
+to the probe and a test that runs it; never freeze configuration inside the
+test process. `HOKUSAI_STRESS_ITERATIONS` lengthens the memory test, and
+`HOKUSAI_PROBE` points at a probe binary when the default lookup fails.
 
 Still open under #50: fresh-process runtime variants, sanitizer jobs, the
 benchmark harness (base-versus-candidate on one runner, memory and
