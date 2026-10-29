@@ -19,6 +19,8 @@ Rules of thumb:
 - Layer A needs no native helper. `RasterSupport.swift` builds inputs and reads
   outputs through an uncompressed TIFF, which keeps the oracle independent of
   the codecs under test.
+- Fixtures are shared with layer B through the `HokusaiPublicTests/Fixtures`
+  symlink (`fixtureData(named:ext:)`), so binaries are not duplicated.
 - Optional codecs (GIF, AVIF, HEIF, ...) are skipped only after asking
   `Hokusai.capabilities()`. A missing baseline capability must fail.
 

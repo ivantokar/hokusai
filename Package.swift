@@ -95,7 +95,10 @@ let package = Package(
         // @testable, no CVips) so it can verify documented behaviour alone.
         .testTarget(
             name: "HokusaiPublicTests",
-            dependencies: ["Hokusai"]
+            dependencies: ["Hokusai"],
+            resources: [
+                .copy("Fixtures")
+            ]
         ),
     ]
 )
