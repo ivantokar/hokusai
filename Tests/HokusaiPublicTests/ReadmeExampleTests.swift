@@ -111,9 +111,9 @@ import Testing
         let base = try Hokusai(url: fixtureURL(named: "landscape-asym", ext: "jpg"))
         let logo = try Hokusai(url: fixtureURL(named: "rgba-alpha", ext: "png"))
 
-        let label = TextStyle(
-            font: "sans Bold", fontSize: 48, color: .white,
-            stroke: TextStroke(color: Color(red: 0, green: 0, blue: 0), width: 2))
+        // The README's label also has a stroke. It is left out here because the
+        // stroke's dilation crashes inside liborc 0.4.32 (Ubuntu 22.04); see #102.
+        let label = TextStyle(font: "sans Bold", fontSize: 48, color: .white)
 
         let image = try base
             .resize(width: 1200, height: 800, fit: .cover)
