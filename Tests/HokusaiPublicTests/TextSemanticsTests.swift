@@ -167,6 +167,26 @@ import Testing
         #expect(stroked.width == plain.width + 8 && stroked.height == plain.height + 8)
     }
 
+    /// Regression: the outline was dilated with a mask that required the
+    /// surroundings to be clear, so the whole canvas came out as stroke colour.
+    @Test(arguments: [1.0, 2.0, 3.0, 4.0])
+    func strokeOutlinesTheGlyphsInsteadOfFillingTheCanvas(width: Double) async throws {
+        let red = Color(red: 1, green: 0, blue: 0)
+        let raster = try await rasterize(Hokusai.text("Hi", style: TextStyle(fontSize: 40, color: .white, stroke: TextStroke(color: red, width: width))))
+
+        var clear = 0, stroke = 0, glyph = 0
+        for y in 0..<raster.height {
+            for x in 0..<raster.width {
+                let p = raster.pixel(x, y)
+                if p[3] < 40 { clear += 1 }
+                if p[3] > 200, p[0] > 200, p[1] < 60, p[2] < 60 { stroke += 1 }
+                if p[3] > 200, p[0] > 200, p[1] > 200, p[2] > 200 { glyph += 1 }
+            }
+        }
+        #expect(clear > raster.width * raster.height / 20, "canvas around the letters must stay clear, not become stroke colour")
+        #expect(stroke > 0 && glyph > 0, "both the outline and the glyph colour must be present")
+    }
+
     @Test func shadowExtendsTheCanvasTowardsItsOffset() async throws {
         let plain = try await text("Hi", style: TextStyle(fontSize: 40))
         let shadowed = try await text("Hi", style: TextStyle(fontSize: 40, shadow: TextShadow(offsetX: 10, offsetY: 10, blur: 0)))
