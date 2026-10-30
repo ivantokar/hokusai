@@ -9,7 +9,7 @@ import Hokusai
 //
 //   HokusaiProcessProbe <scenario> [key=value ...]
 //
-// Scenarios: status, sweep, overload, cancel, untrusted, stress.
+// Scenarios: status, sweep, overload, cancel, stream, untrusted, stress.
 // Keys: concurrent, queue, vips, block, evaluations, iterations, size.
 
 let arguments = Array(CommandLine.arguments.dropFirst())
@@ -240,6 +240,61 @@ func runCancel() async {
     ])
 }
 
+struct ConsumerFailure: Error {}
+
+/// Chunk streaming with one evaluation slot: a failing consumer and a
+/// cancelled caller must both release it, or the last evaluation never runs.
+func runStream() async {
+    report(["configure": applyConfiguration()])
+    let source = tiff(width: 1024, height: 1024)
+    func pipeline() throws -> Hokusai { try Hokusai(data: source).png(compressionLevel: 0) }
+
+    var streamed = 0, chunks = 0
+    var plain = 0
+    do {
+        plain = try await pipeline().data().info.byteCount
+        let info = try await pipeline().writeChunks(chunkSize: 32 * 1024) { streamed += $0.count; chunks += 1 }
+        streamed = streamed == info.byteCount ? info.byteCount : -1
+    } catch { report(["streamError": category(error)]) }
+
+    var consumerOutcome = "completed"
+    var seen = 0
+    do {
+        try await pipeline().writeChunks(chunkSize: 16 * 1024) { _ in
+            seen += 1
+            if seen == 2 { throw ConsumerFailure() }
+        }
+    } catch is ConsumerFailure { consumerOutcome = "consumerError" } catch { consumerOutcome = category(error) }
+
+    let stalled = Task {
+        try await pipeline().writeChunks(chunkSize: 16 * 1024) { _ in try await Task.sleep(nanoseconds: 60_000_000_000) }
+    }
+    try? await Task.sleep(nanoseconds: 300_000_000)
+    let cancelStart = Date()
+    stalled.cancel()
+    var cancelOutcome = "completed"
+    do { _ = try await stalled.value } catch { cancelOutcome = category(error) }
+    let cancelSeconds = Date().timeIntervalSince(cancelStart)
+
+    // With a single slot this only runs if both failures released it.
+    var afterwards = "completed"
+    do { try await evaluate(source) } catch { afterwards = category(error) }
+
+    let final = await settledStatus()
+    report([
+        "plainBytes": plain,
+        "streamedBytes": streamed,
+        "chunks": chunks,
+        "consumer": consumerOutcome,
+        "consumerSaw": seen,
+        "cancel": cancelOutcome,
+        "cancelSeconds": String(format: "%.2f", cancelSeconds),
+        "afterwards": afterwards,
+        "finalActive": final.activeEvaluations,
+        "finalQueued": final.queuedEvaluations,
+    ])
+}
+
 func runUntrusted() async {
     report(["configure": applyConfiguration()])
     let svg = Data(#"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>"#.utf8)
@@ -290,6 +345,7 @@ case "status": await runStatus()
 case "sweep": await runSweep()
 case "overload": await runOverload()
 case "cancel": await runCancel()
+case "stream": await runStream()
 case "untrusted": await runUntrusted()
 case "stress": await runStress()
 default:

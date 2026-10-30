@@ -116,6 +116,8 @@ final class PDFOutputSink {
     enum Destination {
         case memory
         case file(URL)
+        /// Handed on as it is produced, under the queue's backpressure.
+        case chunks(ChunkQueue)
     }
 
     let destination: Destination
@@ -151,6 +153,10 @@ final class PDFOutputSink {
         switch destination {
         case .memory: return append(bytes, count: count)
         case .file(let url): return writeToFile(bytes, count: count, url: url)
+        case .chunks(let queue):
+            guard queue.write(bytes, count: count) else { return false }
+            byteCount += count
+            return true
         }
     }
 

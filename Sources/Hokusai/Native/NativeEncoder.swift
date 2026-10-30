@@ -181,3 +181,46 @@ extension NativeImage {
         return written
     }
 }
+
+/// libvips' write callback for a chunk stream: forwards to the ``ChunkQueue`` in `user`.
+private let chunkTargetWrite: SwiftVipsWriteCallback = { data, length, user in
+    guard let data, let user else { return -1 }
+    let queue = Unmanaged<ChunkQueue>.fromOpaque(user).takeUnretainedValue()
+    return queue.write(data, count: Int(length)) ? length : -1
+}
+
+extension NativeImage {
+    /// Encodes into `queue` as the encoder produces bytes and returns the
+    /// total, after flushing the last partial chunk.
+    ///
+    /// The target is forward-only. A failure after
+    /// output began leaves the consumer holding a partial stream, which is why
+    /// the caller must report the error and not only end the stream.
+    func stream(_ encoder: NativeEncoder, into queue: ChunkQueue) throws -> Int {
+        // libtiff rewrites earlier bytes and cannot write to a forward-only
+        // target, so a TIFF is encoded in memory first and then streamed. It is
+        // the one format whose complete output is held before the first chunk.
+        if case .tiff = encoder {
+            let data = try encoded(encoder)
+            let accepted = data.withUnsafeBytes { raw in
+                raw.baseAddress.map { queue.write($0, count: raw.count) } ?? true
+            }
+            guard accepted, queue.finish() else { throw HokusaiError.nativeEncode(encoder.imageFormat.rawValue) }
+            return queue.byteCount
+        }
+        let target = withExtendedLifetime(queue) {
+            swift_vips_callback_target_new(chunkTargetWrite, Unmanaged.passUnretained(queue).toOpaque())
+        }
+        guard let target else {
+            throw HokusaiError.runtime(.native("encode \(encoder.imageFormat.rawValue)", "could not create an output target"))
+        }
+        defer { g_object_unref(target) }
+
+        let (prepared, keep) = try encoder.prepareMetadata(of: self)
+        guard encoder.save(prepared, keep: keep, to: target) == 0 else {
+            throw HokusaiError.nativeEncode(encoder.imageFormat.rawValue)
+        }
+        guard queue.finish() else { throw HokusaiError.nativeEncode(encoder.imageFormat.rawValue) }
+        return queue.byteCount
+    }
+}

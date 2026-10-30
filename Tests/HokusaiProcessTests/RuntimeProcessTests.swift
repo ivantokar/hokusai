@@ -73,6 +73,20 @@ import Testing
         #expect(result.integer("queueFull") == 0)
     }
 
+    /// With one slot, a consumer that throws and a caller that cancels while the
+    /// encoder is blocked must each give the slot back.
+    @Test func chunkStreamingReleasesTheSlotOnConsumerErrorAndCancellation() async throws {
+        let result = try await runProbe("stream", ["concurrent": "1"])
+        #expect(result.integer("streamedBytes") == result.integer("plainBytes"))
+        #expect((result.integer("chunks") ?? 0) > 1)
+        #expect(result.values["consumer"] == "consumerError")
+        #expect(result.integer("consumerSaw") == 2)
+        #expect(result.values["cancel"] == "cancelled")
+        #expect((result.values["cancelSeconds"].flatMap(Double.init) ?? 99) < 10)
+        #expect(result.values["afterwards"] == "completed")
+        #expect(result.integer("finalActive") == 0 && result.integer("finalQueued") == 0)
+    }
+
     @Test func cancellationReleasesCapacityAndLeavesNoCountersBehind() async throws {
         let result = try await runProbe("cancel", ["concurrent": "1", "evaluations": "24"])
         #expect(result.status == 0, "\(result.errorOutput)")

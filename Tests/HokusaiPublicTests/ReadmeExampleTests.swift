@@ -51,6 +51,21 @@ import Testing
         #expect(jpeg.info.width == png.info.width && jpeg.info.height == png.info.height)
     }
 
+    /// "Streaming output": chunks join to what `data()` returns and the info totals them.
+    @Test func streamingOutput() async throws {
+        guard canEncode(.webp) else { return }
+        let image = try Hokusai(data: fixtureData(named: "landscape-asym", ext: "jpg"))
+        var received = Data()
+        let info = try await image
+            .webp(quality: 82)
+            .writeChunks(chunkSize: 64 * 1024) { chunk in
+                received.append(chunk)
+            }
+        let direct = try await image.webp(quality: 82).data()
+        #expect(received == direct.data)
+        #expect(info.byteCount == received.count)
+    }
+
     /// "Metadata policy": every spelling in the README is accepted and applies.
     @Test func metadataPolicySpellings() async throws {
         let image = try Hokusai(data: fixtureData(named: "metadata-rich", ext: "jpg"))
