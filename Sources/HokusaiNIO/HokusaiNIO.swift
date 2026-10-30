@@ -50,6 +50,33 @@ public extension Hokusai {
     }
 }
 
+public extension Hokusai {
+    /// Streams the encoded output as NIO buffers, with the backpressure of ``writeChunks(chunkSize:_:)``.
+    ///
+    /// This is that core terminal with each chunk copied into a buffer from
+    /// `allocator`; it has no queue of its own. The next buffer is not
+    /// produced until `consume` returns for the previous one, which is how a
+    /// slow `ResponseBodyWriter` or channel slows encoding down. Errors,
+    /// cancellation and partial-stream behaviour are those of
+    /// ``writeChunks(chunkSize:_:)``, and the same call works for PDF.
+    ///
+    /// - Parameters:
+    ///   - allocator: Allocates each chunk's buffer, for example a channel's.
+    ///   - chunkSize: Target size of each buffer, in bytes.
+    ///   - consume: Receives each buffer in order. Its error is rethrown.
+    /// - Returns: The format, dimensions and total byte count of the stream.
+    @discardableResult
+    func writeByteBuffers(
+        allocator: ByteBufferAllocator = ByteBufferAllocator(),
+        chunkSize: Int = 64 * 1024,
+        _ consume: (ByteBuffer) async throws -> Void
+    ) async throws -> OutputInfo {
+        try await writeChunks(chunkSize: chunkSize) { chunk in
+            try await consume(ByteBuffer(chunk, allocator: allocator))
+        }
+    }
+}
+
 public extension Output {
     /// Returns owned output bytes in a fresh NIO buffer.
     var byteBuffer: ByteBuffer {

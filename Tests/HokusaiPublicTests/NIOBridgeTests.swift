@@ -9,6 +9,7 @@ import Testing
 /// what the readable bytes meant when it was created.
 @Suite struct NIOBridgeTests {
     private let source = gradient(width: 24, height: 16)
+    private let large = gradient(width: 320, height: 240)
     private let strategies: [ByteBuffer.ByteTransferStrategy] = [.automatic, .copy, .noCopy]
 
     private func buffer(_ data: Data, padding: Int = 0) -> ByteBuffer {
@@ -110,6 +111,86 @@ import Testing
             #expect(resource.limit == 10)
         } catch {
             Issue.record("expected resource, got \(error)")
+        }
+    }
+
+    // MARK: - Streaming
+
+    private struct ConsumerFailure: Error {}
+
+    @Test func streamedBuffersJoinToTheBytesOfData() async throws {
+        let pipeline = try large.pipeline().png(compressionLevel: 0)
+        let direct = try await pipeline.data()
+        var buffers: [ByteBuffer] = []
+        let info = try await pipeline.writeByteBuffers(chunkSize: 3000) { buffers.append($0) }
+
+        #expect(buffers.count > 2)
+        #expect(buffers.allSatisfy { $0.readableBytes > 0 && $0.readableBytes <= 3000 })
+        #expect(buffers.dropLast().allSatisfy { $0.readableBytes == 3000 })
+        let joined = buffers.flatMap { Array($0.readableBytesView) }
+        #expect(joined == [UInt8](direct.data))
+        #expect(info == direct.info)
+        #expect(info.byteCount == joined.count)
+    }
+
+    @Test func streamedBuffersAreIndependentOfEachOther() async throws {
+        let pipeline = try large.pipeline().png(compressionLevel: 0)
+        var held: [ByteBuffer] = []
+        try await pipeline.writeByteBuffers(chunkSize: 2000) { buffer in
+            var copy = buffer
+            held.append(copy)
+            copy.clear()          // a consumer reusing its buffer must not affect the stream
+        }
+        let direct = try await pipeline.data()
+        #expect(held.flatMap { Array($0.readableBytesView) } == [UInt8](direct.data))
+    }
+
+    @Test func aConsumerErrorStopsTheStreamAndIsRethrown() async throws {
+        let pipeline = try large.pipeline().png(compressionLevel: 0)
+        var seen = 0
+        do {
+            try await pipeline.writeByteBuffers(chunkSize: 2000) { _ in
+                seen += 1
+                if seen == 2 { throw ConsumerFailure() }
+            }
+            Issue.record("expected the consumer's error")
+        } catch is ConsumerFailure {
+            #expect(seen == 2)
+        } catch {
+            Issue.record("expected ConsumerFailure, got \(error)")
+        }
+    }
+
+    @Test func cancellingTheCallerStopsAStalledStream() async throws {
+        let pipeline = try gradient(width: 1500, height: 1500).pipeline().png(compressionLevel: 0)
+        let task = Task {
+            try await pipeline.writeByteBuffers(chunkSize: 4096) { _ in try await Task.sleep(for: .seconds(60)) }
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        task.cancel()
+        do {
+            _ = try await task.value
+            Issue.record("expected cancellation")
+        } catch {
+            #expect(error is CancellationError)
+        }
+    }
+
+    @Test func aPDFStreamsThroughTheSameContract() async throws {
+        guard (try? Hokusai.capabilities().canEncode(.pdf)) == true else { return }
+        var bytes: [UInt8] = []
+        let info = try await source.pipeline().pdf().writeByteBuffers(chunkSize: 2048) { bytes += $0.readableBytesView }
+        #expect(bytes.starts(with: Array("%PDF-".utf8)))
+        #expect(info.format == .pdf && info.byteCount == bytes.count)
+    }
+
+    @Test func anEncoderIsRequiredToStream() async throws {
+        do {
+            try await source.pipeline().writeByteBuffers { _ in }
+            Issue.record("expected invalidOption")
+        } catch HokusaiError.invalidOption {
+        } catch {
+            Issue.record("expected invalidOption, got \(error)")
         }
     }
 }
