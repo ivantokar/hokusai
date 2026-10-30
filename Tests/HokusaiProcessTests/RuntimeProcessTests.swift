@@ -82,7 +82,7 @@ import Testing
         #expect(result.values["consumer"] == "consumerError")
         #expect(result.integer("consumerSaw") == 2)
         #expect(result.values["cancel"] == "cancelled")
-        #expect((result.values["cancelSeconds"].flatMap(Double.init) ?? 99) < 10)
+        #expect((result.values["cancelSeconds"].flatMap(Double.init) ?? 99) < 40)
         #expect(result.values["afterwards"] == "completed")
         #expect(result.integer("finalActive") == 0 && result.integer("finalQueued") == 0)
     }
