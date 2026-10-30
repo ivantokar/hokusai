@@ -113,6 +113,47 @@ import Testing
         #expect(scheduler.active == 0)
     }
 
+    @Test func textSubplansRunInsideOneSlot() async throws {
+        // Text is rendered inside the evaluation, not as a nested one.
+        // Text is a baseline capability in every CI job, so its absence fails.
+        #expect(try Hokusai.capabilities().textRendering)
+        let scheduler = EvaluationScheduler(limit: 1)
+        let caption = try Hokusai.text("Hokusai").resize(width: 60, fit: .inside)
+        let pipeline = try Hokusai(data: loadFixtureData(named: "landscape-asym", ext: "jpg"))
+            .composite([CompositeLayer(caption, x: 10, y: 10)])
+            .png()
+        let plan = pipeline.plan, terminal = pipeline.terminal
+
+        let output = try await scheduler.run { context in
+            try Evaluator.encode(plan, terminal, as: .png(), context: context)
+        }
+        #expect(output.info.width == 320)
+        #expect(scheduler.active == 0 && scheduler.queued == 0)
+    }
+
+    @Test func cancellationRacingCompletionResumesEachEvaluationExactlyOnce() async throws {
+        // A continuation resumed twice traps, so surviving the race is the
+        // assertion; every task must also report exactly one outcome.
+        let scheduler = EvaluationScheduler(limit: 2)
+        let outcomes = try await withThrowingTaskGroup(of: String.self) { group in
+            for index in 0..<300 {
+                group.addTask {
+                    let task = Task { try await scheduler.run { _ in index } }
+                    // Cancel at varied points: before admission, in the queue, while running.
+                    for _ in 0..<(index % 7) { await Task.yield() }
+                    if !index.isMultiple(of: 3) { task.cancel() }
+                    do { _ = try await task.value; return "completed" } catch is CancellationError { return "cancelled" }
+                }
+            }
+            var seen: [String] = []
+            for try await outcome in group { seen.append(outcome) }
+            return seen
+        }
+        #expect(outcomes.count == 300)
+        #expect(Set(outcomes).isSubset(of: ["completed", "cancelled"]))
+        try await waitUntil { scheduler.active == 0 && scheduler.queued == 0 }
+    }
+
     @Test func concurrentFailuresKeepTheirOwnTypedContext() async throws {
         let image = try loadFixtureData(named: "landscape-asym", ext: "jpg")
         let missing = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("missing-\(UUID().uuidString).png")
