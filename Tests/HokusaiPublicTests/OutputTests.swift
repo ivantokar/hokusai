@@ -152,6 +152,27 @@ import Testing
         #expect((described.width, described.height) == (16, 24))
         #expect((described.orientation?.rawValue ?? 1) == 1)
     }
+
+    // MARK: - Output format
+
+    @Test func outputFormatIsKnownBeforeEvaluationAndMatchesTheResult() async throws {
+        let pipeline = try gradient(width: 8, height: 8).pipeline()
+        #expect(pipeline.outputFormat == nil)
+
+        let selected: [(ImageFormat, Hokusai)] = try [
+            (.png, pipeline.png()), (.jpeg, pipeline.jpeg()), (.tiff, pipeline.tiff(compression: .none)),
+            (.webp, pipeline.webp()),
+        ]
+        for (format, encoder) in selected {
+            #expect(encoder.outputFormat == format)
+            let evaluated = try await encoder.data().info.format
+            #expect(evaluated == format)
+        }
+        // Choosing an encoder again replaces the earlier choice.
+        let replaced = try pipeline.png().jpeg().outputFormat
+        #expect(replaced == .jpeg)
+        #expect(ImageFormat.png.mimeType == "image/png")
+    }
 }
 
 extension Encoder {

@@ -604,6 +604,13 @@ public struct Hokusai: Sendable {
         }
     }
 
+    /// The format the selected encoder will produce, or `nil` before one is chosen.
+    ///
+    /// It is known without evaluating anything, so a server can set a
+    /// `Content-Type` header (``ImageFormat/mimeType``) before streaming starts.
+    /// It always agrees with ``OutputInfo/format`` of the evaluated result.
+    public var outputFormat: ImageFormat? { terminal.encoder?.imageFormat }
+
     /// Evaluates and encodes the pipeline on Hokusai's evaluation scheduler.
     ///
     /// Call an encoder method first. The returned ``Output`` includes both the
