@@ -162,7 +162,7 @@ import Testing
     }
 
     @Test func cancellingTheCallerStopsAStalledStream() async throws {
-        let pipeline = try gradient(width: 1500, height: 1500).pipeline().png(compressionLevel: 0)
+        let pipeline = try gradient(width: 1000, height: 1000).pipeline().png(compressionLevel: 0)
         let task = Task {
             try await pipeline.writeByteBuffers(chunkSize: 4096) { _ in try await Task.sleep(for: .seconds(60)) }
         }

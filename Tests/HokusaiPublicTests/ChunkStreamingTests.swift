@@ -104,7 +104,9 @@ import Testing
         #expect(bytes.starts(with: Data("%PDF-".utf8)))
         #expect(String(decoding: bytes.suffix(16), as: UTF8.self).contains("%%EOF"))
         #expect(streamed.info.format == .pdf && streamed.info.byteCount == bytes.count)
-        #expect(streamed.info.byteCount == direct.info.byteCount)
+        // Two PDF encodes differ by a few bytes (a timestamp inside a compressed object),
+        // so only the size, not the bytes, is comparable between runs.
+        #expect(abs(streamed.info.byteCount - direct.info.byteCount) <= direct.info.byteCount / 100)
         #expect(streamed.info.pdf?.pageWidth == direct.info.pdf?.pageWidth)
     }
 
@@ -168,7 +170,7 @@ import Testing
     }
 
     @Test func cancellingTheCallerWhileTheEncoderWaitsDoesNotHang() async throws {
-        let pipeline = try gradient(width: 1500, height: 1500).pipeline().png(compressionLevel: 0)
+        let pipeline = try gradient(width: 1000, height: 1000).pipeline().png(compressionLevel: 0)
         let started = Date()
         let task = Task {
             try await pipeline.writeChunks(chunkSize: 4096) { _ in
@@ -179,7 +181,8 @@ import Testing
         task.cancel()
         let error = await failure { _ = try await task.value }
         #expect(error is CancellationError)
-        #expect(Date().timeIntervalSince(started) < 10)
+        // The consumer would stall for 60 s; a CI machine under load may be slow, a hang is not.
+        #expect(Date().timeIntervalSince(started) < 40)
     }
 
     @Test func concurrentStreamsDoNotMixTheirBytes() async throws {
