@@ -578,14 +578,20 @@ static inline int swift_vips_text_render(
                      "rgba", TRUE, NULL);
 }
 
-/** @brief Binary dilation of a uchar image by a round structuring element of `radius` pixels. */
+/**
+ * @brief Binary dilation of a uchar image by a round structuring element of `radius` pixels.
+ *
+ * Outside the disc the mask is 128 ("don't care"). A 0 there means "must be
+ * clear", which makes every pixel of a mostly clear image come out set, and
+ * for a radius of 2 crashes liborc 0.4.32 while it compiles the operation.
+ */
 static inline int swift_vips_dilate_round(VipsImage *in, VipsImage **out, int radius) {
     int size = radius * 2 + 1;
     double *values = g_new0(double, size * size);
     for (int y = 0; y < size; y++) {
         for (int x = 0; x < size; x++) {
             int dx = x - radius, dy = y - radius;
-            values[y * size + x] = (dx * dx + dy * dy <= radius * radius) ? 255 : 0;
+            values[y * size + x] = (dx * dx + dy * dy <= radius * radius) ? 255 : 128;
         }
     }
     VipsImage *mask = vips_image_new_matrix_from_array(size, size, values, size * size);
