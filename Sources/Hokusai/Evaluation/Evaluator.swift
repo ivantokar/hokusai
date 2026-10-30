@@ -62,6 +62,30 @@ enum Evaluator {
         }
     }
 
+    /// Evaluates `plan` and streams the encoded bytes into `queue`.
+    ///
+    /// Encoder options and metadata policy are exactly those of ``encode`` and
+    /// ``write``; only the destination differs. A cancelled evaluation or an
+    /// aborted queue stops the encoder at its next write.
+    static func stream(_ plan: ImagePlan, _ terminal: TerminalConfig, as format: Encoder, into queue: ChunkQueue, context: EvaluationContext) throws -> OutputInfo {
+        let encoder = try selectEncoder(format, terminal)
+        return try classifyingSourceFailures(in: context) {
+            let image = try context.sink(for: build(plan, context: context, scope: nil))
+            context.trace?.record(.sinkSelected("chunks \(format.imageFormat.rawValue)"))
+            switch encoder {
+            case .pdf(let options):
+                let sink = PDFOutputSink(destination: .chunks(queue), isCancelled: { context.isCancelled || queue.isAborted })
+                let result = try image.writePDF(options, into: sink)
+                guard queue.finish() else { throw HokusaiError.nativeEncode("pdf") }
+                return OutputInfo(
+                    format: .pdf, width: result.rasterWidth, height: result.rasterHeight, byteCount: sink.byteCount, pdf: result.details)
+            case .raster(let encoder):
+                let size = try image.stream(encoder, into: queue)
+                return OutputInfo(format: format.imageFormat, width: image.width, height: image.height, byteCount: size)
+            }
+        }
+    }
+
     // MARK: - Source inspection
 
     /// Opens `source` under its options and reads its header.

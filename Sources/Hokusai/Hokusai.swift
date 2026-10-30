@@ -634,6 +634,63 @@ public struct Hokusai: Sendable {
         }
     }
 
+    /// Evaluates the pipeline and hands the encoded bytes to `consume` as they are produced.
+    ///
+    /// Call an encoder method first: there is no file name to infer a format
+    /// from. Encoder options and metadata policy are those of ``data()`` and
+    /// ``write(to:)``.
+    ///
+    /// The bytes arrive as owned chunks of `chunkSize` (the last may be
+    /// smaller; none are empty). The next chunk is not requested until
+    /// `consume` has returned for the previous one, and the encoder waits when
+    /// the consumer falls behind, so at most `chunkSize × 4` bytes of encoded
+    /// output are held, however large the image. Slow responses therefore
+    /// slow encoding down instead of growing memory.
+    ///
+    /// If `consume` throws, encoding stops and that error is thrown. If the
+    /// calling task is cancelled, encoding stops and `CancellationError` is
+    /// thrown. In either case, or if encoding fails after output began, the
+    /// consumer has already received a partial stream and must discard it.
+    ///
+    /// - Parameters:
+    ///   - chunkSize: Target size of each chunk, in `1...67_108_864` bytes.
+    ///   - consume: Receives each chunk in order.
+    /// - Returns: The format, dimensions and total byte count of the stream.
+    @discardableResult
+    public func writeChunks(
+        chunkSize: Int = 64 * 1024,
+        _ consume: (Data) async throws -> Void
+    ) async throws -> OutputInfo {
+        guard let format = terminal.encoder else {
+            throw HokusaiError.invalidOption(name: "output format", reason: "call jpeg(), png(), webp(), avif(), pdf(), or encode(using:) before writeChunks()")
+        }
+        guard (1...ChunkQueue.maxChunkSize).contains(chunkSize) else {
+            throw HokusaiError.invalidOption(name: "chunkSize", reason: "must be in 1...\(ChunkQueue.maxChunkSize)")
+        }
+        let plan = plan, terminal = terminal
+        let queue = ChunkQueue(chunkSize: chunkSize)
+        return try await withTaskCancellationHandler {
+            async let produced = EvaluationScheduler.shared.run { context in
+                do {
+                    return try Evaluator.stream(plan, terminal, as: format, into: queue, context: context)
+                } catch {
+                    queue.abort()
+                    throw error
+                }
+            }
+            do {
+                while let chunk = await queue.next() { try await consume(chunk) }
+            } catch {
+                queue.abort()
+                _ = try? await produced
+                throw error
+            }
+            return try await produced
+        } onCancel: {
+            queue.abort()
+        }
+    }
+
     // MARK: - Pipeline helpers
 
     private func appending(_ operation: ImageOperation) -> Self {

@@ -154,6 +154,24 @@ One encoder configuration means the same thing wherever it is written: `data()` 
 - Raster formats are encoded straight into the memory buffer or file; nothing is staged as a second copy. PDF is the exception for now and is built in memory first.
 - The file is created when the first bytes are written, so a pipeline that fails before producing output never touches the destination. If a write fails after output began, Hokusai removes the regular file it was writing instead of leaving a partial image, which also means an existing file at that path may be replaced or removed. A destination that cannot be opened or written (missing folder, permissions, full disk) throws `HokusaiError.io` with a `.write` operation and the system's reason.
 
+### Streaming output
+
+```swift
+let info = try await image
+    .webp(quality: 82)
+    .writeChunks(chunkSize: 64 * 1024) { chunk in      // chunk: Data
+        try await response.write(chunk)
+    }
+```
+
+`writeChunks` hands the encoded bytes to an async closure as they are produced, so a response can start before the image is fully encoded and a slow client slows encoding down instead of growing memory. It needs an explicit encoder, applies the same codec options and metadata policy as `data()` and `write(to:)`, and returns the final `OutputInfo` (its `byteCount` is the total streamed).
+
+- Chunks are owned `Data` of `chunkSize` bytes (the last may be smaller, none are empty). The next chunk is not produced until your closure returns for the previous one, and at most `chunkSize × 4` bytes of encoded output are held at any time.
+- If your closure throws, encoding stops and your error is thrown. Cancelling the calling task stops encoding and throws `CancellationError`. Either way, and if encoding fails after output began, the consumer has already received a partial stream and must discard it.
+- A failure before any output (a missing file, a limit, an unsupported encoder) never calls your closure.
+- TIFF is the one format that cannot be written forward-only, so it is encoded in memory first and then streamed in chunks.
+- HokusaiNIO adapters build on this contract; the core has no SwiftNIO dependency.
+
 ### Input options
 
 `InputOptions` is the one policy for opening an encoded image, from `Data` or a local file URL:

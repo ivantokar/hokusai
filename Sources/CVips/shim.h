@@ -1139,6 +1139,35 @@ static inline int swift_vips_file_sink_finish(SwiftVipsFileSink *sink, int succe
     return error;
 }
 
+/** @brief Receives a run of encoded bytes; returns the count accepted, or -1 to make the encoder fail. */
+typedef gint64 (*SwiftVipsWriteCallback)(const void *data, gint64 length, void *user_data);
+
+typedef struct {
+    SwiftVipsWriteCallback write;
+    void *user_data;
+} SwiftVipsCallbackSink;
+
+static gint64 swift_vips_callback_target_write(VipsTargetCustom *target, const void *data, gint64 length, void *user_data) {
+    SwiftVipsCallbackSink *sink = (SwiftVipsCallbackSink *) user_data;
+    return sink->write(data, length, sink->user_data);
+}
+
+/**
+ * @brief A forward-only target that hands every write to `write`.
+ *
+ * It has no read or seek handlers, so formats that need to rewrite earlier
+ * bytes are buffered by libvips itself. `user_data` must outlive the target.
+ */
+static inline VipsTarget *swift_vips_callback_target_new(SwiftVipsWriteCallback write, void *user_data) {
+    SwiftVipsCallbackSink *sink = g_new0(SwiftVipsCallbackSink, 1);
+    sink->write = write;
+    sink->user_data = user_data;
+    VipsTargetCustom *target = vips_target_custom_new();
+    g_object_set_data_full(G_OBJECT(target), "swift-callback-sink", sink, g_free);
+    g_signal_connect(target, "write", G_CALLBACK(swift_vips_callback_target_write), sink);
+    return VIPS_TARGET(target);
+}
+
 // MARK: - Composite Operations
 
 static inline int swift_vips_composite2(
