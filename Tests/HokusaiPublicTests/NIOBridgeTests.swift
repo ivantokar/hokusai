@@ -1,0 +1,115 @@
+import Foundation
+import Hokusai
+import HokusaiNIO
+import NIOCore
+import Testing
+
+/// `HokusaiNIO` moves bytes between `ByteBuffer` and Hokusai without ever
+/// sharing mutable storage: whatever the transfer strategy, the pipeline means
+/// what the readable bytes meant when it was created.
+@Suite struct NIOBridgeTests {
+    private let source = gradient(width: 24, height: 16)
+    private let strategies: [ByteBuffer.ByteTransferStrategy] = [.automatic, .copy, .noCopy]
+
+    private func buffer(_ data: Data, padding: Int = 0) -> ByteBuffer {
+        var buffer = ByteBufferAllocator().buffer(capacity: data.count + padding)
+        buffer.writeBytes([UInt8](repeating: 0xEE, count: padding))
+        buffer.writeBytes(data)
+        buffer.moveReaderIndex(forwardBy: padding)
+        return buffer
+    }
+
+    @Test func onlyReadableBytesAreUsedAndIndicesAreUntouched() async throws {
+        // 37 unreadable bytes precede the image; they must not reach the decoder.
+        let input = buffer(tiffData(source), padding: 37)
+        let (reader, writer) = (input.readerIndex, input.writerIndex)
+
+        let image = try Hokusai(buffer: input)
+        #expect(input.readerIndex == reader && input.writerIndex == writer)
+        expectPixels(try await rasterize(image), match: source)
+    }
+
+    @Test func everyStrategyMeansTheSameImage() async throws {
+        let bytes = tiffData(source)
+        for strategy in strategies {
+            let image = try Hokusai(buffer: buffer(bytes, padding: 5), byteTransferStrategy: strategy)
+            expectPixels(try await rasterize(image), match: source)
+        }
+    }
+
+    @Test func theSourceSurvivesReleaseReuseAndMutationOfTheBuffer() async throws {
+        let bytes = tiffData(source)
+        for strategy in strategies {
+            var input = buffer(bytes)
+            let image = try Hokusai(buffer: input, byteTransferStrategy: strategy)
+            // Overwrite the caller's storage, then drop it.
+            input.setBytes([UInt8](repeating: 0, count: bytes.count), at: input.readerIndex)
+            input.clear()
+            input.writeBytes([UInt8](repeating: 0x55, count: bytes.count))
+            input = ByteBuffer()
+            expectPixels(try await rasterize(image), match: source)
+        }
+    }
+
+    @Test func aSmallSliceOfALargeBufferIsAFullImage() async throws {
+        let bytes = tiffData(source)
+        var large = ByteBufferAllocator().buffer(capacity: 4 << 20)
+        large.writeBytes([UInt8](repeating: 0xEE, count: 2 << 20))
+        large.writeBytes(bytes)
+        large.writeBytes([UInt8](repeating: 0xEE, count: 2 << 20))
+        let slice = try #require(large.getSlice(at: 2 << 20, length: bytes.count))
+
+        for strategy in strategies {
+            let image = try Hokusai(buffer: slice, byteTransferStrategy: strategy)
+            large = ByteBuffer()
+            expectPixels(try await rasterize(image), match: source)
+        }
+    }
+
+    @Test func anEmptyBufferIsInvalidInput() async throws {
+        for strategy in strategies {
+            do {
+                _ = try await Hokusai(buffer: ByteBuffer(), byteTransferStrategy: strategy).png().data()
+                Issue.record("expected an error for an empty buffer")
+            } catch HokusaiError.invalidInput {
+            } catch {
+                Issue.record("expected invalidInput, got \(error)")
+            }
+        }
+    }
+
+    @Test func theByteBufferTerminalMatchesDataForEveryEncoder() async throws {
+        let pipelines: [Hokusai] = try [
+            source.pipeline().png(),
+            source.pipeline().tiff(compression: .none),
+            source.pipeline().jpeg(quality: 80),
+            source.pipeline().webp(lossless: true),
+        ]
+        for pipeline in pipelines {
+            let data = try await pipeline.data()
+            let nio = try await pipeline.byteBuffer()
+            #expect(nio.info == data.info)
+            #expect(nio.info.byteCount == nio.buffer.readableBytes)
+            #expect(nio.buffer.readableBytesView.elementsEqual(data.data))
+        }
+    }
+
+    @Test func theByteBufferTerminalUsesTheGivenAllocator() async throws {
+        let allocator = ByteBufferAllocator()
+        let output = try await source.pipeline().png().byteBuffer(allocator: allocator)
+        let decoded = try await rasterize(encoded: Data(output.buffer.readableBytesView))
+        expectPixels(decoded, match: source)
+    }
+
+    @Test func theByteBufferTerminalReportsTheSameErrorsAsData() async throws {
+        let pipeline = try source.pipeline(options: InputOptions(limits: InputLimits(maxPixels: 10))).png()
+        do {
+            _ = try await pipeline.byteBuffer()
+            Issue.record("expected a resource error")
+        } catch HokusaiError.resource(let resource) {
+            #expect(resource.limit == 10)
+        } catch {
+            Issue.record("expected resource, got \(error)")
+        }
+    }
+}
