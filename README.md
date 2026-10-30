@@ -170,7 +170,7 @@ let info = try await image
 - If your closure throws, encoding stops and your error is thrown. Cancelling the calling task stops encoding and throws `CancellationError`. Either way, and if encoding fails after output began, the consumer has already received a partial stream and must discard it.
 - A failure before any output (a missing file, a limit, an unsupported encoder) never calls your closure.
 - TIFF is the one format that cannot be written forward-only, so it is encoded in memory first and then streamed in chunks.
-- HokusaiNIO adapters build on this contract; the core has no SwiftNIO dependency.
+- The core has no SwiftNIO dependency. `HokusaiNIO` adds `writeByteBuffers(allocator:chunkSize:_:)`, the same stream with each chunk as a `ByteBuffer` from your allocator, for NIO-based writers such as Vapor 4 and Hummingbird.
 
 ### Input options
 
