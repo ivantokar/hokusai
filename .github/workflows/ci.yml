@@ -37,6 +37,7 @@ jobs:
               libjxl-dev libhwy-dev libimagequant-dev libcgif-dev
               libheif-plugin-aomenc libheif-plugin-dav1d
     env:
+      VIPS_NOVECTOR: "1"  # DIAGNOSTIC, not for merge
       VIPS_PREFIX: /opt/vips
       PKG_CONFIG_PATH: /opt/vips/lib/pkgconfig
       LD_LIBRARY_PATH: /opt/vips/lib
