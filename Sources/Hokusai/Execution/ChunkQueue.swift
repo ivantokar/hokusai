@@ -28,6 +28,7 @@ final class ChunkQueue: @unchecked Sendable {
     private var waiting: CheckedContinuation<Data?, Never>?
     private var finished = false
     private var aborted = false
+    private var discarded = false
 
     init(chunkSize: Int, depth: Int = 2) {
         precondition(chunkSize > 0 && depth > 0)
@@ -40,6 +41,15 @@ final class ChunkQueue: @unchecked Sendable {
         condition.lock()
         defer { condition.unlock() }
         return aborted
+    }
+
+    /// True when `abort()` dropped output the consumer had not received: queued
+    /// chunks, or a stream that had not finished. A stream that was complete
+    /// and fully delivered before `abort()` is not discarded.
+    var didDiscardOutput: Bool {
+        condition.lock()
+        defer { condition.unlock() }
+        return discarded
     }
 
     // MARK: Producer (blocking thread)
@@ -123,6 +133,7 @@ final class ChunkQueue: @unchecked Sendable {
     func abort() {
         condition.lock()
         aborted = true
+        if !finished || !queued.isEmpty { discarded = true }
         queued.removeAll()
         let consumer = waiting
         waiting = nil

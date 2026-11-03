@@ -87,6 +87,18 @@ import Testing
         #expect(result.integer("finalActive") == 0 && result.integer("finalQueued") == 0)
     }
 
+    /// #111: the scheduler rejects admission before the producer starts, which
+    /// used to leave the consumer waiting for a chunk that could never come.
+    @Test func chunkStreamingFailsPromptlyWhenTheQueueIsFull() async throws {
+        let result = try await runProbe("streamAdmission", ["concurrent": "1", "queue": "1"])
+        #expect(result.status == 0, "\(result.errorOutput)")
+        #expect(result.values["outcome"] == "queueFull")
+        #expect((result.values["seconds"].flatMap(Double.init) ?? 99) < 8)
+        #expect(result.integer("consumerCalls") == 0)
+        #expect(result.values["afterwards"] == "completed")
+        #expect(result.integer("finalActive") == 0 && result.integer("finalQueued") == 0)
+    }
+
     @Test func cancellationReleasesCapacityAndLeavesNoCountersBehind() async throws {
         let result = try await runProbe("cancel", ["concurrent": "1", "evaluations": "24"])
         #expect(result.status == 0, "\(result.errorOutput)")
