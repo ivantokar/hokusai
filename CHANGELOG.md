@@ -2,7 +2,32 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased]
+## [2.0.0] - Unreleased
+
+Hokusai 2.0 is a breaking release. `Hokusai` is the only image type: a pipeline
+is an immutable value, built synchronously and evaluated by an async terminal.
+Everything from the 0.x/1.x object model is removed; see "Migrating from 0.x and
+1.x" in the README. `Scripts/check-api.sh v1.0.0` reports 141 source-breaking
+changes against 1.0.0. Every one is either a removed legacy type or terminal
+(`HokusaiImage`, `ThumbnailOptions`, `SaveOptions`, `drawText(_:x:y:options:)`,
+...) or a rename (`TextGravity`/`CanvasAnchor` to `Gravity`, `OutputFormat` to
+`Encoder`) described below.
+
+Requirements: Swift 6.0+ (tested with 6.0 and 6.4), libvips 8.16+, Cairo 1.16+.
+
+### Added (streaming server output, #45, #46, #47)
+- `Hokusai.writeChunks(chunkSize:...)`: bounded, backpressured encoded output.
+  The consumer is an async closure, so a slow client slows encoding down
+  instead of growing memory.
+- `HokusaiNIO`: `writeByteBuffers` over the core chunk stream, and an
+  allocator-aware `byteBuffer` terminal that chooses the transfer strategy.
+- The selected output format is available before evaluation, so a server can
+  set `Content-Type` before the first byte is produced.
+
+### Fixed (text stroke, #102)
+- A text stroke filled the whole canvas instead of outlining the glyphs, and
+  could crash inside liborc 0.4.32 (Ubuntu 22.04). The dilation mask now uses a
+  "don't care" surround.
 
 ### Added (benchmark harness, #50)
 - `hokusai benchmark run` replaces `benchmark pipeline`. It sweeps
