@@ -4,14 +4,9 @@ All notable changes to this project are documented in this file.
 
 ## [2.0.0] - Unreleased
 
-Hokusai 2.0 is a breaking release. `Hokusai` is the only image type: a pipeline
-is an immutable value, built synchronously and evaluated by an async terminal.
-Everything from the 0.x/1.x object model is removed; see "Migrating from 0.x and
-1.x" in the README. `Scripts/check-api.sh v1.0.0` reports 141 source-breaking
-changes against 1.0.0. Every one is either a removed legacy type or terminal
-(`HokusaiImage`, `ThumbnailOptions`, `SaveOptions`, `drawText(_:x:y:options:)`,
-...) or a rename (`TextGravity`/`CanvasAnchor` to `Gravity`, `OutputFormat` to
-`Encoder`) described below.
+Hokusai 2.0 is a redesigned library. `Hokusai` is the only image type: a
+pipeline is an immutable value, built synchronously and evaluated by an async
+terminal.
 
 Requirements: Swift 6.0+ (tested with 6.0 and 6.4), libvips 8.16+, Cairo 1.16+.
 

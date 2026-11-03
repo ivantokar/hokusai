@@ -338,19 +338,6 @@ The command line is a client of the public API and adds no image processing of i
 - **`benchmark compare`** matches cells of two results and flags a change in median latency, and in the worker's peak resident memory, only when it exceeds both a relative and an absolute threshold (`--relative-threshold`, `--absolute-threshold-ms`, `--memory-relative-threshold`, `--memory-absolute-threshold-mib`). It is advisory, always exits zero, and warns when the two runs came from different native stacks. Absolute milliseconds are not portable; compare base and candidate on the same machine.
 - **Failures** are one line built from the error's case. `--verbose` adds the native diagnostic when there is one.
 
-## Migrating from 0.x and 1.x
-
-| Removed API | Pipeline API |
-| --- | --- |
-| `Hokusai.image(from: path)` | `Hokusai(url: URL(fileURLWithPath: path))` |
-| `Hokusai.image(from: data)` | `Hokusai(data: data)` |
-| `image.resize(...).toFile(path)` | `try await pipeline.resize(...).write(to: URL(...))` |
-| `image.crop(...)` | `pipeline.extract(x:y:width:height:)` |
-| `Hokusai.thumbnail(from:width:)` | `pipeline.resize(width:height:fit:)`; JPEG sources are shrunk by the decoder |
-| `image.toBuffer(...)` | Select `.jpeg()` / `.png()` / `.webp()` / `.avif()`, then `try await .data()` |
-
-The 0.x `HokusaiImage` handle, the static loaders and thumbnails, the synchronous `toBuffer`/`toFile` terminals and the `HokusaiLegacy` product are removed in 2.0.
-
 ## 1.0 ergonomics roadmap
 
 Hokusai follows the useful parts of Sharp's server-side image-processing
