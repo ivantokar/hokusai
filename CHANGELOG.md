@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [2.0.0] - Unreleased
+## [2.0.0] - 2026-11-03
 
 Hokusai 2.0 is a redesigned library. `Hokusai` is the only image type: a
 pipeline is an immutable value, built synchronously and evaluated by an async
