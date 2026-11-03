@@ -46,6 +46,7 @@ enum Evaluator {
     /// Evaluates `plan` and writes it to a local file.
     static func write(_ plan: ImagePlan, _ terminal: TerminalConfig, as format: Encoder, to url: URL, context: EvaluationContext) throws -> OutputInfo {
         let encoder = try selectEncoder(format, terminal)
+        try rejectSourceAliases(of: plan, destination: url)
         return try classifyingSourceFailures(in: context) {
             let image = try context.sink(for: build(plan, context: context, scope: nil))
             context.trace?.record(.sinkSelected("file \(format.imageFormat.rawValue)"))
@@ -58,6 +59,26 @@ enum Evaluator {
             case .raster(let encoder):
                 let size = try image.write(encoder, to: url)
                 return OutputInfo(format: format.imageFormat, width: image.width, height: image.height, byteCount: size)
+            }
+        }
+    }
+
+    /// Fails when `destination` is a file the plan reads.
+    ///
+    /// The destination is opened for writing, and truncated, at the first
+    /// encoded byte, while a decode may still be reading the same file. Files
+    /// are compared by device and inode, so a symbolic link or a hard link to a
+    /// source is the same file. A destination that does not exist yet cannot
+    /// alias anything.
+    private static func rejectSourceAliases(of plan: ImagePlan, destination: URL) throws {
+        var target = stat()
+        guard stat(destination.path, &target) == 0 else { return }
+        for source in plan.fileSources {
+            var candidate = stat()
+            if stat(source.path, &candidate) == 0, candidate.st_dev == target.st_dev, candidate.st_ino == target.st_ino {
+                throw HokusaiError.invalidOption(
+                    name: "output URL",
+                    reason: "\(destination.lastPathComponent) is a file this pipeline reads; write to a different file")
             }
         }
     }

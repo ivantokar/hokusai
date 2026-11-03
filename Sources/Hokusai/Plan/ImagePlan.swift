@@ -48,6 +48,19 @@ struct ImagePlan: Sendable {
         }
     }
 
+    /// Every local file this plan reads, including the sources of composite layers.
+    var fileSources: [URL] {
+        let chain = self.chain
+        var urls: [URL] = []
+        if case .file(let url, _) = chain.source { urls.append(url) }
+        for step in chain.steps {
+            if case .composite(let layers, _) = step.operation {
+                for layer in layers { urls += layer.plan.fileSources }
+            }
+        }
+        return urls
+    }
+
     /// A plan flattened from source to result.
     struct Chain {
         struct Step {

@@ -172,6 +172,17 @@ import Testing
         #expect(message?.contains("missing.jpg") == true)
     }
 
+    @Test func writingBackOverTheInputIsRefusedAndLeavesItIntact() async throws {
+        defer { scratch.remove() }
+        let copy = scratch.path("photo.jpg")
+        try FileManager.default.copyItem(atPath: landscape, toPath: copy)
+        let original = try Data(contentsOf: URL(fileURLWithPath: copy))
+        let message = await failureMessage(of: ResizeCommand.self, ["-i", copy, "-o", copy, "--width", "10"])
+        #expect(message?.contains("photo.jpg") == true)
+        #expect(message?.contains("reads") == true)
+        #expect(try Data(contentsOf: URL(fileURLWithPath: copy)) == original)
+    }
+
     @Test func anEncoderTheBuildLacksIsAClearUnsupportedDiagnostic() async throws {
         defer { scratch.remove() }
         let capabilities = try Hokusai.capabilities()
