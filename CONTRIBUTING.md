@@ -1,0 +1,42 @@
+# Contributing
+
+## GitHub issues are the source of truth
+
+There is no separate specification in the repository. Design, scope and
+acceptance criteria live in GitHub issues, and the code is checked against them.
+
+- **Design first, in an issue.** A feature or a contract change starts as an
+  issue that states the problem, the proposed API and semantics, and a checklist
+  of requirements. Discuss and revise the design there, before the code.
+- **Verify against the issue.** A pull request names the issue it implements
+  (`for #N` when it is a slice, `part of #N` when more is coming) and is checked
+  against that issue's checklist. If the implementation changes the design,
+  update the issue in the same step, so the issue stays current.
+- **Close an issue when its checklist is met**, with a comment that links the
+  pull requests that did it. Work deliberately left out moves to a new or
+  existing issue; do not leave it as an unchecked box in a closed one.
+- **Umbrella issues** (`roadmap`) hold the release gates and the order of work.
+  Tick a gate only after checking it against the code.
+- **The README and the CHANGELOG describe what the code does today.** They are
+  not a place for plans: plans belong in issues.
+
+## Labels
+
+- Release scope: `next-major` (required before the next major), `post-major`
+  (additive, does not block it), `roadmap` (umbrella).
+- Work type: `architecture`, `performance`, `cleanup`, `integration`,
+  `testing`, plus GitHub's `enhancement` and `documentation`.
+- Ownership: one or more `area:*` labels (`area:input`, `area:output`,
+  `area:operations`, `area:server`, `area:pdf`, and so on).
+
+## Pull requests
+
+- Branch from, and target, the release branch named in the roadmap issue
+  (currently `release/2.0`), not `main`.
+- Add public, black-box tests for behaviour that users can observe
+  (`Tests/HokusaiPublicTests`). Add a `CHANGELOG.md` entry under the unreleased
+  version.
+- Before a release, `Scripts/check-api.sh <git-ref>` lists public API changes
+  against a ref.
+- Commit messages and pull request descriptions are plain text; do not add
+  attribution trailers.
