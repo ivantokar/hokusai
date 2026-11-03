@@ -390,3 +390,4 @@ the core pipeline.
 - [Hokusai Vapor](https://github.com/ivantokar/hokusai-vapor)
 - [Archived Vapor example](https://github.com/ivantokar/hokusai-vapor-example)
 - [API documentation](Sources/Hokusai/Hokusai.docc/Hokusai.md)
+- [Contributing](CONTRIBUTING.md)
