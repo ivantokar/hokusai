@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Fixed (streaming, #111)
+- `writeChunks` no longer hangs when the scheduler rejects admission. With a full
+  evaluation queue the call now fails with the typed `queuedEvaluations` resource
+  error, promptly and without calling the consumer. The producer's failure ended
+  the stream only when the work closure ran, which is after admission.
+- Cancelling after the encoder finished, while chunks the consumer had not yet
+  received were still queued, now throws `CancellationError` instead of returning
+  the `OutputInfo` of a partial stream. `HokusaiNIO.writeByteBuffers` inherits both.
+
 ## [2.0.0] - 2026-11-03
 
 Hokusai 2.0 is a redesigned library. `Hokusai` is the only image type: a

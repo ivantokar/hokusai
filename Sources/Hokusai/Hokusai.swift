@@ -677,14 +677,18 @@ public struct Hokusai: Sendable {
         let plan = plan, terminal = terminal
         let queue = ChunkQueue(chunkSize: chunkSize)
         return try await withTaskCancellationHandler {
-            async let produced = EvaluationScheduler.shared.run { context in
+            // Any producer failure ends the stream, including a rejection by the
+            // scheduler's admission, which happens before the work closure runs.
+            async let produced: OutputInfo = {
                 do {
-                    return try Evaluator.stream(plan, terminal, as: format, into: queue, context: context)
+                    return try await EvaluationScheduler.shared.run { context in
+                        try Evaluator.stream(plan, terminal, as: format, into: queue, context: context)
+                    }
                 } catch {
                     queue.abort()
                     throw error
                 }
-            }
+            }()
             do {
                 while let chunk = await queue.next() { try await consume(chunk) }
             } catch {
@@ -692,7 +696,11 @@ public struct Hokusai: Sendable {
                 _ = try? await produced
                 throw error
             }
-            return try await produced
+            let info = try await produced
+            // Cancellation after the producer finished discards chunks the
+            // consumer has not received; that is not a complete stream.
+            if queue.didDiscardOutput { throw CancellationError() }
+            return info
         } onCancel: {
             queue.abort()
         }

@@ -9,7 +9,7 @@ import Hokusai
 //
 //   HokusaiProcessProbe <scenario> [key=value ...]
 //
-// Scenarios: status, sweep, overload, cancel, stream, untrusted, stress.
+// Scenarios: status, sweep, overload, cancel, stream, streamAdmission, untrusted, stress.
 // Keys: concurrent, queue, vips, block, evaluations, iterations, size.
 
 let arguments = Array(CommandLine.arguments.dropFirst())
@@ -295,6 +295,61 @@ func runStream() async {
     ])
 }
 
+final class CallCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func increment() { lock.lock(); value += 1; lock.unlock() }
+    var count: Int { lock.lock(); defer { lock.unlock() }; return value }
+}
+
+/// Chunk streaming when the scheduler rejects admission (#111): with one slot
+/// held and the one queue place taken, another stream must fail promptly with
+/// the typed queue error and never call its consumer.
+func runStreamAdmission() async {
+    report(["configure": applyConfiguration()])
+    let source = tiff(width: 1024, height: 1024)
+    func pipeline() throws -> Hokusai { try Hokusai(data: source).png(compressionLevel: 0) }
+
+    let holder = Task {
+        try await pipeline().writeChunks(chunkSize: 16 * 1024) { _ in try await Task.sleep(nanoseconds: 60_000_000_000) }
+    }
+    try? await Task.sleep(nanoseconds: 300_000_000)
+    let waiter = Task { try await pipeline().writeChunks { _ in } }
+    try? await Task.sleep(nanoseconds: 300_000_000)
+
+    let calls = CallCounter()
+    let started = Date()
+    let outcome = await withTaskGroup(of: String.self) { group in
+        group.addTask {
+            do { _ = try await pipeline().writeChunks { _ in calls.increment() }; return "completed" } catch { return category(error) }
+        }
+        group.addTask {
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            return "timeout"
+        }
+        let first = await group.next() ?? "none"
+        group.cancelAll()
+        return first
+    }
+    let seconds = Date().timeIntervalSince(started)
+
+    holder.cancel()
+    waiter.cancel()
+    _ = try? await holder.value
+    _ = try? await waiter.value
+    var afterwards = "completed"
+    do { try await evaluate(source) } catch { afterwards = category(error) }
+    let final = await settledStatus()
+    report([
+        "outcome": outcome,
+        "seconds": String(format: "%.2f", seconds),
+        "consumerCalls": calls.count,
+        "afterwards": afterwards,
+        "finalActive": final.activeEvaluations,
+        "finalQueued": final.queuedEvaluations,
+    ])
+}
+
 func runUntrusted() async {
     report(["configure": applyConfiguration()])
     let svg = Data(#"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>"#.utf8)
@@ -346,6 +401,7 @@ case "sweep": await runSweep()
 case "overload": await runOverload()
 case "cancel": await runCancel()
 case "stream": await runStream()
+case "streamAdmission": await runStreamAdmission()
 case "untrusted": await runUntrusted()
 case "stress": await runStress()
 default:

@@ -185,6 +185,26 @@ import Testing
         #expect(Date().timeIntervalSince(started) < 40)
     }
 
+    /// #111: the encoder has finished and the last chunk is queued when the
+    /// caller is cancelled. Dropping that chunk must not look like success.
+    @Test func cancellingAfterTheEncoderFinishedButBeforeDeliveryIsACancellation() async throws {
+        let pipeline = try gradient(width: 64, height: 48).pipeline().png()
+        let total = try await pipeline.data().info.byteCount
+        let chunkSize = total / 2 + 1        // two chunks fit the queue, so the encoder never blocks
+        let received = ChunkCounter()
+        let task = Task {
+            try await pipeline.writeChunks(chunkSize: chunkSize) { chunk in
+                if received.increment() == 1 {
+                    try await Task.sleep(for: .milliseconds(400))   // the encoder finishes meanwhile
+                    withUnsafeCurrentTask { $0?.cancel() }          // a consumer that does not itself throw on cancel
+                }
+            }
+        }
+        let error = await failure { _ = try await task.value }
+        #expect(error is CancellationError)
+        #expect(received.value == 1)
+    }
+
     @Test func concurrentStreamsDoNotMixTheirBytes() async throws {
         let pipelines = try (0..<6).map { index in
             try gradient(width: 64 + index * 8, height: 48).pipeline().png()
@@ -205,4 +225,11 @@ import Testing
     private func failure(_ body: () async throws -> Void) async -> Error? {
         do { try await body(); return nil } catch { return error }
     }
+}
+
+private final class ChunkCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    var value: Int { lock.withLock { count } }
+    func increment() -> Int { lock.withLock { count += 1; return count } }
 }

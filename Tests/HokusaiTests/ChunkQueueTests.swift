@@ -104,6 +104,32 @@ import Testing
         #expect(!bytes(8).withUnsafeBytes { queue.write($0.baseAddress!, count: 8) })
         queue.abort()   // idempotent
     }
+
+    // MARK: - Discarded output (#111)
+
+    @Test func abortingAFinishedStreamWithUndeliveredChunksDiscardsOutput() async throws {
+        let queue = ChunkQueue(chunkSize: 4, depth: 4)
+        _ = bytes(8).withUnsafeBytes { queue.write($0.baseAddress!, count: 8) }
+        _ = queue.finish()
+        queue.abort()
+        #expect(queue.didDiscardOutput)
+        #expect(await drain(queue).isEmpty)
+    }
+
+    @Test func abortingAfterEveryChunkWasDeliveredDiscardsNothing() async throws {
+        let queue = ChunkQueue(chunkSize: 4, depth: 4)
+        _ = bytes(8).withUnsafeBytes { queue.write($0.baseAddress!, count: 8) }
+        _ = queue.finish()
+        #expect(await drain(queue).count == 2)
+        queue.abort()
+        #expect(!queue.didDiscardOutput)
+    }
+
+    @Test func abortingAStreamThatHasNotFinishedDiscardsOutput() async throws {
+        let queue = ChunkQueue(chunkSize: 4, depth: 4)
+        queue.abort()
+        #expect(queue.didDiscardOutput)
+    }
 }
 
 private final class Flag: @unchecked Sendable {
