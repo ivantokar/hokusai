@@ -58,7 +58,7 @@ the runtime you actually installed.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/ivantokar/hokusai.git", from: "1.0.0")
+    .package(url: "https://github.com/ivantokar/hokusai.git", from: "2.0.0")
 ]
 ```
 
@@ -369,14 +369,14 @@ deliberate, tracked capability rather than an implied promise.
 - [x] Typed JPEG, PNG, WebP, AVIF, and single-page raster PDF output.
 - [x] Typed header metadata plus privacy-safe metadata removal by default.
 - [x] [First-class pipeline thumbnails with shrink-on-load](https://github.com/ivantokar/hokusai/issues/20).
-- [ ] [Complete page, decoder-failure, and upload-safety input controls](https://github.com/ivantokar/hokusai/issues/21).
+- [x] [Complete page, decoder-failure, and upload-safety input controls](https://github.com/ivantokar/hokusai/issues/21).
 - [ ] [Typed raw-pixel input and output](https://github.com/ivantokar/hokusai/issues/22).
 
 ### Output, metadata, and composition
 
-- [ ] [Capability-aware TIFF, GIF, and HEIF output](https://github.com/ivantokar/hokusai/issues/23).
-- [ ] [Statistics and granular EXIF, ICC, XMP, orientation, and density controls](https://github.com/ivantokar/hokusai/issues/24).
-- [ ] [Gravity placement and a broader typed blend-mode set](https://github.com/ivantokar/hokusai/issues/25).
+- [x] [Capability-aware TIFF, GIF, and HEIF output](https://github.com/ivantokar/hokusai/issues/23).
+- [x] [Statistics and granular EXIF, ICC, XMP, orientation, and density controls](https://github.com/ivantokar/hokusai/issues/24).
+- [x] [Gravity placement and a broader typed blend-mode set](https://github.com/ivantokar/hokusai/issues/25).
 - [ ] [A staged set of advanced transforms](https://github.com/ivantokar/hokusai/issues/26), beginning with common server-side operations rather than a generic native wrapper.
 - [x] [A documented multi-page and animation contract](https://github.com/ivantokar/hokusai/issues/27).
 
@@ -384,9 +384,9 @@ deliberate, tracked capability rather than an implied promise.
 
 - [x] Idempotent, process-safe, one-way libvips initialization.
 - [x] Concurrent pipeline evaluation and copied buffer-input ownership.
-- [ ] [Runtime format capabilities, queue observability, and safe process-level configuration](https://github.com/ivantokar/hokusai/issues/28).
-- [ ] [A clean 1.0-first public API boundary and semver-safe legacy retirement plan](https://github.com/ivantokar/hokusai/issues/29).
-- [ ] [Correct the CLI thumbnail documentation to match its implementation](https://github.com/ivantokar/hokusai/issues/30).
+- [x] [Runtime format capabilities, queue observability, and safe process-level configuration](https://github.com/ivantokar/hokusai/issues/28).
+- [x] [A clean 1.0-first public API boundary and semver-safe legacy retirement plan](https://github.com/ivantokar/hokusai/issues/29).
+- [x] [Correct the CLI thumbnail documentation to match its implementation](https://github.com/ivantokar/hokusai/issues/30).
 
 ### Intentional Swift differences
 
