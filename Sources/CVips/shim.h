@@ -373,6 +373,38 @@ static inline VipsImage *swift_vips_open_buffer_shrink(const void *buf, size_t s
     return image;
 }
 
+/**
+ * @brief Open a WebP file, letting the decoder scale it by `scale` (0 < scale <= 1).
+ *
+ * Only call this for a source whose loader is already known to be a WebP
+ * loader: other loaders reject the `scale` argument. The loaded size is
+ * `rint(dimension * scale)`.
+ */
+static inline VipsImage *swift_vips_open_file_scale(const char *path, int sequential, int fail_on, double scale, int revalidate) {
+    const VipsAccess access = sequential ? VIPS_ACCESS_SEQUENTIAL : VIPS_ACCESS_RANDOM;
+    if (revalidate) {
+        return vips_image_new_from_file(path, "access", access, "fail_on", fail_on, "scale", scale, "revalidate", TRUE, NULL);
+    }
+    return vips_image_new_from_file(path, "access", access, "fail_on", fail_on, "scale", scale, NULL);
+}
+
+/** @brief As swift_vips_open_buffer, for a WebP source scaled by the decoder. */
+static inline VipsImage *swift_vips_open_buffer_scale(const void *buf, size_t size, int sequential, int fail_on, double scale) {
+    VipsBlob *blob = vips_blob_copy(buf, size);
+    if (blob == NULL) {
+        return NULL;
+    }
+    VipsSource *source = vips_source_new_from_blob(blob);
+    vips_area_unref(VIPS_AREA(blob));
+    if (source == NULL) {
+        return NULL;
+    }
+    const VipsAccess access = sequential ? VIPS_ACCESS_SEQUENTIAL : VIPS_ACCESS_RANDOM;
+    VipsImage *image = vips_image_new_from_source(source, "", "access", access, "fail_on", fail_on, "scale", scale, NULL);
+    g_object_unref(source);
+    return image;
+}
+
 /** @brief The number of pages libvips reports for an image (1 when the loader has no pages). */
 static inline int swift_vips_image_n_pages(VipsImage *image) {
     return vips_image_get_n_pages(image);

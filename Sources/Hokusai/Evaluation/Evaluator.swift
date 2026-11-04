@@ -236,12 +236,12 @@ enum Evaluator {
         var shrink: ShrinkOnLoad?
         var shrinkFactor: Int?
 
-        if context.planner.isEnabled(.shrinkOnLoad), source.options.page == nil, native.supportsDecoderShrink,
-           let plan = shrinkPlan(for: native, steps: steps) {
+        if context.planner.isEnabled(.shrinkOnLoad), source.options.page == nil,
+           let kind = native.decoderShrinkKind, let plan = shrinkPlan(for: native, steps: steps, kind: kind) {
             let reduced: NativeImage
             switch source {
-            case .file(let url, let options): reduced = try NativeImage.open(path: url.path, options: options, decoderShrink: plan.factor)
-            case .data(let data, let options): reduced = try NativeImage.open(data: data, options: options, decoderShrink: plan.factor)
+            case .file(let url, let options): reduced = try NativeImage.open(path: url.path, options: options, decoderShrink: plan.factor, kind: kind)
+            case .data(let data, let options): reduced = try NativeImage.open(data: data, options: options, decoderShrink: plan.factor, kind: kind)
             case .text: reduced = native
             }
             // The decoder may round a dimension up but never below what was
@@ -273,7 +273,8 @@ enum Evaluator {
     /// seen at full resolution, so any such operation rules it out.
     private static func shrinkPlan(
         for header: NativeImage,
-        steps: [PlannedStep]
+        steps: [PlannedStep],
+        kind: DecoderShrinkKind
     ) -> (factor: Int, resizeIndex: Int, reference: (width: Int, height: Int), minimum: (width: Int, height: Int))? {
         var index = 0
         var oriented = false
@@ -298,13 +299,12 @@ enum Evaluator {
         // Back in the source's own axes, which is what the decoder shrinks.
         let needed = turned ? (width: target.height, height: target.width) : target
         for factor in [8, 4, 2] where
-            ceilDiv(header.width, factor) >= needed.width && ceilDiv(header.height, factor) >= needed.height {
+            kind.loadedSize(header.width, factor: factor) >= needed.width
+                && kind.loadedSize(header.height, factor: factor) >= needed.height {
             return (factor, index, reference, needed)
         }
         return nil
     }
-
-    private static func ceilDiv(_ value: Int, _ divisor: Int) -> Int { (value + divisor - 1) / divisor }
 
     private static func apply(
         _ operation: ImageOperation,
