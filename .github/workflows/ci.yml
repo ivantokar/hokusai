@@ -1,10 +1,18 @@
 name: CI
 
+# Release policy: a `v*` tag runs this workflow on the exact commit it names.
+# A GitHub Release is published from a tag only after that run is green, so the
+# released commit, not a similar one, was built and tested.
 on:
   pull_request:
     branches:
       - main
       - release/2.0
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
 
 concurrency:
   group: ci-${{ github.ref }}
