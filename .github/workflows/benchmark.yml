@@ -12,6 +12,7 @@ name: Benchmark
 on:
   pull_request:
     branches:
+      - main
       - release/2.0
     paths:
       - Sources/**

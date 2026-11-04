@@ -95,6 +95,13 @@ import Testing
         #expect(WorkloadCatalog.defaultIDs.allSatisfy { WorkloadCatalog.workload(id: $0) != nil })
     }
 
+    @Test func streamingWorkloadsDeclareHowTheirOutputIsReceived() {
+        #expect(WorkloadCatalog.workload(id: "stream-ttfb")?.delivery == .stream(consumerDelayMs: 0))
+        #expect(WorkloadCatalog.workload(id: "stream-slow-consumer")?.delivery == .stream(consumerDelayMs: 5))
+        #expect(WorkloadCatalog.workload(id: "thumbnail-jpeg")?.delivery == .buffer)
+        #expect(WorkloadCatalog.defaultIDs.allSatisfy { WorkloadCatalog.workload(id: $0)?.delivery == .buffer })
+    }
+
     // MARK: - Orchestration
 
     private final class FakeLauncher: WorkerLauncher, @unchecked Sendable {
@@ -166,6 +173,21 @@ import Testing
         let settings = WorkerSettings(workload: "blur-webp", input: "x", profile: .stable, evaluations: 2, vipsConcurrency: .fixed(2), requests: 4)
         let original = Self.cell(settings)
         #expect(try BenchmarkOrchestrator.decode(JSONEncoder().encode(original)) == original)
+    }
+
+    @Test func firstByteSamplesRoundTripAndOlderResultsWithoutThemStillDecode() throws {
+        let settings = WorkerSettings(workload: "stream-ttfb", input: "x", profile: .quick, evaluations: 1, vipsConcurrency: .automatic, requests: 2)
+        var streamed = Self.cell(settings)
+        streamed.delivery = Delivery.stream(consumerDelayMs: 0).label
+        streamed.firstByteSamplesMs = [3, 4, 5]
+        streamed.firstByteMs = SampleStatistics(samplesMs: [3, 4, 5])
+        #expect(try BenchmarkOrchestrator.decode(JSONEncoder().encode(streamed)) == streamed)
+
+        // A result written before these fields existed has no such keys.
+        var object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(streamed)) as? [String: Any])
+        for key in ["delivery", "firstByteMs", "firstByteSamplesMs"] { object[key] = nil }
+        let older = try BenchmarkOrchestrator.decode(JSONSerialization.data(withJSONObject: object))
+        #expect(older.firstByteMs == nil && older.delivery == nil)
     }
 
     // MARK: - Comparison
