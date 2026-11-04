@@ -41,6 +41,26 @@ All notable changes to this project are documented in this file.
   the exact commit it names; the benchmark comparison also runs for pull
   requests to `main`.
 
+### Fixed (capabilities, #111)
+- `RuntimeCapabilities` reports AVIF and HEIF reading and writing independently.
+  Before, AVIF was added to both lists only after a tiny image had been encoded
+  and decoded, so a runtime with an AV1 decoder and no AV1 encoder reported no
+  AVIF input, and one with an encoder and no decoder reported no AVIF output.
+  Encoding is now probed by encoding and decoding by decoding a small embedded
+  AVIF. `heifCompressions` lists the codecs that can be *encoded*, which is
+  what `canEncode(_:)` has always meant.
+
+### Fixed (colour, #111)
+- A background colour on a CMYK image is read as RGB and converted to CMYK. It
+  used to be copied band by band, so `.white` filled with full ink (near black)
+  and `.red` with an unrelated dark colour in `extend`, `rotate`, `affine` and
+  `resize(fit: .contain)`. White is now white. The default `.transparent`
+  background has no alpha to land in on a CMYK image and now fills black, as it
+  does on an RGB image; it was white only because RGBA zeros are "no ink".
+- `normalize()` on a 16-bit image stretched nothing: libvips returns the 8-bit
+  luminance it measures the percentiles on, and that was rescaled a second time
+  by the 16-bit range, so the image looked flat and was returned unchanged.
+
 ## [2.0.0] - 2026-11-03
 
 Hokusai 2.0 is a redesigned library. `Hokusai` is the only image type: a
