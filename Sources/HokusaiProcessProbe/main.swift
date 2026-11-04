@@ -9,8 +9,8 @@ import Hokusai
 //
 //   HokusaiProcessProbe <scenario> [key=value ...]
 //
-// Scenarios: status, sweep, overload, cancel, stream, streamAdmission, boundary, untrusted, stress.
-// Keys: concurrent, queue, vips, block, evaluations, iterations, size.
+// Scenarios: status, sweep, overload, cancel, stream, streamAdmission, boundary, outputLimit, untrusted, stress.
+// Keys: concurrent, queue, vips, block, maxOutput, evaluations, iterations, size.
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard let scenario = arguments.first else {
@@ -81,7 +81,8 @@ func configuration() -> RuntimeConfiguration {
         maxConcurrentEvaluations: integer("concurrent").map(ConcurrencyLimit.fixed) ?? .automatic,
         maxQueuedEvaluations: integer("queue"),
         vipsConcurrency: integer("vips").map(ConcurrencyLimit.fixed) ?? .automatic,
-        blockUntrustedOperations: options["block"] == "1")
+        blockUntrustedOperations: options["block"] == "1",
+        maxOutputPixels: options["maxOutput"].map { $0 == "none" ? nil : Int($0) } ?? RuntimeConfiguration.defaultMaxOutputPixels)
 }
 
 /// Applies the command-line configuration and reports how that went.
@@ -355,6 +356,10 @@ case "cancel": await runCancel()
 case "stream": await runStream()
 case "streamAdmission": await runStreamAdmission()
 case "boundary": await runBoundary(case: options["case"] ?? "")
+case "outputLimit":
+    // Configured here: Swift 6.0 cannot compile Boundary.swift calling back into main.swift.
+    _ = applyConfiguration()
+    await runOutputLimit(unbounded: options["maxOutput"] == "none")
 case "untrusted": await runUntrusted()
 case "stress": await runStress()
 default:

@@ -90,6 +90,10 @@ public struct ResourceKind: Sendable, Hashable, CustomStringConvertible {
     /// `InputLimits.maxPixels`: the decoded image has too many pixels.
     public static let decodedPixels = ResourceKind(name: "decodedPixels")
 
+    /// `RuntimeConfiguration.maxOutputPixels`: an image the pipeline would
+    /// produce, final or intermediate, has too many pixels.
+    public static let outputPixels = ResourceKind(name: "outputPixels")
+
     /// `InputLimits.maxChannels`: the decoded image has too many bands.
     public static let channels = ResourceKind(name: "channels")
 

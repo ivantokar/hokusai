@@ -119,10 +119,7 @@ import Testing
         let names = listing.errorOutput.isEmpty ? listing.rawOutput.split(separator: "\n").map(String.init) : []
         #expect(names.count > 400, "the case list should cover the public API, got \(names.count)")
 
-        // A request-sized resize of a tiny image is accepted and then takes minutes and
-        // terabytes of work: output cost is the caller's responsibility today (#111, finding 12).
-        let costly: Set<String> = ["resize.width=10000000", "resize.width=10000001", "resize.height=10000000", "resize.height=10000001"]
-        let cases = names.filter { !costly.contains($0) }
+        let cases = names
 
         var failures: [String] = []
         await withTaskGroup(of: String?.self) { group in
@@ -142,6 +139,33 @@ import Testing
             }
         }
         #expect(failures.isEmpty, "\(failures.sorted().joined(separator: "\n"))")
+    }
+
+    // MARK: - Output size (#120)
+
+    @Test func anOutputLimitRefusesOversizedImagesBeforeAnyPixelIsComputed() async throws {
+        let result = try await runProbe("outputLimit", ["maxOutput": "1000000"])
+        #expect(result.status == 0, "\(result.errorOutput)")
+        #expect(result.values["small"] == "ok 100x75")
+        for key in ["final", "intermediate", "extend", "huge"] {
+            #expect(result.values[key]?.hasPrefix("outputPixels limit=1000000") == true, "\(key): \(result.values[key] ?? "none")")
+        }
+        #expect((result.values["seconds"].flatMap(Double.init) ?? 99) < 20)
+    }
+
+    @Test func theDefaultLimitStillRefusesAnAbsurdSize() async throws {
+        let result = try await runProbe("outputLimit", [:])
+        #expect(result.status == 0, "\(result.errorOutput)")
+        #expect(result.values["small"] == "ok 100x75")
+        #expect(result.values["final"] == "ok 6000x5000", "a 30 megapixel canvas works under the default")
+        #expect(result.values["huge"]?.hasPrefix("outputPixels") == true)
+        #expect((result.values["seconds"].flatMap(Double.init) ?? 99) < 30)
+    }
+
+    @Test func theOutputLimitCanBeSwitchedOff() async throws {
+        let result = try await runProbe("outputLimit", ["maxOutput": "none"])
+        #expect(result.values["final"] == "ok 6000x5000")
+        #expect(result.values["intermediate"] == "ok 10x10")
     }
 
     // MARK: - Untrusted loaders

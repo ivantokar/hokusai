@@ -195,6 +195,7 @@ enum Evaluator {
         } else {
             let opened = try open(chain.source, planned: steps, context: context, label: label)
             current = opened.image
+            try checkOutputSize(current, after: "source")
             shrink = opened.shrink
             if shareable && shrink == nil { context.remember(current, for: chain.sourceID) }
         }
@@ -207,12 +208,27 @@ enum Evaluator {
             } else {
                 let reference = shrink.flatMap { index == $0.resizeIndex ? $0.reference : nil }
                 current = try apply(step.operation, to: current, reference: reference, context: context)
+                try checkOutputSize(current, after: step.operation.name)
                 context.trace?.record(.operationLowered(step.operation.name))
             }
             let sharesWrittenMeaning = shrink.map { index >= $0.resizeIndex } ?? true
             if shareable && sharesWrittenMeaning { context.remember(current, for: chain.steps[index].id) }
         }
         return current
+    }
+
+    /// Refuses an image with more pixels than ``RuntimeConfiguration/maxOutputPixels``.
+    ///
+    /// Run after every lowered step, when only the lazy node exists, so a size
+    /// that would take forever to compute fails before any pixel is.
+    private static func checkOutputSize(_ image: NativeImage, after operation: String) throws {
+        guard let limit = VipsRuntime.frozenConfiguration().maxOutputPixels else { return }
+        let (pixels, overflow) = image.width.multipliedReportingOverflow(by: image.height)
+        guard !overflow, pixels <= limit else {
+            throw HokusaiError.resource(ResourceFailure(
+                kind: .outputPixels, limit: limit, actual: overflow ? nil : pixels,
+                reason: "\(operation) would produce a \(image.width) × \(image.height) image, above the limit of \(limit) pixels (RuntimeConfiguration.maxOutputPixels)"))
+        }
     }
 
     /// A source opened at reduced size, and what the resize that follows needs.
