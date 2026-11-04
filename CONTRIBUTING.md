@@ -43,7 +43,7 @@ acceptance criteria live in GitHub issues, and the code is checked against them.
 - CI is cheap by design: a pull request that changes only documentation skips
   the build jobs, a draft skips them (and the benchmark) until it is marked
   ready, and macOS runs for ready pull requests and tags only. The one required
-  check is `CI complete`. Open a pull request as a draft while it is still
+  check is `CI complete`. The benchmark comparison takes about fifteen minutes, so it runs only on a pull request labelled `benchmark`; add the label to a performance-sensitive change. Open a pull request as a draft while it is still
   changing, and push in batches.
 - Commit messages and pull request descriptions are plain text; do not add
   attribution trailers.
