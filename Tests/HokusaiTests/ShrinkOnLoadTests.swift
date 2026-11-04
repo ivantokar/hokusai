@@ -221,4 +221,68 @@ import Testing
             _ = try await Hokusai(data: data).resize(width: 30).png().data()
         }
     }
+    // MARK: - WebP (#72)
+
+    /// A still WebP of an odd size, so the decoder's rounding matters.
+    private func stillWebP(width: Int = 641, height: Int = 403) async throws -> Hokusai {
+        let encoded = try await landscape().resize(width: width, height: height, fit: .fill).webp(quality: 90).data()
+        return try Hokusai(data: encoded.data)
+    }
+
+    @Test func aStillWebPIsShrunkByTheDecoder() async throws {
+        let result = try run(await stillWebP().resize(width: 80))
+        #expect(!result.shrinkFactors.isEmpty)
+        #expect(result.image.width == 80)
+    }
+
+    @Test func aWebPFileSourceIsShrunkByTheDecoder() async throws {
+        let encoded = try await stillWebP().webp(quality: 90).data()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("shrink-\(UUID().uuidString).webp")
+        try encoded.data.write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let result = try run(Hokusai(url: url).resize(width: 80))
+        #expect(!result.shrinkFactors.isEmpty)
+    }
+
+    @Test(arguments: [ResizeFit.cover, .contain, .fill, .inside, .outside])
+    func webPDimensionsMatchTheNormalPathForEveryFit(fit: ResizeFit) async throws {
+        let pipeline = try await stillWebP().resize(width: 90, height: 70, fit: fit)
+        let optimised = try run(pipeline)
+        let normal = try run(pipeline, planner: forcedNormal)
+        #expect(!optimised.shrinkFactors.isEmpty)
+        #expect((optimised.image.width, optimised.image.height) == (normal.image.width, normal.image.height))
+    }
+
+    @Test(arguments: [(641, 403, 81), (640, 402, 80), (639, 401, 79), (1001, 7, 126)])
+    func webPDimensionsMatchForOddSizesAndTargets(width: Int, height: Int, target: Int) async throws {
+        let pipeline = try await stillWebP(width: width, height: height).resize(width: target)
+        let optimised = try run(pipeline)
+        let normal = try run(pipeline, planner: forcedNormal)
+        #expect((optimised.image.width, optimised.image.height) == (normal.image.width, normal.image.height))
+    }
+
+    @Test func webPWithoutEnlargementUsesTheFullResolutionSize() async throws {
+        let result = try run(await stillWebP().resize(width: 900, withoutEnlargement: true))
+        #expect(result.shrinkFactors.isEmpty)
+        #expect((result.image.width, result.image.height) == (641, 403))
+    }
+
+    @Test func webPPixelsAgreeWithinCodecTolerance() async throws {
+        let pipeline = try await stillWebP().resize(width: 80, height: 50, fit: .fill)
+        let optimised = try run(pipeline)
+        let normal = try run(pipeline, planner: forcedNormal)
+        #expect(!optimised.shrinkFactors.isEmpty)
+        #expect(try meanDifference(optimised.image, normal.image) < 20)
+    }
+
+    @Test func aTargetThatNeedsTheFullWebPDoesNotShrink() async throws {
+        let result = try run(await stillWebP().resize(width: 400))
+        #expect(result.shrinkFactors.isEmpty)
+    }
+
+    @Test func anAnimatedWebPKeepsTheNormalPath() throws {
+        let animated = try Hokusai(data: loadFixtureData(named: "animated", ext: "webp"))
+        let result = try run(animated.resize(width: 4))
+        #expect(result.shrinkFactors.isEmpty)
+    }
 }

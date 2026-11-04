@@ -146,32 +146,51 @@ extension NativeImage {
         swift_vips_image_get_string_field(pointer, "vips-loader").map { String(cString: $0) }
     }
 
-    /// Whether a decoder-level `shrink` can be requested for this source.
-    var supportsDecoderShrink: Bool {
-        loaderName?.hasPrefix("jpegload") == true
+    /// How the decoder of this source can reduce it while decoding, if it can.
+    ///
+    /// JPEG shrinks by an integer factor and rounds a size up. WebP scales by a
+    /// fraction and rounds to the nearest size, and only a still image is
+    /// eligible: an animated one keeps the normal path.
+    var decoderShrinkKind: DecoderShrinkKind? {
+        guard let loader = loaderName else { return nil }
+        if loader.hasPrefix("jpegload") { return .jpeg }
+        if loader.hasPrefix("webpload"), pageCount == 1 { return .webp }
+        return nil
     }
 
     /// The EXIF orientation, 1 when absent.
     var exifOrientation: Int { Int(vips_image_get_orientation(pointer)) }
 
-    /// Reopens a JPEG file with the decoder shrinking it by `factor` (2, 4 or 8).
-    static func open(path: String, options: InputOptions, decoderShrink factor: Int) throws -> NativeImage {
+    /// Reopens a file with the decoder shrinking it by `factor` (2, 4 or 8).
+    static func open(path: String, options: InputOptions, decoderShrink factor: Int, kind: DecoderShrinkKind) throws -> NativeImage {
         try VipsRuntime.ensureInitialized()
         try requireReadableFile(path)
         let name = URL(fileURLWithPath: path).lastPathComponent
         return try opened(options: options, operation: "decode \(name)", reason: "could not decode the image file") { _ in
-            swift_vips_open_file_shrink(
-                path, options.access == .sequential ? 1 : 0, options.failOn.vipsValue, Int32(factor), options.revalidate ? 1 : 0)
+            switch kind {
+            case .jpeg:
+                swift_vips_open_file_shrink(
+                    path, options.access == .sequential ? 1 : 0, options.failOn.vipsValue, Int32(factor), options.revalidate ? 1 : 0)
+            case .webp:
+                swift_vips_open_file_scale(
+                    path, options.access == .sequential ? 1 : 0, options.failOn.vipsValue, 1.0 / Double(factor), options.revalidate ? 1 : 0)
+            }
         }
     }
 
-    /// Reopens encoded JPEG bytes with the decoder shrinking them by `factor` (2, 4 or 8).
-    static func open(data: Data, options: InputOptions, decoderShrink factor: Int) throws -> NativeImage {
+    /// Reopens encoded bytes with the decoder shrinking them by `factor` (2, 4 or 8).
+    static func open(data: Data, options: InputOptions, decoderShrink factor: Int, kind: DecoderShrinkKind) throws -> NativeImage {
         try VipsRuntime.ensureInitialized()
         return try opened(options: options, operation: "decode input data", reason: "could not decode the image data") { _ in
             data.withUnsafeBytes { bytes in
-                swift_vips_open_buffer_shrink(
-                    bytes.baseAddress, data.count, options.access == .sequential ? 1 : 0, options.failOn.vipsValue, Int32(factor))
+                switch kind {
+                case .jpeg:
+                    swift_vips_open_buffer_shrink(
+                        bytes.baseAddress, data.count, options.access == .sequential ? 1 : 0, options.failOn.vipsValue, Int32(factor))
+                case .webp:
+                    swift_vips_open_buffer_scale(
+                        bytes.baseAddress, data.count, options.access == .sequential ? 1 : 0, options.failOn.vipsValue, 1.0 / Double(factor))
+                }
             }
         }
     }
@@ -278,6 +297,21 @@ extension InputOptions.DecodeFailureLevel {
         case .truncated: Int32(VIPS_FAIL_ON_TRUNCATED.rawValue)
         case .error: Int32(VIPS_FAIL_ON_ERROR.rawValue)
         case .warning: Int32(VIPS_FAIL_ON_WARNING.rawValue)
+        }
+    }
+}
+
+/// A decoder that can reduce an image while decoding it.
+enum DecoderShrinkKind {
+    /// Integer shrink factor; the loaded size is `ceil(size / factor)`.
+    case jpeg
+    /// Fractional scale; the loaded size is `size / factor` rounded to nearest, ties to even.
+    case webp
+
+    func loadedSize(_ size: Int, factor: Int) -> Int {
+        switch self {
+        case .jpeg: (size + factor - 1) / factor
+        case .webp: max(1, Int((Double(size) / Double(factor)).rounded(.toNearestOrEven)))
         }
     }
 }

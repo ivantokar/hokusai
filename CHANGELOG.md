@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added (shrink-on-load for WebP, #72)
+- A still WebP whose pipeline starts with a `resize` (optionally after
+  `autoOrient`) is now scaled by the decoder, as a JPEG already was. The same
+  rules apply, the output dimensions are identical to the normal path, and the
+  loaded size is never below what the resize needs. Animated WebP keeps the
+  normal path. On the 5760 x 3840 fixture, resizing to 200 pixels wide took about
+  65 ms instead of 89 ms (debug build, best of six).
+
 ## [2.0.1] - 2026-11-04
 
 Fixes from the post-release audit (#111). No API changes.
