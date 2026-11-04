@@ -35,6 +35,26 @@ All notable changes to this project are documented in this file.
   ThreadSanitizer reported those calls as data races in the nightly job. The
   behaviour is unchanged.
 
+### Fixed (colour, #121)
+- `modulate` on a 16-bit greyscale image came out as a three-band image labelled
+  greyscale, so it was written as a mislabelled 16-bit file. It is now labelled RGB16
+  like any other 16-bit colour result.
+
+### Added (verification, #121)
+- Tests feed damaged files (truncated, bit-flipped, header-scribbled, padded) of
+  every decoder through every `failOn` level and require a typed error in bounded
+  time. Tens of thousands of mutants found no trap and no untyped error.
+- Documented: with `InputOptions.failOn = .none` a damaged file is decoded with
+  the missing data padded, so a few hundred bytes that claim 130 million pixels
+  cost a gigabyte and tens of seconds inside the default `maxPixels`. Services
+  that use `.none` should also lower `maxPixels`; the default `.warning` fails fast.
+- Further tests: `write(to:)` cancelled at 30 moments for six formats (no partial
+  file; an existing file may be removed once the write began, see #134); output
+  sizes of resize, extend, rotate and extract against a reference for random sizes and
+  fits; affine entries together, extreme rotation angles and NaN colour components;
+  greyscale, grey with alpha and 16-bit grey against the equivalent RGB picture for
+  17 operations; CMYK sizes and white backgrounds.
+
 ## [2.0.1] - 2026-11-04
 
 Fixes from the post-release audit (#111). No API changes.

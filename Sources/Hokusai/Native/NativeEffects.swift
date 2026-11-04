@@ -272,7 +272,12 @@ extension NativeImage {
             if colour.bandMaximum > 255, result.bandMaximum <= 255 {
                 result = try result.applying("modulate") { swift_vips_linear1($0, $1, 257, 0) }
             }
-            let interpretation = swift_vips_image_get_interpretation(colour.pointer)
+            // A grey input comes out as RGB, so the label is the input's only when the band count is
+            // unchanged; otherwise it is the RGB label of the same depth.
+            let sameBands = result.bands == colour.bands
+            let interpretation = sameBands
+                ? swift_vips_image_get_interpretation(colour.pointer)
+                : Int32((colour.bandMaximum > 255 ? VIPS_INTERPRETATION_RGB16 : VIPS_INTERPRETATION_sRGB).rawValue)
             return try result.castRounded(to: colour.bandFormat, operation: "modulate")
                 .applying("modulate") { swift_vips_set_interpretation($0, $1, interpretation) }
         }
