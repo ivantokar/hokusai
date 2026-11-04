@@ -9,9 +9,13 @@ name: Benchmark
 # Runs are ordered base, candidate, candidate, base. The two base runs also
 # compare against each other, which shows how noisy this runner is: treat a
 # regression as real only when it appears in both pairs and exceeds that noise.
+#
+# It takes about fifteen minutes of runner time, so it runs for a pull request
+# only while that pull request carries the `benchmark` label. Add the label to a
+# performance-sensitive change.
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [labeled, synchronize, reopened, ready_for_review]
     branches:
       - main
       - release/2.0
@@ -26,7 +30,8 @@ concurrency:
 
 jobs:
   compare:
-    if: ${{ !github.event.pull_request.draft }}
+    # `labeled` fires for any label, so check that the benchmark one is present.
+    if: ${{ !github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'benchmark') }}
     name: Base vs candidate (Swift 6.4, libvips 8.18.7)
     runs-on: ubuntu-latest
     container: swift:6.4-noble
