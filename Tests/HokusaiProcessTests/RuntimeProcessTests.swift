@@ -107,6 +107,43 @@ import Testing
         #expect(result.integer("finalActive") == 0 && result.integer("finalQueued") == 0)
     }
 
+    // MARK: - Boundary values (#111)
+
+    /// Every public operation with one extreme argument at a time (`Int.min`,
+    /// `Int.max`, the `Int32` and native-coordinate limits, `nan`, `inf`, ...).
+    /// A typed error and a result are both fine; a trap or a hang is not.
+    /// Each case runs in its own process because a trap ends the process.
+    @Test(.timeLimit(.minutes(5)))
+    func extremeArgumentsFailWithTypedErrorsAndNeverTrap() async throws {
+        let listing = try await runProbe("boundary", ["case": "list"])
+        let names = listing.errorOutput.isEmpty ? listing.rawOutput.split(separator: "\n").map(String.init) : []
+        #expect(names.count > 400, "the case list should cover the public API, got \(names.count)")
+
+        // A request-sized resize of a tiny image is accepted and then takes minutes and
+        // terabytes of work: output cost is the caller's responsibility today (#111, finding 12).
+        let costly: Set<String> = ["resize.width=10000000", "resize.width=10000001", "resize.height=10000000", "resize.height=10000001"]
+        let cases = names.filter { !costly.contains($0) }
+
+        var failures: [String] = []
+        await withTaskGroup(of: String?.self) { group in
+            var iterator = cases.makeIterator()
+            func next() {
+                guard let name = iterator.next() else { return }
+                group.addTask {
+                    guard let result = try? await runProbe("boundary", ["case": name]) else { return "\(name): the probe did not start" }
+                    if result.status != 0 { return "\(name): exit \(result.status) \(result.errorOutput.split(separator: "\n").last ?? "")" }
+                    return result.values["outcome"] == nil ? "\(name): no outcome" : nil
+                }
+            }
+            for _ in 0..<6 { next() }
+            while let failure = await group.next() {
+                if let failure { failures.append(failure) }
+                next()
+            }
+        }
+        #expect(failures.isEmpty, "\(failures.sorted().joined(separator: "\n"))")
+    }
+
     // MARK: - Untrusted loaders
 
     @Test func blockedLoadersFailAsDecodeWhileRasterFormatsKeepWorking() async throws {

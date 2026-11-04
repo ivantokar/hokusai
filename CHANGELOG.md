@@ -22,6 +22,14 @@ All notable changes to this project are documented in this file.
   with the failed write. Write to a different file and replace the original
   afterwards.
 
+### Fixed (invalid arguments, #111)
+- `extract(x:y:width:height:)` rejects coordinates above 10,000,000 (the native
+  coordinate limit already used by `extend` and `affine`) with `invalidOption`.
+  `x: Int.max` used to pass validation and trap in the native conversion.
+- `affine(outputArea:)` compares its position by range instead of `abs`, so
+  `Int.min` is a typed `invalidOption` instead of a trap during pipeline
+  construction.
+
 ## [2.0.0] - 2026-11-03
 
 Hokusai 2.0 is a redesigned library. `Hokusai` is the only image type: a

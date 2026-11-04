@@ -9,7 +9,7 @@ import Hokusai
 //
 //   HokusaiProcessProbe <scenario> [key=value ...]
 //
-// Scenarios: status, sweep, overload, cancel, stream, streamAdmission, untrusted, stress.
+// Scenarios: status, sweep, overload, cancel, stream, streamAdmission, boundary, untrusted, stress.
 // Keys: concurrent, queue, vips, block, evaluations, iterations, size.
 
 let arguments = Array(CommandLine.arguments.dropFirst())
@@ -402,6 +402,7 @@ case "overload": await runOverload()
 case "cancel": await runCancel()
 case "stream": await runStream()
 case "streamAdmission": await runStreamAdmission()
+case "boundary": await runBoundary()
 case "untrusted": await runUntrusted()
 case "stress": await runStress()
 default:

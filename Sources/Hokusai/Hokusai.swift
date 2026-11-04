@@ -154,8 +154,10 @@ public struct Hokusai: Sendable {
     public func extract(x: Int, y: Int, width: Int, height: Int) throws -> Self {
         try Self.validate(dimension: width, name: "width")
         try Self.validate(dimension: height, name: "height")
-        guard x >= 0, y >= 0 else {
-            throw HokusaiError.invalidOption(name: x < 0 ? "x" : "y", reason: "must be zero or greater")
+        for (name, value) in [("x", x), ("y", y)] {
+            guard (0...maximumNativeCoordinate).contains(value) else {
+                throw HokusaiError.invalidOption(name: name, reason: "must be in 0...\(maximumNativeCoordinate)")
+            }
         }
         return appending(.extract(x: x, y: y, width: width, height: height))
     }
@@ -220,7 +222,9 @@ public struct Hokusai: Sendable {
         if let area = outputArea {
             try Self.validate(dimension: area.width, name: "outputArea.width")
             try Self.validate(dimension: area.height, name: "outputArea.height")
-            guard abs(area.x) <= maximumNativeCoordinate, abs(area.y) <= maximumNativeCoordinate,
+            // Range checks, not abs(): abs(Int.min) is not representable and traps.
+            let range = -maximumNativeCoordinate...maximumNativeCoordinate
+            guard range.contains(area.x), range.contains(area.y),
                   area.width <= maximumNativeCoordinate, area.height <= maximumNativeCoordinate else {
                 throw HokusaiError.invalidOption(name: "outputArea", reason: "must lie within \(maximumNativeCoordinate) pixels")
             }

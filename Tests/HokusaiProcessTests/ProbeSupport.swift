@@ -6,6 +6,8 @@ struct ProbeResult {
     var values: [String: String]
     var status: Int32
     var errorOutput: String
+    /// Standard output as printed, for scenarios that list lines rather than key=value pairs.
+    var rawOutput = ""
 
     func integer(_ key: String) -> Int? { values[key].flatMap(Int.init) }
     func flag(_ key: String) -> Bool? { values[key].map { $0 == "true" } }
@@ -59,6 +61,10 @@ func runProbe(_ scenario: String, _ options: [String: String] = [:], environment
     process.standardOutput = output
     process.standardError = errors
     try process.run()
+    // A probe that wedges is killed, so a bug shows up as a failed test, not a stuck run.
+    let watchdog = DispatchWorkItem { if process.isRunning { kill(process.processIdentifier, SIGKILL) } }
+    DispatchQueue.global().asyncAfter(deadline: .now() + 120, execute: watchdog)
+    defer { watchdog.cancel() }
 
     // Read before waiting so a full pipe can never stall the child.
     let (standard, diagnostic) = await Task.detached {
@@ -71,5 +77,7 @@ func runProbe(_ scenario: String, _ options: [String: String] = [:], environment
         guard let separator = line.firstIndex(of: "=") else { continue }
         values[String(line[..<separator])] = String(line[line.index(after: separator)...])
     }
-    return ProbeResult(values: values, status: process.terminationStatus, errorOutput: String(decoding: diagnostic, as: UTF8.self))
+    var result = ProbeResult(values: values, status: process.terminationStatus, errorOutput: String(decoding: diagnostic, as: UTF8.self))
+    result.rawOutput = String(decoding: standard, as: UTF8.self)
+    return result
 }
