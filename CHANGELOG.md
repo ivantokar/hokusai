@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added (verification, #121)
+- Tests feed damaged files (truncated, bit-flipped, header-scribbled, padded) of
+  every decoder through every `failOn` level and require a typed error in bounded
+  time. Tens of thousands of mutants found no trap and no untyped error.
+- Documented: with `InputOptions.failOn = .none` a damaged file is decoded with
+  the missing data padded, so a few hundred bytes that claim 130 million pixels
+  cost a gigabyte and tens of seconds inside the default `maxPixels`. Services
+  that use `.none` should also lower `maxPixels`; the default `.warning` fails fast.
+
 ## [2.0.1] - 2026-11-04
 
 Fixes from the post-release audit (#111). No API changes.
