@@ -86,7 +86,7 @@ import Testing
         let capabilities = try Hokusai.capabilities()
         let base = try Hokusai(data: fixtureData(named: "landscape-asym", ext: "jpg")).resize(width: 64)
         if capabilities.outputFormats.contains(.avif) { sources.append(("avif", try await base.avif().data().data)) }
-        if capabilities.outputFormats.contains(.heif) { sources.append(("heif", try await base.heif().data().data)) }
+        if capabilities.canEncode(.hevc) { sources.append(("heif", try await base.heif().data().data)) }
         // Each of these needs its encoder in this libvips build (the baseline job has no GIF encoder).
         if capabilities.outputFormats.contains(.tiff) { sources.append(("tiff", try await base.tiff().data().data)) }
         if capabilities.outputFormats.contains(.webp) { sources.append(("webp", try await base.webp().data().data)) }
