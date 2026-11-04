@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-11-04
+
+Fixes from the post-release audit (#111). No API changes.
+
 ### Fixed (streaming, #111)
 - `writeChunks` no longer hangs when the scheduler rejects admission. With a full
   evaluation queue the call now fails with the typed `queuedEvaluations` resource
