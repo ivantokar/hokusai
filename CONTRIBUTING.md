@@ -38,5 +38,7 @@ acceptance criteria live in GitHub issues, and the code is checked against them.
   version.
 - Before a release, `Scripts/check-api.sh <git-ref>` lists public API changes
   against a ref.
+- A release is a `v*` tag. CI runs on the tag, on the exact commit it names; a
+  GitHub Release is published only from a tag whose run is green.
 - Commit messages and pull request descriptions are plain text; do not add
   attribution trailers.

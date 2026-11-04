@@ -65,6 +65,7 @@ struct WorkerSession {
         }
 
         var latencies: [Double] = []
+        var firstBytes: [Double] = []
         var batches: [Double] = []
         var encodedBytes = 0
         for _ in 0..<settings.profile.measuredIterations {
@@ -72,6 +73,7 @@ struct WorkerSession {
             let batch = try await runBatch(sources)
             batches.append(Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
             latencies += batch.map(\.latencyMs)
+            firstBytes += batch.compactMap(\.firstByteMs)
             encodedBytes = batch.last?.bytes ?? 0
         }
         sampler.cancel()
@@ -94,6 +96,9 @@ struct WorkerSession {
             requestsPerIteration: settings.requests,
             latencyMs: SampleStatistics(samplesMs: latencies),
             latencySamplesMs: latencies,
+            delivery: workload.delivery.label,
+            firstByteMs: firstBytes.isEmpty ? nil : SampleStatistics(samplesMs: firstBytes),
+            firstByteSamplesMs: firstBytes.isEmpty ? nil : firstBytes,
             batchMs: batches,
             requestsPerSecond: totalSeconds > 0 ? Double(latencies.count) / totalSeconds : 0,
             encodedBytes: encodedBytes,
@@ -103,18 +108,32 @@ struct WorkerSession {
     }
 
     /// Submits every request at once and times each from submission to completion.
-    private func runBatch(_ sources: [URL]) async throws -> [(latencyMs: Double, bytes: Int)] {
-        try await withThrowingTaskGroup(of: (Double, Int).self) { group in
+    private func runBatch(_ sources: [URL]) async throws -> [(latencyMs: Double, bytes: Int, firstByteMs: Double?)] {
+        try await withThrowingTaskGroup(of: (Double, Int, Double?).self) { group in
             for source in sources {
                 let workload = workload
                 group.addTask {
                     let start = DispatchTime.now().uptimeNanoseconds
-                    let output = try await workload.pipeline(reading: source).data()
-                    return (Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000, output.data.count)
+                    func elapsed() -> Double { Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000 }
+                    let pipeline = try workload.pipeline(reading: source)
+                    switch workload.delivery {
+                    case .buffer:
+                        let output = try await pipeline.data()
+                        return (elapsed(), output.data.count, nil)
+                    case .stream(let delay):
+                        var firstByte: Double?
+                        var bytes = 0
+                        try await pipeline.writeChunks(chunkSize: 64 * 1024) { chunk in
+                            if firstByte == nil { firstByte = elapsed() }
+                            bytes += chunk.count
+                            if delay > 0 { try await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000) }
+                        }
+                        return (elapsed(), bytes, firstByte)
+                    }
                 }
             }
-            var results: [(latencyMs: Double, bytes: Int)] = []
-            for try await (latency, bytes) in group { results.append((latency, bytes)) }
+            var results: [(latencyMs: Double, bytes: Int, firstByteMs: Double?)] = []
+            for try await (latency, bytes, firstByte) in group { results.append((latency, bytes, firstByte)) }
             return results
         }
     }
