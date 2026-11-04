@@ -18,9 +18,17 @@ final class ChunkQueue: @unchecked Sendable {
     let chunkSize: Int
     let depth: Int
 
-    // Producer-only: the chunk being filled and the total accepted.
+    // The chunk being filled and the total accepted. Only the producer writes them, but the
+    // producer is a libvips encoder that may call `write` from a different worker thread each
+    // time, with its own (uninstrumented) synchronisation between the calls. The lock makes
+    // the ordering Hokusai's own, so correctness does not depend on how libvips schedules its
+    // writer, and ThreadSanitizer can see it.
+    private let fill = NSLock()
     private var filling = Data()
-    private(set) var byteCount = 0
+    private var accepted = 0
+
+    /// The bytes accepted from the producer so far.
+    var byteCount: Int { fill.withLock { accepted } }
 
     // Guarded by `condition`.
     private let condition = NSCondition()
@@ -59,27 +67,30 @@ final class ChunkQueue: @unchecked Sendable {
     func write(_ bytes: UnsafeRawPointer, count: Int) -> Bool {
         var offset = 0
         while offset < count {
-            if filling.isEmpty { filling.reserveCapacity(chunkSize) }
-            let take = min(chunkSize - filling.count, count - offset)
-            filling.append((bytes + offset).assumingMemoryBound(to: UInt8.self), count: take)
-            offset += take
-            byteCount += take
-            if filling.count == chunkSize {
-                let chunk = filling
-                filling = Data()
-                guard push(chunk) else { return false }
+            let full: Data? = fill.withLock {
+                if filling.isEmpty { filling.reserveCapacity(chunkSize) }
+                let take = min(chunkSize - filling.count, count - offset)
+                filling.append((bytes + offset).assumingMemoryBound(to: UInt8.self), count: take)
+                offset += take
+                accepted += take
+                guard filling.count == chunkSize else { return nil }
+                defer { filling = Data() }
+                return filling
             }
+            // The lock is not held while the push blocks on a slow consumer.
+            if let chunk = full, !push(chunk) { return false }
         }
         return !isAborted
     }
 
     /// Flushes the last partial chunk and ends the stream.
     func finish() -> Bool {
-        if !filling.isEmpty {
-            let chunk = filling
-            filling = Data()
-            guard push(chunk) else { return false }
+        let last: Data? = fill.withLock {
+            guard !filling.isEmpty else { return nil }
+            defer { filling = Data() }
+            return filling
         }
+        if let last, !push(last) { return false }
         condition.lock()
         finished = true
         let consumer = waiting

@@ -28,6 +28,13 @@ All notable changes to this project are documented in this file.
   `ResourceKind.outputPixels`. Before, `resize(width: 10_000_000)` of a 64 x 48
   image was accepted and did not finish. Sizes up to the default work as before.
 
+### Fixed (streaming, #121)
+- `ChunkQueue`'s producer state (the chunk being filled and the byte count) is
+  now guarded by a lock. A libvips encoder may call its write callback from a
+  different worker thread each time, ordered only by libvips' own synchronisation;
+  ThreadSanitizer reported those calls as data races in the nightly job. The
+  behaviour is unchanged.
+
 ## [2.0.1] - 2026-11-04
 
 Fixes from the post-release audit (#111). No API changes.
