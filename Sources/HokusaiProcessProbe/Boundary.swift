@@ -21,6 +21,9 @@ typealias BoundaryBuild = (Hokusai) throws -> Hokusai
 /// Every combination of one public operation, one parameter and one extreme value.
 func boundaryCases() -> [(name: String, build: BoundaryBuild)] {
     var cases: [(String, BoundaryBuild)] = []
+    // Built once, outside the closures: Swift 6.0 crashes while lowering a closure
+    // that captures a function declared in main.swift.
+    let source = tiff(width: 16, height: 16)
     func integer(_ name: String, _ build: @escaping (Hokusai, Int) throws -> Hokusai) {
         for (label, value) in extremeIntegers { cases.append(("\(name)=\(label)", { try build($0, value) })) }
     }
@@ -63,9 +66,9 @@ func boundaryCases() -> [(name: String, build: BoundaryBuild)] {
     integer("text.layoutWidth") { try $0.drawText("Hi", layout: .width($1)) }
     integer("text.fitWidth") { try $0.drawText("Hi", layout: .fit(width: $1, height: 20)) }
     integer("text.fitHeight") { try $0.drawText("Hi", layout: .fit(width: 20, height: $1)) }
-    integer("input.page") { try Hokusai(data: tiff(width: 16, height: 16), options: InputOptions(page: $1)) }
-    integer("input.maxPixels") { try Hokusai(data: tiff(width: 16, height: 16), options: InputOptions(limits: InputLimits(maxPixels: $1))) }
-    integer("input.maxBytes") { try Hokusai(data: tiff(width: 16, height: 16), options: InputOptions(limits: InputLimits(maxBytes: $1))) }
+    integer("input.page") { try Hokusai(data: source, options: InputOptions(page: $1)) }
+    integer("input.maxPixels") { try Hokusai(data: source, options: InputOptions(limits: InputLimits(maxPixels: $1))) }
+    integer("input.maxBytes") { try Hokusai(data: source, options: InputOptions(limits: InputLimits(maxBytes: $1))) }
 
     double("rotate.degrees") { try $0.rotate(by: $1) }
     double("blur.sigma") { try $0.blur(sigma: $1) }
