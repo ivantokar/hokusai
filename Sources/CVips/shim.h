@@ -739,6 +739,10 @@ static inline void swift_vips_g_free(void *ptr) {
     g_free(ptr);
 }
 
+static inline int swift_vips_set_interpretation(VipsImage *in, VipsImage **out, int interpretation) {
+    return vips_copy(in, out, "interpretation", (VipsInterpretation) interpretation, NULL);
+}
+
 static inline int swift_vips_image_get_interpretation(VipsImage *in) {
     return (int) in->Type;
 }
