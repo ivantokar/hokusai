@@ -50,6 +50,11 @@ struct CellMeasurement: Codable, Equatable {
     /// End-to-end latency of every measured request, queueing included.
     var latencyMs: SampleStatistics
     var latencySamplesMs: [Double]
+    /// How the output was received: `buffer`, or `stream` with the consumer's delay.
+    var delivery: String? = nil
+    /// Time from submission to the first encoded byte, for streaming workloads.
+    var firstByteMs: SampleStatistics? = nil
+    var firstByteSamplesMs: [Double]? = nil
     /// Wall-clock time of each measured batch of concurrent requests.
     var batchMs: [Double]
     var requestsPerSecond: Double

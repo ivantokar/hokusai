@@ -89,17 +89,28 @@ extension NativeImage {
     ///
     /// libvips needs a fill with one value per band: luminance for grey,
     /// grey plus alpha, RGB, or RGBA. 16-bit images use the 0...65535 range.
+    ///
+    /// The bands are read by the image's colour interpretation, not only by
+    /// their number: four bands are CMYK, not RGBA, in a CMYK image, whose
+    /// fourth band is ink and whose alpha, if any, is the fifth. A CMYK fill is
+    /// the plain RGB to CMYK mapping (no profile), so white is no ink at all.
     func fill(_ rgba: [Double]) -> [Double] {
         guard rgba.count == 4 else { return rgba }
         let luminance = 0.2126 * rgba[0] + 0.7152 * rgba[1] + 0.0722 * rgba[2]
-        let values: [Double]
-        switch bands {
-        case 1: values = [luminance]
-        case 2: values = [luminance, rgba[3]]
-        case 3: values = [rgba[0], rgba[1], rgba[2]]
-        default: values = rgba + Array(repeating: 255, count: bands - 4)
-        }
         let interpretation = swift_vips_image_get_interpretation(pointer)
+        let values: [Double]
+        if interpretation == VIPS_INTERPRETATION_CMYK.rawValue, bands >= 4 {
+            let black = 255 - max(rgba[0], rgba[1], rgba[2])
+            let ink = black >= 255 ? [0, 0, 0] : rgba[0...2].map { 255 * (255 - $0 - black) / (255 - black) }
+            values = ink + [black] + (bands > 4 ? [rgba[3]] : []) + Array(repeating: 255, count: max(0, bands - 5))
+        } else {
+            switch bands {
+            case 1: values = [luminance]
+            case 2: values = [luminance, rgba[3]]
+            case 3: values = [rgba[0], rgba[1], rgba[2]]
+            default: values = rgba + Array(repeating: 255, count: bands - 4)
+            }
+        }
         let sixteenBit = interpretation == VIPS_INTERPRETATION_RGB16.rawValue || interpretation == VIPS_INTERPRETATION_GREY16.rawValue
         return sixteenBit ? values.map { $0 * 257 } : values
     }

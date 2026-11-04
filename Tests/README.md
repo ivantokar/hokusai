@@ -48,13 +48,20 @@ understood. Run it on a branch with `gh workflow run sanitizers.yml --ref <branc
 once the file is on the default branch, or let a PR that edits it trigger it.
 
 `.github/workflows/benchmark.yml` builds the base and the candidate of a pull
-request to `release/2.0` on one runner and compares them with
+request to `main` or `release/2.0` on one runner and compares them with
 `hokusai benchmark compare` (latency and peak resident memory), in the order
 base, candidate, candidate, base so the two base runs show the runner's noise.
-It is advisory and never fails on a slowdown. Time to first byte waits for the
-streaming API.
+It is advisory and never fails on a slowdown.
 
-Still open under #50: fresh-process runtime variants, sanitizer jobs, the
-benchmark harness (base-versus-candidate on one runner, memory and
-time-to-first-byte), and the streaming/backpressure and vector-PDF suites that
-depend on features not shipped yet.
+Time to first byte and slow-consumer memory are measured by the streaming
+workloads `stream-ttfb` and `stream-slow-consumer` (`hokusai benchmark run
+--workloads stream-ttfb,stream-slow-consumer`): the first reports the time from
+submission to the first encoded byte next to total latency, the second makes the
+consumer take 5 ms per chunk so peak resident memory shows whether it follows
+the output size. They run on demand; the pull request job keeps to the buffered
+workloads because its base commit may not have them.
+
+CI (`.github/workflows/ci.yml`) runs on pull requests to `main` and
+`release/2.0`, on pushes to `main`, and on every `v*` tag. The tag run is the
+release check: it builds and tests the exact commit the tag names, and a GitHub
+Release is published only from a tag whose run is green.

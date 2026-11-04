@@ -151,7 +151,7 @@ One encoder configuration means the same thing wherever it is written: `data()` 
 
 - `data()` needs an explicit encoder (`.jpeg()`, `.png()`, `.webp()`, `.avif()`, `.pdf()`), because a pipeline can originate from several sources and "same as the input" has no meaning.
 - `write(to:)` infers the encoder from the file extension only when you did not select one. An explicit encoder always wins, so choose a matching extension yourself: `.png().write(to: "a.jpg")` writes PNG data.
-- Raster formats are encoded straight into the memory buffer or file; nothing is staged as a second copy. PDF is the exception for now and is built in memory first.
+- Raster formats are encoded straight into the memory buffer or file; nothing is staged as a second copy. PDF is written directly to a file as Cairo produces it; `data()` collects the same writer's bytes (see PDF output). TIFF is the exception that must be encoded in memory first when it is streamed.
 - The file is created when the first bytes are written, so a pipeline that fails before producing output never touches the destination. If a write fails after output began, Hokusai removes the regular file it was writing instead of leaving a partial image, which also means an existing file at that path may be replaced or removed. A destination that is a file the pipeline reads, including through a symbolic link or a hard link, is refused with `HokusaiError.invalidOption` (`output URL`) before anything is written, and the file is left as it was; write to a different file and replace the original yourself. A destination that cannot be opened or written (missing folder, permissions, full disk) throws `HokusaiError.io` with a `.write` operation and the system's reason.
 
 ### Streaming output
@@ -166,7 +166,7 @@ let info = try await image
 
 `writeChunks` hands the encoded bytes to an async closure as they are produced, so a response can start before the image is fully encoded and a slow client slows encoding down instead of growing memory. It needs an explicit encoder, applies the same codec options and metadata policy as `data()` and `write(to:)`, and returns the final `OutputInfo` (its `byteCount` is the total streamed).
 
-- Chunks are owned `Data` of `chunkSize` bytes (the last may be smaller, none are empty). The next chunk is not produced until your closure returns for the previous one, and at most `chunkSize × 4` bytes of encoded output are held at any time.
+- Chunks are owned `Data` of `chunkSize` bytes (the last may be smaller, none are empty). The next chunk is not produced until your closure returns for the previous one, and at most `chunkSize × 4` bytes of *encoded output* are held in the hand-off at any time (TIFF excepted, below). That bounds the queue between the encoder and your closure, not the memory libvips and the codecs use to decode, transform and encode the image, which depends on its size and on `maxConcurrentEvaluations`.
 - If your closure throws, encoding stops and your error is thrown. Cancelling the calling task stops encoding and throws `CancellationError`. Either way, and if encoding fails after output began, the consumer has already received a partial stream and must discard it.
 - A failure before any output (a missing file, a limit, an unsupported encoder) never calls your closure.
 - TIFF is the one format that cannot be written forward-only, so it is encoded in memory first and then streamed in chunks.
@@ -191,7 +191,7 @@ let image = try Hokusai(
 - **Decoder failure level** (`failOn`): `.none` decodes whatever it can; `.truncated` fails on truncated files; `.error` also fails on decoder errors; `.warning` (the default, as in Sharp) also fails on decoder warnings, so it rejects slightly malformed but viewable images. Failures are `HokusaiError.decode`. Choose the level that matches how strict your application must be.
 - **Access** (`access`): `.random` (default) allows any pixel order. `.sequential` streams top to bottom with lower peak memory for single-pass pipelines; operations that read out of order may fail with a decode error. Measure before using it: for heavily downscaled JPEGs it was slower in our benchmarks.
 - **Pages** (`page`): selects exactly one zero-based page (TIFF, PDF, GIF, WebP, ...). Without it you get the first page. A page beyond the file's page count is an `invalidOption`; selecting a page other than 0 in a single-page format is `unsupported`. Page ranges, all-page loading, and animation are not supported; see [Multi-page and animation](#multi-page-and-animation).
-- **Limits** (`limits`): `maxBytes` (default 512 MiB) is checked before `Data` is copied and against a file's size; `maxPixels` (default 268,402,689, i.e. 16383 × 16383) and `maxChannels` (default 8) are checked from the header before any pixels are decoded. Exceeding one throws `HokusaiError.resource`. Tighten them to your upload policy; native codec safety limits always remain in force.
+- **Limits** (`limits`): `maxBytes` (default 512 MiB) is checked before `Data` is copied and against a file's size; `maxPixels` (default 268,402,689, i.e. 16383 × 16383) and `maxChannels` (default 8) are checked from the header before any pixels are decoded. Exceeding one throws `HokusaiError.resource`. Tighten them to your upload policy; native codec safety limits always remain in force. **These limits judge the source, not the result.** A small image can be resized, extended or rotated to a very large one, and Hokusai does not bound that: a service that takes sizes from a request must validate them itself. A bound on output cost is tracked in [#120](https://github.com/ivantokar/hokusai/issues/120).
 - **Freshness** (`revalidate`): libvips caches recent file opens, so a file replaced at the same path may be served from cache. `revalidate: true` bypasses the cache for that open. It has no effect on `Data`, and Hokusai keeps no cache of its own.
 
 ## Transformations
@@ -271,7 +271,7 @@ try Hokusai.configure(.init(
 
 `configure(_:)` may be called once. Configuration freezes at the first `initialize()`, `capabilities()`, or `data()`/`write(to:)`; building pipelines does not freeze it. Later calls throw.
 
-The two concurrency settings are different resources. `maxConcurrentEvaluations` limits how many whole pipelines Hokusai runs at once, which bounds memory and latency; extra evaluations wait in FIFO order as suspended tasks. `vipsConcurrency` sets how many libvips worker threads one image computation may use. With both `.automatic`, Hokusai currently admits one evaluation per active processor and libvips uses its own default; these defaults will be tuned from benchmarks before the major release. `maxQueuedEvaluations` (unbounded by default) rejects new work with `HokusaiError.resource` (kind `.queuedEvaluations`) instead of retaining more source bytes in memory.
+The two concurrency settings are different resources. `maxConcurrentEvaluations` limits how many whole pipelines Hokusai runs at once, which bounds memory and latency; extra evaluations wait in FIFO order as suspended tasks. `vipsConcurrency` sets how many libvips worker threads one image computation may use. With both `.automatic`, Hokusai admits one evaluation per active processor and libvips uses its own default. These defaults are provisional: no benchmark has yet shown them to be best for any workload, and `hokusai benchmark run` sweeps both dimensions so you can measure your own. Set both explicitly for a production service. `maxQueuedEvaluations` (unbounded by default) rejects new work with `HokusaiError.resource` (kind `.queuedEvaluations`) instead of retaining more source bytes in memory.
 
 **Untrusted input.** `blockUntrustedOperations` turns on libvips' own switch for loaders it marks untrusted (poppler PDF, SVG, ImageMagick, OpenSlide). Turn it on for services that decode uploads from strangers; a source in a blocked format then fails as `decode`. JPEG, PNG, WebP, GIF, TIFF and HEIF are not affected, and neither is `pdf()` output, which is Cairo. libvips reads `VIPS_BLOCK_UNTRUSTED` too, so setting that environment variable has the same effect.
 
@@ -287,7 +287,7 @@ let status = Hokusai.runtimeStatus
 print(status.queuedEvaluations, status.activeEvaluations)
 ```
 
-Codec availability depends on how libvips was built, not on Hokusai's package dependencies. AVIF is verified by encoding and decoding a tiny image. PDF input (libvips `pdfload`) and PDF output (Cairo) are reported separately, and `blockedInputFormats` lists formats the build can decode but `blockUntrustedOperations` has switched off, so "absent" and "blocked" are not confused. Font-file loading (`TextStyle.fontFile`) is not reported because libvips only warns when it cannot load one, so it cannot be probed reliably. `hokusai info` prints the same report.
+Codec availability depends on how libvips was built, not on Hokusai's package dependencies. Reading and writing AVIF are reported separately: writing is verified by encoding a tiny image, reading by decoding a small embedded AVIF, because a build can have an AV1 decoder without an AV1 encoder and the other way round. PDF input (libvips `pdfload`) and PDF output (Cairo) are reported separately, and `blockedInputFormats` lists formats the build can decode but `blockUntrustedOperations` has switched off, so "absent" and "blocked" are not confused. Font-file loading (`TextStyle.fontFile`) is not reported because libvips only warns when it cannot load one, so it cannot be probed reliably. `hokusai info` prints the same report.
 
 `runtimeStatus` never initializes libvips. Its counters describe Hokusai's evaluation scheduler; they do not measure libvips worker threads or memory allocated by codec libraries.
 
@@ -338,7 +338,7 @@ The command line is a client of the public API and adds no image processing of i
 - **`benchmark compare`** matches cells of two results and flags a change in median latency, and in the worker's peak resident memory, only when it exceeds both a relative and an absolute threshold (`--relative-threshold`, `--absolute-threshold-ms`, `--memory-relative-threshold`, `--memory-absolute-threshold-mib`). It is advisory, always exits zero, and warns when the two runs came from different native stacks. Absolute milliseconds are not portable; compare base and candidate on the same machine.
 - **Failures** are one line built from the error's case. `--verbose` adds the native diagnostic when there is one.
 
-## 1.0 ergonomics roadmap
+## Roadmap
 
 Hokusai follows the useful parts of Sharp's server-side image-processing
 ergonomics—clear input, fluent transforms, configured output, and useful

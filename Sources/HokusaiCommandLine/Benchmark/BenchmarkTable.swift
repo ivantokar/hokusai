@@ -2,7 +2,7 @@ import Foundation
 
 /// How a run is laid out in the terminal.
 enum BenchmarkTable {
-    static let headers = ["Workload", "Eval", "libvips", "Req/s", "p50", "p95", "p99", "Active", "Peak RSS"]
+    static let headers = ["Workload", "Eval", "libvips", "Req/s", "p50", "p95", "p99", "First byte p50", "Active", "Peak RSS"]
 
     static func rows(for run: BenchmarkRun) -> [[String]] {
         run.cells.map { cell in
@@ -14,6 +14,7 @@ enum BenchmarkTable {
                 format(cell.latencyMs.p50Ms),
                 format(cell.latencyMs.p95Ms),
                 format(cell.latencyMs.p99Ms),
+                cell.firstByteMs.map { format($0.p50Ms) } ?? "-",
                 "\(cell.activeEvaluationsHighWater)",
                 String(format: "%.0f MB", Double(cell.peakResidentBytes) / 1_048_576),
             ]

@@ -655,8 +655,12 @@ public struct Hokusai: Sendable {
     /// smaller; none are empty). The next chunk is not requested until
     /// `consume` has returned for the previous one, and the encoder waits when
     /// the consumer falls behind, so at most `chunkSize × 4` bytes of encoded
-    /// output are held, however large the image. Slow responses therefore
-    /// slow encoding down instead of growing memory.
+    /// output are held in the hand-off, however large the image. Slow
+    /// responses therefore slow encoding down instead of growing the queue.
+    /// That bounds encoded output only: the memory libvips and the codecs use
+    /// to decode and transform the image is not bounded by `chunkSize`. TIFF
+    /// cannot be written forward-only, so its complete output is encoded in
+    /// memory first and then streamed in chunks.
     ///
     /// If `consume` throws, encoding stops and that error is thrown. If the
     /// calling task is cancelled, encoding stops and `CancellationError` is

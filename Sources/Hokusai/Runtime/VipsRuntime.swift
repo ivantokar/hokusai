@@ -95,20 +95,17 @@ enum VipsRuntime {
         if exists("gifsave") { outputs.insert(.gif) }
         if hokusai_cairo_pdf_available() != 0 { outputs.insert(.pdf) }
 
-        // A HEIF saver may lack an AV1 encoder, and a HEIF loader may lack an
-        // AV1 decoder, so AVIF is verified by a round trip of a tiny image.
-        var heifCompressions = Set<HEIFCompression>()
-        if exists("heifsave") {
-            if swift_vips_heif_roundtrip_probe(1) == 0 {
-                outputs.insert(.avif)
-                inputs.insert(.avif)
-                heifCompressions.insert(.av1)
-            }
-            if swift_vips_heif_roundtrip_probe(0) == 0 {
-                heifCompressions.insert(.hevc)
-            }
-            if !heifCompressions.isEmpty { outputs.insert(.heif) }
-        }
+        // The HEIF saver and loader are optional plugins, and each direction has
+        // its own codecs: an AV1 decoder can exist without an AV1 encoder and the
+        // other way round. Each is therefore probed alone: an encoder by encoding
+        // a tiny image, a decoder by decoding a small embedded AVIF.
+        let heif = heifCapabilities(
+            saverExists: exists("heifsave"), loaderUsable: usable.contains(.heif),
+            encodesAV1: exists("heifsave") && swift_vips_heif_encode_probe(1) == 0,
+            encodesHEVC: exists("heifsave") && swift_vips_heif_encode_probe(0) == 0,
+            decodesAV1: usable.contains(.heif) && swift_vips_avif_decode_probe() == 0)
+        inputs.formUnion(heif.inputs)
+        outputs.formUnion(heif.outputs)
         // A failed probe leaves libvips diagnostics behind; do not leak them
         // into the next unrelated error.
         _ = VipsDiagnostics.drain()
@@ -120,10 +117,28 @@ enum VipsRuntime {
             outputFormats: outputs,
             blockedInputFormats: blocked,
             textRendering: exists("text"),
-            heifCompressions: heifCompressions,
+            heifCompressions: heif.compressions,
             pngPalette: exists("pngsave") && swift_vips_png_palette_probe() == 0
         )
     }
+}
+
+/// What HEIF and AVIF support follows from the probes, one per direction and codec.
+///
+/// Reading and writing are independent: a runtime with only an AV1 decoder
+/// reads AVIF and cannot write it, and one with only an encoder is the reverse.
+/// `.heif` input comes from the loader itself and is not decided here.
+func heifCapabilities(
+    saverExists: Bool, loaderUsable: Bool, encodesAV1: Bool, encodesHEVC: Bool, decodesAV1: Bool
+) -> (inputs: Set<ImageFormat>, outputs: Set<ImageFormat>, compressions: Set<HEIFCompression>) {
+    var compressions = Set<HEIFCompression>()
+    if saverExists, encodesAV1 { compressions.insert(.av1) }
+    if saverExists, encodesHEVC { compressions.insert(.hevc) }
+    var inputs = Set<ImageFormat>(), outputs = Set<ImageFormat>()
+    if loaderUsable, decodesAV1 { inputs.insert(.avif) }
+    if compressions.contains(.av1) { outputs.insert(.avif) }
+    if !compressions.isEmpty { outputs.insert(.heif) }
+    return (inputs, outputs, compressions)
 }
 
 /// Splits the loaders libvips has into those that can run and those it blocks.
