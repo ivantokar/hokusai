@@ -133,8 +133,12 @@ extension NativeImage {
         // Percentiles are read from an 8-bit luminance image.
         var luminance = try colour.applying("normalize") { swift_vips_colourspace_bw($0, $1) }
         luminance = try luminance.applying("normalize") { swift_vips_extract_band($0, $1, 0, 1) }
-        if maximum > 255 {
-            luminance = try luminance.applying("normalize") { swift_vips_linear1($0, $1, 255 / maximum, 0.5) }
+        // The scale comes from the converted image, not from this one: libvips'
+        // B_W conversion of a 16-bit image already returns 8-bit luminance, and
+        // rescaling that again by this image's range would flatten it to zero.
+        let luminanceMaximum = luminance.bandMaximum
+        if luminanceMaximum > 255 {
+            luminance = try luminance.applying("normalize") { swift_vips_linear1($0, $1, 255 / luminanceMaximum, 0.5) }
             luminance = try luminance.applying("normalize") { swift_vips_cast($0, $1, Int32(VIPS_FORMAT_UCHAR.rawValue)) }
         }
 
