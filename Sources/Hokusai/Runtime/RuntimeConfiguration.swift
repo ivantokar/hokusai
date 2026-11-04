@@ -11,7 +11,8 @@ import Foundation
 /// try Hokusai.configure(.init(
 ///     maxConcurrentEvaluations: .fixed(4),
 ///     maxQueuedEvaluations: 64,
-///     vipsConcurrency: .fixed(2)
+///     vipsConcurrency: .fixed(2),
+///     maxOutputPixels: 100_000_000
 /// ))
 /// ```
 public struct RuntimeConfiguration: Sendable, Hashable {
@@ -47,12 +48,29 @@ public struct RuntimeConfiguration: Sendable, Hashable {
     /// HEIF loaders are not marked untrusted by libvips.
     public var blockUntrustedOperations: Bool
 
+    /// Default for ``maxOutputPixels``: 1,073,741,824 (2^30) pixels.
+    public static let defaultMaxOutputPixels = 1_073_741_824
+
+    /// The most pixels any image a pipeline produces may have, final or
+    /// intermediate, as width × height. A pipeline that would exceed it fails
+    /// with ``HokusaiError/resource(_:)`` (kind `.outputPixels`) while it is being
+    /// planned, before any pixel is computed.
+    ///
+    /// ``InputLimits`` only judge the source. Without this a request that
+    /// controls a size, such as `resize(width: 10_000_000)`, would occupy an
+    /// evaluation slot for as long as the work takes. The default only refuses
+    /// sizes no real canvas has; a service should set it to its own policy.
+    /// `nil` removes the bound.
+    public var maxOutputPixels: Int?
+
     public init(
         maxConcurrentEvaluations: ConcurrencyLimit = .automatic,
         maxQueuedEvaluations: Int? = nil,
         vipsConcurrency: ConcurrencyLimit = .automatic,
-        blockUntrustedOperations: Bool = false
+        blockUntrustedOperations: Bool = false,
+        maxOutputPixels: Int? = RuntimeConfiguration.defaultMaxOutputPixels
     ) {
+        self.maxOutputPixels = maxOutputPixels
         self.blockUntrustedOperations = blockUntrustedOperations
         self.maxConcurrentEvaluations = maxConcurrentEvaluations
         self.maxQueuedEvaluations = maxQueuedEvaluations
@@ -66,6 +84,9 @@ public struct RuntimeConfiguration: Sendable, Hashable {
         }
         if let value = maxQueuedEvaluations, value < 0 {
             throw HokusaiError.invalidOption(name: "maxQueuedEvaluations", reason: "must be zero or greater")
+        }
+        if let value = maxOutputPixels, value < 1 {
+            throw HokusaiError.invalidOption(name: "maxOutputPixels", reason: "must be at least 1")
         }
         if let value = vipsConcurrency.fixedValue, value < 1 || Int32(exactly: value) == nil {
             throw HokusaiError.invalidOption(name: "vipsConcurrency", reason: "must be in 1...\(Int32.max)")

@@ -4,6 +4,57 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed (clahe, #71)
+- `clahe(width:height:maxSlope:)` equalises lightness (the L band of LAB) and keeps
+  the colour, instead of equalising R, G and B separately, which shifted hues.
+  Greyscale images are equalised directly and alpha is unchanged. The result on
+  colour images is therefore different from before.
+- `clahe` accepts 16-bit images (the lightness is brought to 8 bits for libvips'
+  `hist_local` and scaled back). Float images still throw `unsupported`.
+
+### Added (shrink-on-load for WebP, #72)
+- A still WebP whose pipeline starts with a `resize` (optionally after
+  `autoOrient`) is now scaled by the decoder, as a JPEG already was. The same
+  rules apply, the output dimensions are identical to the normal path, and the
+  loaded size is never below what the resize needs. Animated WebP keeps the
+  normal path. On the 5760 x 3840 fixture, resizing to 200 pixels wide took about
+  65 ms instead of 89 ms (debug build, best of six).
+
+### Added (output size limit, #120)
+- `RuntimeConfiguration.maxOutputPixels` (default 2^30 pixels, `nil` for no bound)
+  limits every image a pipeline creates, final or intermediate, as width x height.
+  It is checked while the pipeline is lowered, before any pixel is computed, and a
+  pipeline over the limit fails with `HokusaiError.resource` of the new kind
+  `ResourceKind.outputPixels`. Before, `resize(width: 10_000_000)` of a 64 x 48
+  image was accepted and did not finish. Sizes up to the default work as before.
+
+### Fixed (streaming, #121)
+- `ChunkQueue`'s producer state (the chunk being filled and the byte count) is
+  now guarded by a lock. A libvips encoder may call its write callback from a
+  different worker thread each time, ordered only by libvips' own synchronisation;
+  ThreadSanitizer reported those calls as data races in the nightly job. The
+  behaviour is unchanged.
+
+### Fixed (colour, #121)
+- `modulate` on a 16-bit greyscale image came out as a three-band image labelled
+  greyscale, so it was written as a mislabelled 16-bit file. It is now labelled RGB16
+  like any other 16-bit colour result.
+
+### Added (verification, #121)
+- Tests feed damaged files (truncated, bit-flipped, header-scribbled, padded) of
+  every decoder through every `failOn` level and require a typed error in bounded
+  time. Tens of thousands of mutants found no trap and no untyped error.
+- Documented: with `InputOptions.failOn = .none` a damaged file is decoded with
+  the missing data padded, so a few hundred bytes that claim 130 million pixels
+  cost a gigabyte and tens of seconds inside the default `maxPixels`. Services
+  that use `.none` should also lower `maxPixels`; the default `.warning` fails fast.
+- Further tests: `write(to:)` cancelled at 30 moments for six formats (no partial
+  file; an existing file may be removed once the write began, see #134); output
+  sizes of resize, extend, rotate and extract against a reference for random sizes and
+  fits; affine entries together, extreme rotation angles and NaN colour components;
+  greyscale, grey with alpha and 16-bit grey against the equivalent RGB picture for
+  17 operations; CMYK sizes and white backgrounds.
+
 ## [2.0.1] - 2026-11-04
 
 Fixes from the post-release audit (#111). No API changes.

@@ -329,7 +329,12 @@ public struct Hokusai: Sendable {
         return appending(.normalize(lower: lower, upper: upper))
     }
 
-    /// Local contrast enhancement (CLAHE) on each colour band of an 8-bit image.
+    /// Local contrast enhancement (CLAHE) on the lightness of an 8-bit or 16-bit image.
+    ///
+    /// Lightness is equalised in LAB and the colour is kept, so hues do not drift
+    /// as they do when each of R, G and B is equalised on its own. Greyscale
+    /// images are equalised directly, and alpha is left unchanged. Float images
+    /// throw `unsupported`.
     ///
     /// `width` and `height` are the tile size in pixels and `maxSlope` limits
     /// how much contrast a tile may gain (0 disables the limit, 3 is a common

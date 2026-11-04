@@ -178,12 +178,45 @@ extension NativeImage {
 
     /// Contrast-limited adaptive histogram equalisation on each colour band.
     func clahe(width: Int, height: Int, maxSlope: Int) throws -> NativeImage {
-        guard bandMaximum == 255 else {
-            throw HokusaiError.unsupported(feature: "clahe", reason: "requires an 8-bit image")
+        guard bandMaximum == 255 || bandMaximum == 65535 else {
+            throw HokusaiError.unsupported(feature: "clahe", reason: "requires an 8-bit or 16-bit image")
         }
-        return try onColourBands("clahe") { colour in
-            try colour.applying("clahe") { swift_vips_hist_local($0, $1, Int32(width), Int32(height), Int32(maxSlope)) }
+        let format = bandFormat
+        let interpretation = swift_vips_image_get_interpretation(pointer)
+        let (colour, alpha) = try splitAlpha()
+        // libvips' hist_local takes 8-bit samples only, so the equalised band is
+        // brought to 0...255 and a 16-bit result is scaled back afterwards.
+        let wide = colour.bandMaximum > 255
+        func equalise(_ band: NativeImage) throws -> NativeImage {
+            let narrow = wide
+                ? try band.applying("clahe") { swift_vips_linear1($0, $1, 1.0 / 257, 0) }.castRounded(to: Int32(VIPS_FORMAT_UCHAR.rawValue), operation: "clahe")
+                : band
+            let local = try narrow.applying("clahe") { swift_vips_hist_local($0, $1, Int32(width), Int32(height), Int32(maxSlope)) }
+            return wide ? try local.applying("clahe") { swift_vips_linear1($0, $1, 257, 0) } : local
         }
+
+        let processed: NativeImage
+        if colour.bands == 1 {
+            processed = try equalise(colour)
+        } else {
+            // Equalise lightness only, so the relative levels of the colour bands (the hue) are kept.
+            let lab = try colour.applying("clahe") { swift_vips_colourspace($0, $1, VIPS_INTERPRETATION_LAB) }
+            let lightness = try lab.applying("clahe") { swift_vips_extract_band($0, $1, 0, 1) }
+            let chroma = try lab.applying("clahe") { swift_vips_extract_band($0, $1, 1, 2) }
+            let scaled = try lightness.applying("clahe") { swift_vips_linear1($0, $1, 255.0 / 100, 0) }
+                .castRounded(to: Int32(VIPS_FORMAT_UCHAR.rawValue), operation: "clahe")
+            let equalised = try scaled.applying("clahe") { swift_vips_hist_local($0, $1, Int32(width), Int32(height), Int32(maxSlope)) }
+                .applying("clahe") { swift_vips_cast($0, $1, Int32(VIPS_FORMAT_FLOAT.rawValue)) }
+                .applying("clahe") { swift_vips_linear1($0, $1, 100.0 / 255, 0) }
+            let joined = try Self.bandjoin([equalised, chroma], operation: "clahe")
+                .applying("clahe") { swift_vips_set_interpretation($0, $1, Int32(VIPS_INTERPRETATION_LAB.rawValue)) }
+            processed = try joined.applying("clahe") {
+                swift_vips_colourspace($0, $1, VipsInterpretation(rawValue: interpretation))
+            }
+        }
+        let restored = try processed.castRounded(to: format, operation: "clahe")
+        guard let alpha else { return restored }
+        return try Self.bandjoin([restored, alpha], operation: "clahe")
     }
 
     /// `out = in ^ (1 / value)` on the colour bands; values above 1 brighten.
@@ -239,7 +272,12 @@ extension NativeImage {
             if colour.bandMaximum > 255, result.bandMaximum <= 255 {
                 result = try result.applying("modulate") { swift_vips_linear1($0, $1, 257, 0) }
             }
-            let interpretation = swift_vips_image_get_interpretation(colour.pointer)
+            // A grey input comes out as RGB, so the label is the input's only when the band count is
+            // unchanged; otherwise it is the RGB label of the same depth.
+            let sameBands = result.bands == colour.bands
+            let interpretation = sameBands
+                ? swift_vips_image_get_interpretation(colour.pointer)
+                : Int32((colour.bandMaximum > 255 ? VIPS_INTERPRETATION_RGB16 : VIPS_INTERPRETATION_sRGB).rawValue)
             return try result.castRounded(to: colour.bandFormat, operation: "modulate")
                 .applying("modulate") { swift_vips_set_interpretation($0, $1, interpretation) }
         }
