@@ -114,8 +114,7 @@ func runBoundary(case name: String) async {
 }
 
 /// #120: what the output pixel limit refuses and what it lets through.
-func runOutputLimit() async {
-    _ = applyConfiguration()
+func runOutputLimit(unbounded: Bool) async {
     let source = tiff(width: 64, height: 48)
     func outcome(_ build: (Hokusai) throws -> Hokusai) async -> String {
         do {
@@ -128,7 +127,6 @@ func runOutputLimit() async {
         }
     }
     // With the limit off these two would run for as long as the work takes.
-    let unbounded = options["maxOutput"] == "none"
     let started = Date()
     report([
         "small": await outcome { try $0.resize(width: 100) },

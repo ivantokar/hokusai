@@ -356,7 +356,10 @@ case "cancel": await runCancel()
 case "stream": await runStream()
 case "streamAdmission": await runStreamAdmission()
 case "boundary": await runBoundary(case: options["case"] ?? "")
-case "outputLimit": await runOutputLimit()
+case "outputLimit":
+    // Configured here: Swift 6.0 cannot compile Boundary.swift calling back into main.swift.
+    _ = applyConfiguration()
+    await runOutputLimit(unbounded: options["maxOutput"] == "none")
 case "untrusted": await runUntrusted()
 case "stress": await runStress()
 default:
