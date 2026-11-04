@@ -20,6 +20,8 @@ on:
       - main
     tags:
       - "v*"
+  # Re-run a tag whose runner never came: gh workflow run ci.yml --ref v2.0.1
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -188,6 +190,8 @@ jobs:
     steps:
       - run: |
           echo "changes=${{ needs.changes.result }} linux=${{ needs.linux.result }} macos=${{ needs.macos.result }}"
-          case "${{ needs.changes.result }}${{ needs.linux.result }}${{ needs.macos.result }}" in
-            *failure*|*cancelled*) exit 1 ;;
-          esac
+          # Only success and skipped pass. A job can also end "abandoned" when no
+          # runner picks it up, which must not count as green.
+          for result in "${{ needs.changes.result }}" "${{ needs.linux.result }}" "${{ needs.macos.result }}"; do
+            case "$result" in success|skipped) ;; *) echo "not green: $result"; exit 1 ;; esac
+          done
