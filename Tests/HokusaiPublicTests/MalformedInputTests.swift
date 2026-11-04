@@ -87,9 +87,10 @@ import Testing
         let base = try Hokusai(data: fixtureData(named: "landscape-asym", ext: "jpg")).resize(width: 64)
         if capabilities.outputFormats.contains(.avif) { sources.append(("avif", try await base.avif().data().data)) }
         if capabilities.outputFormats.contains(.heif) { sources.append(("heif", try await base.heif().data().data)) }
-        sources.append(("tiff", try await base.tiff().data().data))
-        sources.append(("webp", try await base.webp().data().data))
-        sources.append(("gif", try await base.gif().data().data))
+        // Each of these needs its encoder in this libvips build (the baseline job has no GIF encoder).
+        if capabilities.outputFormats.contains(.tiff) { sources.append(("tiff", try await base.tiff().data().data)) }
+        if capabilities.outputFormats.contains(.webp) { sources.append(("webp", try await base.webp().data().data)) }
+        if capabilities.outputFormats.contains(.gif) { sources.append(("gif", try await base.gif().data().data)) }
         if capabilities.inputFormats.contains(.svg) {
             sources.append(("svg", Data("<svg xmlns='http://www.w3.org/2000/svg' width='40' height='30'><rect width='40' height='30' fill='red'/></svg>".utf8)))
         }
