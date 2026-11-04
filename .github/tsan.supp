@@ -8,3 +8,10 @@
 # this one pattern and none implicates Hokusai's own synchronisation.
 race:swift_vips_file_sink_open
 race:swift_vips_file_sink_write
+#
+# The stream target in Sources/CVips/shim.h follows the same pattern: it is
+# filled in by the encoding thread and then read by a libvips worker through the
+# write callback, ordered by uninstrumented libvips and GLib synchronisation.
+# Reported on the first scheduled run after 2.0.0, in the process probe.
+race:swift_vips_callback_target_new
+race:swift_vips_callback_target_write
