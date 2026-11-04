@@ -95,8 +95,7 @@ func boundaryCases() -> [(name: String, build: BoundaryBuild)] {
     return cases
 }
 
-func runBoundary() async {
-    let name = options["case"] ?? ""
+func runBoundary(case name: String) async {
     if name == "list" {
         for entry in boundaryCases() { print(entry.name) }
         return

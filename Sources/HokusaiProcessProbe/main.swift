@@ -354,7 +354,7 @@ case "overload": await runOverload()
 case "cancel": await runCancel()
 case "stream": await runStream()
 case "streamAdmission": await runStreamAdmission()
-case "boundary": await runBoundary()
+case "boundary": await runBoundary(case: options["case"] ?? "")
 case "untrusted": await runUntrusted()
 case "stress": await runStress()
 default:
