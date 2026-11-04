@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-04
+
+The fixes from the post-release audit (#111) and the changes that followed it.
+It is a minor release because it adds API (`RuntimeConfiguration.maxOutputPixels`,
+`ResourceKind.outputPixels`) and changes the output of `clahe` on colour images.
+Nothing was published as 2.0.1: those fixes are part of this release.
+
 ### Changed (clahe, #71)
 - `clahe(width:height:maxSlope:)` equalises lightness (the L band of LAB) and keeps
   the colour, instead of equalising R, G and B separately, which shifted hues.
@@ -54,10 +61,6 @@ All notable changes to this project are documented in this file.
   fits; affine entries together, extreme rotation angles and NaN colour components;
   greyscale, grey with alpha and 16-bit grey against the equivalent RGB picture for
   17 operations; CMYK sizes and white backgrounds.
-
-## [2.0.1] - 2026-11-04
-
-Fixes from the post-release audit (#111). No API changes.
 
 ### Fixed (streaming, #111)
 - `writeChunks` no longer hangs when the scheduler rejects admission. With a full
