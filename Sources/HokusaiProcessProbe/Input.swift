@@ -1,7 +1,29 @@
 import Foundation
+import Hokusai
 
 // Not in main.swift: Swift 6.0 crashes lowering the captures of a function declared there
-// when another file calls it from a closure.
+// when another file calls it (the helpers here are used by Boundary.swift).
+func report(_ pairs: KeyValuePairs<String, Any>) {
+    for (key, value) in pairs { print("\(key)=\(value)") }
+}
+
+/// The name of the error case, which is what callers branch on.
+func category(_ error: Error) -> String {
+    if error is CancellationError { return "cancelled" }
+    switch error as? HokusaiError {
+    case .invalidInput: return "invalidInput"
+    case .invalidOption: return "invalidOption"
+    case .unsupported: return "unsupported"
+    case .decode: return "decode"
+    case .transform: return "transform"
+    case .encode: return "encode"
+    case .io: return "io"
+    case .resource(let failure): return failure.kind == .queuedEvaluations ? "queueFull" : "resource"
+    case .runtime: return "runtime"
+    case nil: return "other"
+    }
+}
+
 /// An uncompressed RGB TIFF, so the probe needs no encoder of its own.
 func tiff(width: Int, height: Int) -> Data {
     var data = Data()

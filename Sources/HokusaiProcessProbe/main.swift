@@ -25,27 +25,6 @@ let options = Dictionary(
 
 func integer(_ key: String) -> Int? { options[key].flatMap(Int.init) }
 
-func report(_ pairs: KeyValuePairs<String, Any>) {
-    for (key, value) in pairs { print("\(key)=\(value)") }
-}
-
-/// The name of the error case, which is what callers branch on.
-func category(_ error: Error) -> String {
-    if error is CancellationError { return "cancelled" }
-    switch error as? HokusaiError {
-    case .invalidInput: return "invalidInput"
-    case .invalidOption: return "invalidOption"
-    case .unsupported: return "unsupported"
-    case .decode: return "decode"
-    case .transform: return "transform"
-    case .encode: return "encode"
-    case .io: return "io"
-    case .resource(let failure): return failure.kind == .queuedEvaluations ? "queueFull" : "resource"
-    case .runtime: return "runtime"
-    case nil: return "other"
-    }
-}
-
 // MARK: - Input
 
 /// What one evaluation does: enough work to hold a slot for a moment.
