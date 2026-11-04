@@ -112,3 +112,30 @@ func runBoundary(case name: String) async {
         report(["outcome": category(error)])
     }
 }
+
+/// #120: what the output pixel limit refuses and what it lets through.
+func runOutputLimit() async {
+    _ = applyConfiguration()
+    let source = tiff(width: 64, height: 48)
+    func outcome(_ build: (Hokusai) throws -> Hokusai) async -> String {
+        do {
+            let output = try await build(Hokusai(data: source)).png().data()
+            return "ok \(output.info.width)x\(output.info.height)"
+        } catch let HokusaiError.resource(failure) where failure.kind == .outputPixels {
+            return "outputPixels limit=\(failure.limit ?? -1) actual=\(failure.actual ?? -1)"
+        } catch {
+            return category(error)
+        }
+    }
+    // With the limit off these two would run for as long as the work takes.
+    let unbounded = options["maxOutput"] == "none"
+    let started = Date()
+    report([
+        "small": await outcome { try $0.resize(width: 100) },
+        "final": await outcome { try $0.resize(width: 6_000, height: 5_000, fit: .fill) },
+        "intermediate": await outcome { try $0.resize(width: 6_000, height: 5_000, fit: .fill).resize(width: 10, height: 10, fit: .fill) },
+        "extend": unbounded ? "skipped" : await outcome { try $0.extend(to: ImageSize(width: 200_000, height: 200_000)) },
+        "huge": unbounded ? "skipped" : await outcome { try $0.resize(width: 10_000_000) },
+        "seconds": String(format: "%.1f", Date().timeIntervalSince(started)),
+    ])
+}

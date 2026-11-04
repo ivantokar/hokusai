@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added (output size limit, #120)
+- `RuntimeConfiguration.maxOutputPixels` (default 2^30 pixels, `nil` for no bound)
+  limits every image a pipeline creates, final or intermediate, as width x height.
+  It is checked while the pipeline is lowered, before any pixel is computed, and a
+  pipeline over the limit fails with `HokusaiError.resource` of the new kind
+  `ResourceKind.outputPixels`. Before, `resize(width: 10_000_000)` of a 64 x 48
+  image was accepted and did not finish. Sizes up to the default work as before.
+
 ## [2.0.1] - 2026-11-04
 
 Fixes from the post-release audit (#111). No API changes.
