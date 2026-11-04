@@ -31,6 +31,17 @@ All notable changes to this project are documented in this file.
   AVIF. `heifCompressions` lists the codecs that can be *encoded*, which is
   what `canEncode(_:)` has always meant.
 
+### Fixed (colour, #111)
+- A background colour on a CMYK image is read as RGB and converted to CMYK. It
+  used to be copied band by band, so `.white` filled with full ink (near black)
+  and `.red` with an unrelated dark colour in `extend`, `rotate`, `affine` and
+  `resize(fit: .contain)`. White is now white. The default `.transparent`
+  background has no alpha to land in on a CMYK image and now fills black, as it
+  does on an RGB image; it was white only because RGBA zeros are "no ink".
+- `normalize()` on a 16-bit image stretched nothing: libvips returns the 8-bit
+  luminance it measures the percentiles on, and that was rescaled a second time
+  by the 16-bit range, so the image looked flat and was returned unchanged.
+
 ## [2.0.0] - 2026-11-03
 
 Hokusai 2.0 is a redesigned library. `Hokusai` is the only image type: a

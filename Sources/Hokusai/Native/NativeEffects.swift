@@ -133,8 +133,12 @@ extension NativeImage {
         // Percentiles are read from an 8-bit luminance image.
         var luminance = try colour.applying("normalize") { swift_vips_colourspace_bw($0, $1) }
         luminance = try luminance.applying("normalize") { swift_vips_extract_band($0, $1, 0, 1) }
-        if maximum > 255 {
-            luminance = try luminance.applying("normalize") { swift_vips_linear1($0, $1, 255 / maximum, 0.5) }
+        // The scale comes from the converted image, not from this one: libvips'
+        // B_W conversion of a 16-bit image already returns 8-bit luminance, and
+        // rescaling that again by this image's range would flatten it to zero.
+        let luminanceMaximum = luminance.bandMaximum
+        if luminanceMaximum > 255 {
+            luminance = try luminance.applying("normalize") { swift_vips_linear1($0, $1, 255 / luminanceMaximum, 0.5) }
             luminance = try luminance.applying("normalize") { swift_vips_cast($0, $1, Int32(VIPS_FORMAT_UCHAR.rawValue)) }
         }
 
@@ -228,7 +232,16 @@ extension NativeImage {
             let adjusted = try lch.applying("modulate") {
                 swift_vips_linear_array($0, $1, [brightness, saturation, 1], [0, 0, hue], 3)
             }
-            return try adjusted.applying("modulate") { swift_vips_colourspace_srgb($0, $1) }
+            var result = try adjusted.applying("modulate") { swift_vips_colourspace_srgb($0, $1) }
+            // The conversion to sRGB yields 8-bit samples. Bring them to the input's depth and
+            // label them as the input was, so a 16-bit image stays an RGB16 image on every
+            // libvips version (8.16 left it labelled sRGB, which later steps do not narrow).
+            if colour.bandMaximum > 255, result.bandMaximum <= 255 {
+                result = try result.applying("modulate") { swift_vips_linear1($0, $1, 257, 0) }
+            }
+            let interpretation = swift_vips_image_get_interpretation(colour.pointer)
+            return try result.castRounded(to: colour.bandFormat, operation: "modulate")
+                .applying("modulate") { swift_vips_set_interpretation($0, $1, interpretation) }
         }
     }
 }
