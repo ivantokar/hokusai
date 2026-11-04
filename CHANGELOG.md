@@ -22,6 +22,15 @@ All notable changes to this project are documented in this file.
   with the failed write. Write to a different file and replace the original
   afterwards.
 
+### Fixed (capabilities, #111)
+- `RuntimeCapabilities` reports AVIF and HEIF reading and writing independently.
+  Before, AVIF was added to both lists only after a tiny image had been encoded
+  and decoded, so a runtime with an AV1 decoder and no AV1 encoder reported no
+  AVIF input, and one with an encoder and no decoder reported no AVIF output.
+  Encoding is now probed by encoding and decoding by decoding a small embedded
+  AVIF. `heifCompressions` lists the codecs that can be *encoded*, which is
+  what `canEncode(_:)` has always meant.
+
 ## [2.0.0] - 2026-11-03
 
 Hokusai 2.0 is a redesigned library. `Hokusai` is the only image type: a

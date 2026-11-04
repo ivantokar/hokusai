@@ -230,4 +230,51 @@ import Testing
         try await holder.value
         #expect(try await scheduler.run { _ in 7 } == 7)
     }
+
+    // MARK: - HEIF and AVIF directions (#111)
+
+    @Test func aDecoderWithoutAnEncoderReadsAVIFAndCannotWriteIt() {
+        let caps = heifCapabilities(saverExists: false, loaderUsable: true, encodesAV1: false, encodesHEVC: false, decodesAV1: true)
+        #expect(caps.inputs == [.avif])
+        #expect(caps.outputs.isEmpty && caps.compressions.isEmpty)
+    }
+
+    @Test func anEncoderWithoutADecoderWritesAVIFAndCannotReadIt() {
+        let caps = heifCapabilities(saverExists: true, loaderUsable: true, encodesAV1: true, encodesHEVC: false, decodesAV1: false)
+        #expect(caps.inputs.isEmpty)
+        #expect(caps.outputs == [.avif, .heif] && caps.compressions == [.av1])
+    }
+
+    @Test func anEncoderAloneWithoutAnyLoaderStillWrites() {
+        let caps = heifCapabilities(saverExists: true, loaderUsable: false, encodesAV1: true, encodesHEVC: true, decodesAV1: false)
+        #expect(caps.inputs.isEmpty)
+        #expect(caps.outputs == [.avif, .heif] && caps.compressions == [.av1, .hevc])
+    }
+
+    @Test func hevcAloneIsHEIFOutputButNotAVIF() {
+        let caps = heifCapabilities(saverExists: true, loaderUsable: true, encodesAV1: false, encodesHEVC: true, decodesAV1: false)
+        #expect(caps.outputs == [.heif] && caps.compressions == [.hevc])
+    }
+
+    @Test func aProbeNeverReportsACodecThatNeedsAMissingPlugin() {
+        let caps = heifCapabilities(saverExists: false, loaderUsable: false, encodesAV1: true, encodesHEVC: true, decodesAV1: true)
+        #expect(caps.inputs.isEmpty && caps.outputs.isEmpty && caps.compressions.isEmpty)
+    }
+
+    /// What this runtime reports must be what it can do, in each direction on its own.
+    @Test func theReportMatchesWhatAVIFReallyDoes() async throws {
+        let capabilities = try Hokusai.capabilities()
+        let png = try makePNG(width: 8, height: 8, bands: 3, pixels: [UInt8](repeating: 120, count: 8 * 8 * 3))
+
+        // Encoding: reported exactly when an AVIF can be produced.
+        var avif: Data?
+        do { avif = try await Hokusai(data: png).avif().data().data } catch { avif = nil }
+        #expect((avif != nil) == capabilities.canEncode(.avif))
+
+        // Decoding: reported exactly when the runtime reads an AVIF, whether or not it can write one.
+        if let avif {
+            let decoded = (try? await Hokusai(data: avif).metadata()) != nil
+            #expect(decoded == capabilities.canDecode(.avif))
+        }
+    }
 }

@@ -94,9 +94,10 @@ public struct ConcurrencyLimit: Sendable, Hashable, CustomStringConvertible {
 /// Image capabilities of the linked native libraries.
 ///
 /// Codec availability depends on how libvips (and its codec libraries) were
-/// built, not on Hokusai's package dependencies. AVIF encoding is verified by
-/// encoding a tiny image, because a HEIF saver can exist without an AV1
-/// encoder.
+/// built, not on Hokusai's package dependencies. Reading and writing are
+/// reported independently: AVIF encoding is verified by encoding a tiny image
+/// and AVIF decoding by decoding a small embedded one, because a HEIF saver can
+/// exist without an AV1 encoder and a HEIF loader without an AV1 decoder.
 public struct RuntimeCapabilities: Sendable, Hashable {
     /// The linked libvips version, for example `8.18.5`.
     public let libvipsVersion: String
@@ -122,8 +123,9 @@ public struct RuntimeCapabilities: Sendable, Hashable {
     /// Whether `drawText` can render text (libvips built with Pango/Cairo).
     public let textRendering: Bool
 
-    /// The HEIF codecs this build can both encode and decode. `.av1` is what
-    /// AVIF needs; `.hevc` is what `.heic` files need and is often missing.
+    /// The HEIF codecs this build can encode. `.av1` is what AVIF output
+    /// needs; `.hevc` is what `.heic` output needs and is often missing.
+    /// Decoding is reported separately, through ``canDecode(_:)``.
     public let heifCompressions: Set<HEIFCompression>
 
     /// Whether palette (indexed) PNG output works. It needs libimagequant or
