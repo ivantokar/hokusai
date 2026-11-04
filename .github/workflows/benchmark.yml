@@ -11,6 +11,7 @@ name: Benchmark
 # regression as real only when it appears in both pairs and exceeds that noise.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
       - release/2.0
@@ -25,6 +26,7 @@ concurrency:
 
 jobs:
   compare:
+    if: ${{ !github.event.pull_request.draft }}
     name: Base vs candidate (Swift 6.4, libvips 8.18.7)
     runs-on: ubuntu-latest
     container: swift:6.4-noble
