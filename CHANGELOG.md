@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed (clahe, #71)
+- `clahe(width:height:maxSlope:)` equalises lightness (the L band of LAB) and keeps
+  the colour, instead of equalising R, G and B separately, which shifted hues.
+  Greyscale images are equalised directly and alpha is unchanged. The result on
+  colour images is therefore different from before.
+- `clahe` accepts 16-bit images (the lightness is brought to 8 bits for libvips'
+  `hist_local` and scaled back). Float images still throw `unsupported`.
+
 ## [2.0.1] - 2026-11-04
 
 Fixes from the post-release audit (#111). No API changes.
