@@ -13,6 +13,15 @@ All notable changes to this project are documented in this file.
   received were still queued, now throws `CancellationError` instead of returning
   the `OutputInfo` of a partial stream. `HokusaiNIO.writeByteBuffers` inherits both.
 
+### Changed (file output, #111)
+- `write(to:)` and the CLI refuse a destination that is a file the pipeline
+  reads, including a source reached through a symbolic link or a hard link and
+  the file of a composite layer. The write fails with `HokusaiError.invalidOption`
+  (`output URL`) before it starts and the file is not touched. Before, a decode
+  that was still reading (sequential access) failed and the source was removed
+  with the failed write. Write to a different file and replace the original
+  afterwards.
+
 ## [2.0.0] - 2026-11-03
 
 Hokusai 2.0 is a redesigned library. `Hokusai` is the only image type: a
