@@ -4,12 +4,13 @@ name: CI
 # A GitHub Release is published from a tag only after that run is green, so the
 # released commit, not a similar one, was built and tested.
 #
-# Cost: a pull request that only touches documentation skips the build jobs, a
-# draft skips them until it is marked ready, and a ready pull request runs the two
-# Linux jobs (Swift 6.0 with libvips 8.16 and Swift 6.4 with libvips 8.18). The
-# full matrix, with macOS, runs after a merge to main, on a tag and on a manual
-# run. The single required check is `CI complete`, which passes when nothing it
-# waits on failed; a skipped job counts as passing.
+# Cost: nothing is run twice. A pull request that only touches documentation skips
+# the build jobs, a draft skips them until it is marked ready, and a ready pull
+# request runs the two Linux jobs (Swift 6.0 with libvips 8.16 and Swift 6.4 with
+# libvips 8.18). The merge to main then runs only what the pull request did not,
+# which is macOS. A tag and a manual run build the whole matrix. The single
+# required check is `CI complete`, which passes when nothing it waits on failed; a
+# skipped job counts as passing.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -57,7 +58,11 @@ jobs:
 
   linux:
     needs: changes
-    if: needs.changes.outputs.code == 'true' && !github.event.pull_request.draft
+    # Not repeated after the merge to main: the pull request already ran both Linux jobs on this
+    # code. A tag and a manual run build everything.
+    if: >-
+      needs.changes.outputs.code == 'true' && !github.event.pull_request.draft &&
+      (github.event_name != 'push' || startsWith(github.ref, 'refs/tags/'))
     name: Linux ${{ matrix.name }} (Swift ${{ matrix.swift }}, libvips ${{ matrix.vips }})
     runs-on: ubuntu-latest
     container: swift:${{ matrix.swift }}-${{ matrix.distro }}
