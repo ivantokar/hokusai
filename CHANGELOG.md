@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added (vector PDF, #13)
+- A new product, `HokusaiPDF`, for vector PDF documents: `VectorDocument` of `VectorPage`s with ordered items (background, rectangle, line, image, text). Text is laid out by Pango and written as real text, so it can be selected and searched; a typed `VectorTextStyle` sets family, size, weight, italic, colour, alignment, wrapping and line spacing, and text can be plain or Pango markup. Fills can be a colour or a linear gradient. Images are Hokusai pipelines, embedded as rasters. `data()` and `write(to:)` (atomic) produce the PDF, with document metadata.
+- `Hokusai.pdf()` is unchanged and stays a raster export. Pango 1.44 or later is needed by `HokusaiPDF` only; the `Hokusai` product does not depend on it.
+
 ### Added (advanced filters, #26)
 - `convolve(_:)` with a validated `ConvolutionKernel` (size, coefficient count, finite values, scale, offset), `linear(multiply:add:)`, and `recombine(_:)` with a 3×3 `ColorMatrix` (`.sepia`, `.luminance`, `.swapRedBlue` or your own).
 - `dilate(radius:)` and `erode(radius:)`, morphology on each channel with a square window.

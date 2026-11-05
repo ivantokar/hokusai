@@ -6,10 +6,12 @@ set -euo pipefail
 swift --version
 echo "libvips $(pkg-config --modversion vips)"
 echo "cairo   $(pkg-config --modversion cairo)"
+echo "pango   $(pkg-config --modversion pangocairo)"
 vips --vips-config
 
 pkg-config --atleast-version=8.16.0 vips || { echo "libvips < 8.16 is below the Hokusai baseline" >&2; exit 1; }
 pkg-config --atleast-version=1.16.0 cairo || { echo "Cairo < 1.16 is below the Hokusai baseline" >&2; exit 1; }
+pkg-config --atleast-version=1.44.0 pangocairo || { echo "Pango < 1.44 is below the HokusaiPDF baseline" >&2; exit 1; }
 pkg-config --exists cairo-pdf || { echo "Cairo was built without PDF surface support" >&2; exit 1; }
 
 if [ -n "${EXPECTED_SWIFT:-}" ]; then

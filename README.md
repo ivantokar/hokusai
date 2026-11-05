@@ -289,7 +289,7 @@ let info = try await Hokusai(url: URL(fileURLWithPath: "photo.jpg"))
 info.pdf?.pageWidth   // 595.276 points; info.width/height are the embedded pixels
 ```
 
-`.pdf()` is a **raster-document terminal**: the evaluated pixels are embedded as an image on a page by Cairo. Text drawn into the pipeline has already become pixels, so it is not selectable, and an input PDF that is rasterised and written again loses its vector content, fonts, links, and structure. Vector documents are a separate surface, tracked in [#13](https://github.com/ivantokar/hokusai/issues/13).
+`.pdf()` is a **raster-document terminal**: the evaluated pixels are embedded as an image on a page by Cairo. Text drawn into the pipeline has already become pixels, so it is not selectable, and an input PDF that is rasterised and written again loses its vector content, fonts, links, and structure. For selectable text and vector content use the separate `HokusaiPDF` product, described below.
 
 - **Page size** says how big the page is, in points: `.image(dpi:)` (the raster at that resolution plus margins), `.a4(_:)`, `.letter(_:)` with a portrait or landscape orientation, or `.points(width:height:)`. Fixed sizes carry no DPI, because there is nothing for a resolution to change.
 - **Layout.** The raster is scaled uniformly to fit inside the margins and placed by `anchor` (centred by default).
@@ -298,6 +298,33 @@ info.pdf?.pageWidth   // 595.276 points; info.width/height are the embedded pixe
 - **Colour.** Pixels are rendered as 8-bit sRGB. An embedded ICC profile is neither applied nor embedded.
 - **Document properties** are written only if you set them (title, author, subject, keywords, creator, dates). Nothing is copied from the source's EXIF, XMP, or IPTC. Without a `creationDate` Cairo records the current time, so set one for reproducible bytes.
 - **Output.** `data()` and `write(to:)` use the same writer. A file is written as Cairo produces bytes, never built as `Data` first, through the same temporary file as every other format, so a failed or cancelled write leaves an existing file untouched. The raster is converted once into a single buffer, so peak memory is one full-size raster lower than before (about 184 MiB less for an 8000 × 6000 RGBA image).
+
+### Vector PDF documents (`HokusaiPDF`)
+
+A separate product in the same package draws pages directly with Cairo and Pango, so text stays real, selectable and searchable text, and shapes and gradients stay vector. Images are Hokusai pipelines, embedded as rasters. The core does not depend on Pango; only code that imports `HokusaiPDF` needs it (Pango 1.44 or later: `libpango1.0-dev`, or `brew install pango`).
+
+```swift
+import Hokusai
+import HokusaiPDF
+
+let cover = try VectorPage(size: .a4())
+    .background(.linearGradient(from: navy, to: teal))                        // or .color(...), or several stops
+    .image(hero.resize(width: 715), frame: VectorRect(x: 40, y: 40, width: 515, height: 200), fit: .cover)
+    .text("Quarterly Performance", at: VectorPoint(x: 40, y: 270), width: 515,
+          style: VectorTextStyle(family: "sans", size: 30, weight: .bold, color: .white))
+    .rectangle(VectorRect(x: 40, y: 330, width: 160, height: 90), fill: .color(navy), cornerRadius: 8)
+    .line(from: VectorPoint(x: 40, y: 440), to: VectorPoint(x: 555, y: 440), stroke: VectorStroke(color: .white))
+
+let document = VectorDocument(pages: [cover], metadata: PDFDocumentMetadata(title: "Q3 report"))
+try await document.write(to: URL(fileURLWithPath: "report.pdf"))     // or: let pdf = try await document.data()
+```
+
+- **Coordinates** are PDF points (1/72 inch), origin at the top-left, y growing downwards. Page sizes: `.a4()`, `.letter()` (portrait or landscape) or `.points(width:height:)` (1 to 14400).
+- **Items** are drawn in the order they are added: `background`, `rectangle` (fill, stroke, corner radius), `line`, `image` (`.contain`, `.cover`, `.fill`, opacity), and `text`. A page is an immutable value, and each item is validated when it is added.
+- **Text** is plain or Pango markup (`TextContent`), with a typed `VectorTextStyle`: font family, size, weight, italic, colour, alignment (including justified), wrapping, and line spacing. A width wraps lines; without one only line breaks do. The font is resolved by fontconfig (CoreText-backed on macOS) and embedded as a subset with a character map, which is what makes the text searchable. A family that is not installed falls back to the system default.
+- **Images** are evaluated when the document is written and embedded at their own resolution; resize them to about the pixel size the frame needs (100 to 150 dpi for screens) to keep the file small. Alpha is kept.
+- **Output** is `data()` (with the page count and byte size) or `write(to:)`, which replaces an existing file atomically. Invalid markup, a failing image pipeline, or a Cairo failure throw `HokusaiError`; cancelling the task throws `CancellationError`.
+- **Not in the first version:** embedding font files, tables and columns, links and bookmarks, rotated text, and streaming the PDF while it is built.
 
 ## Runtime
 

@@ -21,6 +21,12 @@ let package = Package(
             name: "HokusaiNIO",
             targets: ["HokusaiNIO"]
         ),
+        // Vector PDF documents with selectable text (#13). A separate product so that
+        // Pango is needed only by code that uses it.
+        .library(
+            name: "HokusaiPDF",
+            targets: ["HokusaiPDF"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.7.0"),
@@ -48,6 +54,17 @@ let package = Package(
                 .brew(["cairo"]),
             ]
         ),
+        // PURPOSE: System library wrapper for Pango with its Cairo bridge, used only by the
+        // vector PDF product. Pango 1.44 or later (line spacing factors) is enforced by the
+        // module header.
+        .systemLibrary(
+            name: "CPangoCairo",
+            pkgConfig: "pangocairo",
+            providers: [
+                .apt(["libpango1.0-dev"]),
+                .brew(["pango"]),
+            ]
+        ),
         // PURPOSE: Main Hokusai library target
         .target(
             name: "Hokusai",
@@ -67,6 +84,12 @@ let package = Package(
         .executableTarget(
             name: "HokusaiCLI",
             dependencies: ["HokusaiCommandLine"]
+        ),
+        // PURPOSE: Vector PDF scene API: pages of text, shapes, gradients and raster layers,
+        // drawn directly with Cairo and Pango.
+        .target(
+            name: "HokusaiPDF",
+            dependencies: ["Hokusai", "CPangoCairo"]
         ),
         .target(
             name: "HokusaiNIO",
@@ -110,6 +133,10 @@ let package = Package(
             resources: [
                 .copy("Fixtures")
             ]
+        ),
+        .testTarget(
+            name: "HokusaiPDFTests",
+            dependencies: ["Hokusai", "HokusaiPDF"]
         ),
         // PURPOSE: Layer C. Each test starts HokusaiProcessProbe as a fresh
         // process, because runtime configuration freezes at first use.
