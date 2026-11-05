@@ -62,7 +62,7 @@ dependencies: [
 ]
 ```
 
-Add `Hokusai` to your target dependencies. The optional product `HokusaiNIO` bridges SwiftNIO `ByteBuffer`.
+Add `Hokusai` to your target dependencies. The optional product `HokusaiNIO` bridges SwiftNIO `ByteBuffer`, and `HokusaiPDF` draws vector PDF documents (see below; it is the only product that needs Pango).
 
 ## Quick start
 
