@@ -87,5 +87,5 @@ struct BenchmarkRunCommand: ReportingCommand {
 /// results record it. Change it with the release: a test compares it to the newest
 /// release heading in CHANGELOG.md.
 enum HokusaiVersion {
-    static let current = "2.2.0"
+    static let current = "2.2.1"
 }

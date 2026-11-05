@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-11-05
+
+### Added
+
+- Each GitHub Release carries a prebuilt macOS arm64 `hokusai` archive with its sha256, for the
+  Homebrew formula.
+
 ### Fixed
 
 - `hokusai --version` prints the release version. The CLI had no version flag, and benchmark
