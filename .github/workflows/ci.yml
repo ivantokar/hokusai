@@ -220,12 +220,13 @@ jobs:
           fetch-depth: 0
 
       # Catches workflow mistakes (bad expressions, unknown inputs, shell errors) before they
-      # break a run. SC1090 is the `source` of the Swift toolchain's environment file, which
-      # cannot be followed statically.
+      # break a run. Two things are ignored on purpose: SC1090 (the `source` of the Swift
+      # toolchain's environment file, which cannot be followed statically) and the pinned
+      # version's list of runner labels, which predates `macos-26`.
       - name: Lint the workflows
         run: |
           bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
-          ./actionlint -color -ignore 'SC1090'
+          ./actionlint -color -ignore 'SC1090' -ignore 'label "macos-26" is unknown'
 
       # A change to the library's sources is a change users can see, so it needs a changelog
       # entry. A pull request that has none for a good reason carries the `no-changelog` label.
