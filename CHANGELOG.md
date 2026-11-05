@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- `hokusai --version` prints the release version. The CLI had no version flag, and benchmark
+  results recorded the stale `2.0.0-dev`.
+
 ## [2.2.0] - 2026-11-05
 
 New API on top of 2.1: raw pixels, large uploads, advanced filters, a vector PDF product

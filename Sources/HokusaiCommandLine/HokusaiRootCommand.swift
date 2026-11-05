@@ -9,6 +9,7 @@ public struct HokusaiRootCommand: AsyncParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "hokusai",
         abstract: "First-party CLI for trying Hokusai image operations and benchmarks.",
+        version: HokusaiVersion.current,
         subcommands: [
             RunCommand.self,
             InfoCommand.self,
