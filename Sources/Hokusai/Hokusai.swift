@@ -79,6 +79,67 @@ public struct Hokusai: Sendable {
         self.init(plan: .source(.file(url, options)))
     }
 
+    /// Creates a pipeline from raw pixels the caller already holds.
+    ///
+    /// Use this when pixels come from a renderer, a camera buffer, a
+    /// computer-vision step or a binary protocol rather than an encoded file.
+    /// The layout is described by `format`: interleaved unsigned samples,
+    /// colour first and alpha last (see ``RawPixelFormat``). Rows run top to
+    /// bottom.
+    ///
+    /// The bytes are retained copy-on-write until evaluation and copied into
+    /// native storage when a terminal method opens the source, so the caller
+    /// may reuse its buffer at once. Nothing borrows caller memory across an
+    /// `await`.
+    ///
+    /// - Parameters:
+    ///   - data: The pixels. Exactly `rowStride × height` bytes; the padding
+    ///     after the last row may be missing.
+    ///   - width: Pixels per row, `1...Int32.max`.
+    ///   - height: Number of rows, `1...Int32.max`.
+    ///   - format: The channel layout and sample width.
+    ///   - rowStride: Bytes between the starts of two rows. `nil` means
+    ///     tightly packed (`width × format.bytesPerPixel`).
+    ///   - premultiplied: Whether the colour channels were already multiplied
+    ///     by alpha. They are divided out on load, so every later operation
+    ///     sees straight alpha, as for an encoded source. Ignored for a format
+    ///     without alpha.
+    ///   - limits: Bounds on the image, checked before any native call.
+    ///
+    /// - Throws: ``HokusaiError/invalidOption(name:reason:)`` for a bad
+    ///   dimension or stride, ``HokusaiError/invalidInput(reason:)`` when the
+    ///   byte count does not match the geometry, and
+    ///   ``HokusaiError/resource(_:)`` when a limit is exceeded.
+    ///
+    /// ```swift
+    /// let frame = try Hokusai(raw: pixels, width: 640, height: 480, format: .rgba8)
+    /// let thumbnail = try await frame.resize(width: 320).webp().data()
+    /// ```
+    public init(
+        raw data: Data,
+        width: Int,
+        height: Int,
+        format: RawPixelFormat,
+        rowStride: Int? = nil,
+        premultiplied: Bool = false,
+        limits: InputLimits = InputLimits()
+    ) throws {
+        let source = try RawSource(
+            data: data, width: width, height: height, format: format,
+            rowStride: rowStride, premultiplied: premultiplied, limits: limits)
+        self.init(plan: .source(.raw(source)))
+    }
+
+    /// Creates a pipeline from the raw pixels another pipeline produced.
+    ///
+    /// Equivalent to `init(raw:width:height:format:rowStride:premultiplied:limits:)`
+    /// with the values `image` carries, so a ``RawImage`` round-trips.
+    public init(raw image: RawImage, limits: InputLimits = InputLimits()) throws {
+        try self.init(
+            raw: image.data, width: image.width, height: image.height, format: image.format,
+            rowStride: image.rowStride, premultiplied: image.premultiplied, limits: limits)
+    }
+
     // MARK: - Pipeline transformations
 
     /// Applies the source EXIF orientation before later transformations.
@@ -631,6 +692,49 @@ public struct Hokusai: Sendable {
         let plan = plan, terminal = terminal
         return try await EvaluationScheduler.shared.run { context in
             try Evaluator.encode(plan, terminal, as: format, context: context)
+        }
+    }
+
+    /// Evaluates the pipeline and returns raw pixels instead of an encoded image.
+    ///
+    /// The result is described completely by the returned ``RawImage``: its
+    /// dimensions, channel layout, sample width, row stride and alpha
+    /// convention. Rows are tightly packed. Nothing is encoded, so no metadata
+    /// is kept and no encoder may be selected on this pipeline.
+    ///
+    /// The image is converted to `format` first. Colour is converted to sRGB
+    /// (or to grey for a grey format) by libvips' colour-space conversion;
+    /// embedded ICC profiles are not applied. A grey source gets its channel
+    /// repeated for an RGB format, and a colour source is reduced to
+    /// luminance for a grey format. Converting between 8 and 16 bits scales
+    /// the range, so full white stays full white.
+    ///
+    /// - Parameters:
+    ///   - format: The layout to return. Defaults to ``RawPixelFormat/rgba8``.
+    ///   - premultiplied: Return colour channels multiplied by alpha. Ignored
+    ///     for a format without alpha.
+    ///   - background: What transparent pixels are composited over when
+    ///     `format` has no alpha channel. Ignored for a format with alpha.
+    ///
+    /// - Throws: ``HokusaiError/invalidOption(name:reason:)`` when an encoder
+    ///   was selected, plus any error from the pipeline itself.
+    ///
+    /// ```swift
+    /// let frame = try await image.resize(width: 320).raw(.rgb8, background: .white)
+    /// frame.data.count == frame.rowStride * frame.height
+    /// ```
+    public func raw(
+        _ format: RawPixelFormat = .rgba8,
+        premultiplied: Bool = false,
+        background: Color = .white
+    ) async throws -> RawImage {
+        guard terminal.encoder == nil else {
+            throw HokusaiError.invalidOption(name: "raw", reason: "an encoder is selected; raw output has no encoder, so use data() for an encoded image")
+        }
+        _ = try background.rgba8()
+        let plan = plan
+        return try await EvaluationScheduler.shared.run { context in
+            try Evaluator.raw(plan, as: format, premultiplied: premultiplied, background: background, context: context)
         }
     }
 

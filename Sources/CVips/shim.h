@@ -836,6 +836,31 @@ static inline void swift_vips_g_free(void *ptr) {
     g_free(ptr);
 }
 
+/**
+ * @brief A native image that owns a copy of `size` bytes of tightly packed pixels.
+ *
+ * `format` is a VipsBandFormat and `interpretation` a VipsInterpretation. The bytes are copied
+ * before this returns, so lazy evaluation never borrows the caller's memory. The caller checked
+ * that `size` is exactly width * height * bands * bytes-per-sample.
+ */
+static inline VipsImage *swift_vips_new_from_memory(
+    const void *data, size_t size, int width, int height, int bands, int format, int interpretation
+) {
+    VipsImage *raw = vips_image_new_from_memory_copy(data, size, width, height, bands, (VipsBandFormat) format);
+    if (raw == NULL) {
+        return NULL;
+    }
+    VipsImage *tagged = NULL;
+    const int status = vips_copy(raw, &tagged, "interpretation", (VipsInterpretation) interpretation, NULL);
+    g_object_unref(raw);
+    return status == 0 ? tagged : NULL;
+}
+
+/** @brief Evaluates `in` into one malloc'd buffer (release with swift_vips_g_free), or NULL. */
+static inline void *swift_vips_write_to_memory(VipsImage *in, size_t *size) {
+    return vips_image_write_to_memory(in, size);
+}
+
 static inline int swift_vips_set_interpretation(VipsImage *in, VipsImage **out, int interpretation) {
     return vips_copy(in, out, "interpretation", (VipsInterpretation) interpretation, NULL);
 }

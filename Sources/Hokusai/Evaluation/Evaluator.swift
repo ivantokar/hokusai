@@ -63,6 +63,21 @@ enum Evaluator {
         }
     }
 
+    /// Evaluates `plan` and returns tightly packed raw pixels in `format`.
+    static func raw(
+        _ plan: ImagePlan, as format: RawPixelFormat, premultiplied: Bool, background: Color, context: EvaluationContext
+    ) throws -> RawImage {
+        try classifyingSourceFailures(in: context) {
+            let image = try context.sink(for: build(plan, context: context, scope: nil))
+            context.trace?.record(.sinkSelected("memory raw \(format)"))
+            let converted = try image.converted(to: format, premultiplied: premultiplied, background: try background.rgba8())
+            let data = try converted.pixelBytes()
+            return RawImage(
+                data: data, width: converted.width, height: converted.height, format: format,
+                premultiplied: premultiplied && format.hasAlpha)
+        }
+    }
+
     /// Fails when `destination` is a file the plan reads.
     ///
     /// The destination is opened for writing, and truncated, at the first
@@ -125,6 +140,8 @@ enum Evaluator {
             return image.sourceMetadata(sourceByteSize: data.count)
         case .text(let text):
             return try NativeImage.renderText(text).sourceMetadata(sourceByteSize: nil)
+        case .raw(let raw):
+            return try NativeImage.open(raw: raw).sourceMetadata(sourceByteSize: raw.data.count)
         }
     }
 
@@ -258,7 +275,7 @@ enum Evaluator {
             switch source {
             case .file(let url, let options): reduced = try NativeImage.open(path: url.path, options: options, decoderShrink: plan.factor, kind: kind)
             case .data(let data, let options): reduced = try NativeImage.open(data: data, options: options, decoderShrink: plan.factor, kind: kind)
-            case .text: reduced = native
+            case .text, .raw: reduced = native
             }
             // The decoder may round a dimension up but never below what was
             // asked; if it did, keep the full-size source rather than resize
@@ -279,6 +296,7 @@ enum Evaluator {
         case .file(let url, let options): try NativeImage.open(path: url.path, options: options)
         case .data(let data, let options): try NativeImage.open(data: data, options: options)
         case .text(let text): try NativeImage.renderText(text, trace: trace)
+        case .raw(let raw): try NativeImage.open(raw: raw)
         }
     }
 

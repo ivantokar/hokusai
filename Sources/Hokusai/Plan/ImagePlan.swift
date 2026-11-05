@@ -101,11 +101,14 @@ enum ImageSource: Sendable {
     case data(Data, InputOptions)
     /// Generated text, rendered at evaluation time.
     case text(TextSource)
+    /// Caller-supplied raw pixels, copied into native storage at evaluation time.
+    case raw(RawSource)
 
     var options: InputOptions {
         switch self {
         case .file(_, let options), .data(_, let options): options
         case .text: InputOptions()
+        case .raw(let source): InputOptions(limits: source.limits)
         }
     }
 
@@ -115,6 +118,7 @@ enum ImageSource: Sendable {
         case .file(let url, _): "decode \(url.lastPathComponent)"
         case .data: "decode input data"
         case .text: "render text"
+        case .raw: "load raw pixels"
         }
     }
 }

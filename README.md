@@ -154,6 +154,21 @@ One encoder configuration means the same thing wherever it is written: `data()` 
 - Raster formats are encoded straight into the memory buffer or file; nothing is staged as a second copy. PDF is written directly to a file as Cairo produces it; `data()` collects the same writer's bytes (see PDF output). TIFF is the exception that must be encoded in memory first when it is streamed.
 - The file is written through a temporary file in the same directory (`.name.hokusai-…`) and renamed over the destination only when the write finished, so a write that fails or is cancelled at any moment leaves an existing file exactly as it was and leaves no partial image, and a reader never sees half a file. The temporary file is created when the first bytes are written, so a pipeline that fails before producing output never touches the destination. A replaced file keeps its permissions; a symbolic link stays a link and its target is replaced; a hard link to the old file is not followed (the other name keeps the old content). A destination that is not a regular file, such as a device or a pipe, and a file in a directory you cannot create files in, are written in place as before. A destination that is a file the pipeline reads, including through a symbolic link or a hard link, is refused with `HokusaiError.invalidOption` (`output URL`) before anything is written, and the file is left as it was; write to a different file and replace the original yourself. A destination that cannot be opened or written (missing folder, permissions, full disk) throws `HokusaiError.io` with a `.write` operation and the system's reason.
 
+### Raw pixels
+
+Pixels that already live in memory (a renderer, a camera buffer, a computer-vision step, a binary protocol) go in and out without being encoded:
+
+```swift
+let frame = try Hokusai(raw: pixels, width: 640, height: 480, format: .rgba8)
+let small = try await frame.resize(width: 320).raw(.rgb8, background: .white)
+// small.data, small.width, small.height, small.format, small.rowStride
+```
+
+- A `RawPixelFormat` is one of `gray8`, `grayAlpha8`, `rgb8`, `rgba8`, `gray16`, `grayAlpha16`, `rgb16`, `rgba16`: interleaved unsigned samples, colour first and alpha last, no padding between pixels, rows top to bottom. 16-bit samples use the machine's byte order (little-endian on every supported platform). Colour is sRGB; no ICC profile is applied.
+- Input is validated before any native call: the byte count must match `width × height × bytesPerPixel` (or the row stride you give, `rowStride`, where the padding after the last row may be missing), dimensions and sizes are checked for overflow, and `InputLimits` apply. A mismatch throws `HokusaiError.invalidInput`, a bad dimension or stride `invalidOption`, a limit `resource`. The bytes are retained copy-on-write and copied into native storage at evaluation, so nothing borrows your memory across an `await`.
+- `premultiplied: true` says the input colour is already multiplied by alpha; it is divided out on load so every operation sees straight alpha, as for an encoded source.
+- `raw(_:premultiplied:background:)` is a terminal like `data()`. It returns a `RawImage` that carries the dimensions, format, row stride (always tight) and alpha convention, so the bytes cannot be misread, and `Hokusai(raw: rawImage)` feeds it back in. Converting between layouts follows libvips: grey is repeated for an RGB format, colour is reduced to luminance for a grey format, 8 and 16 bits are rescaled (white stays white), alpha is added opaque, or composited over `background` when the format has none. No metadata is kept, and an encoder must not be selected on the pipeline.
+
 ### Streaming output
 
 ```swift

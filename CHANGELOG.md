@@ -4,6 +4,9 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added (raw pixels, #22)
+- `Hokusai(raw:width:height:format:rowStride:premultiplied:limits:)` takes pixels you already hold, and `raw(_:premultiplied:background:)` returns them as a `RawImage` that states its dimensions, `RawPixelFormat` (`gray8`, `grayAlpha8`, `rgb8`, `rgba8` and their 16-bit forms), row stride and alpha convention. Raw and encoded pipelines share every transformation. Byte count, stride and dimensions are validated, with overflow detection, before any native call; `InputLimits` apply; the bytes are copied, never borrowed.
+
 ### Added (command line, #115)
 - `hokusai run`: a pipeline written the way the library writes it. An input (a path, `-`
   for standard input, or `--text` / `--markup`), steps named after the API methods in the
