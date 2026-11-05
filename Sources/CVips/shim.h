@@ -1106,7 +1106,7 @@ typedef struct {
     char *path;
     int fd;          /* -1 until the first write opens the file */
     int error;       /* errno of the first failure, else 0 */
-    int is_regular;  /* the opened file is a regular file written in place, safe to unlink on failure */
+    int is_regular;  /* the opened file is a regular file: its size is the furthest byte written; one written in place is unlinked on failure */
     gint64 written;
     char *temp_path;  /* the sibling file being written when the destination is replaced atomically */
     char *final_path; /* where the temporary file is renamed to on success */
@@ -1186,7 +1186,7 @@ static int swift_vips_file_sink_open(SwiftVipsFileSink *sink) {
             if (fd >= 0) {
                 sink->fd = fd;
                 sink->final_mode = exists ? (info.st_mode & 07777) : 0;
-                sink->is_regular = 0; /* the temporary file is removed by finish, not unlinked in place */
+                sink->is_regular = 1; /* a regular file, so its size is the furthest byte written (TIFF rewrites bytes) */
                 free(target);
                 return 0;
             }
