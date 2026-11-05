@@ -158,12 +158,41 @@ import Testing
     @Test func everyStepIsReachableAndHasItsOwnHelp() throws {
         let names = PipelineSteps.all.map { $0.name }
         #expect(Set(names).count == names.count, "step names must be unique")
-        #expect(names.count == 36)
+        #expect(names.count == 44)
         for name in ["auto-orient", "resize", "rotate", "flip", "flop", "extract", "extend", "affine", "trim", "smart-crop", "blur", "sharpen",
             "grayscale", "tint", "normalize", "clahe", "gamma", "negate", "median", "threshold", "modulate", "convert-to", "ensure-alpha",
-            "flatten", "remove-alpha", "composite", "draw-text", "jpeg", "png", "webp", "avif", "heif", "tiff", "gif", "pdf", "metadata-policy"] {
+            "flatten", "remove-alpha", "composite", "draw-text", "convolve", "linear", "recombine", "dilate", "erode", "edges", "extract-channel", "with-alpha", "jpeg", "png", "webp", "avif", "heif", "tiff", "gif", "pdf", "metadata-policy"] {
             #expect(PipelineSteps.names.contains(name), "missing step \(name)")
         }
+    }
+
+    @Test func advancedFiltersRunFromTheCommandLine() async throws {
+        let input = try fixturePath(named: "landscape-asym", ext: "jpg")
+        let out = scratch.path("advanced.png")
+        try await runPipeline([
+            input, "resize", "--width", "48", "convolve", "--width", "3", "--height", "3", "--values", "0,-1,0,-1,5,-1,0,-1,0",
+            "recombine", "--preset", "sepia", "dilate", "--radius", "1", "edges", "--detector", "canny", "--sigma", "1.2",
+            "png", "-o", out,
+        ])
+        #expect(try await metadata(out).width == 48)
+        let channel = scratch.path("red.png")
+        try await runPipeline([input, "extract-channel", "--channel", "red", "linear", "--multiply", "0.5", "png", "-o", channel])
+        #expect(FileManager.default.fileExists(atPath: channel))
+    }
+
+    @Test func advancedFilterOptionsAreChecked() async throws {
+        let input = try fixturePath(named: "landscape-asym", ext: "jpg")
+        let out = scratch.path("never.png")
+        for arguments in [
+            [input, "edges", "--sigma", "2", "png", "-o", out],
+            [input, "recombine", "png", "-o", out],
+            [input, "recombine", "--preset", "sepia", "--matrix", "1,0,0,0,1,0,0,0,1", "png", "-o", out],
+            [input, "convolve", "--width", "3", "--height", "3", "--values", "1,2,3", "png", "-o", out],
+            [input, "dilate", "--radius", "0", "png", "-o", out],
+        ] {
+            await #expect(throws: (any Error).self) { try await runPipeline(arguments) }
+        }
+        #expect(!FileManager.default.fileExists(atPath: out))
     }
 
     @Test func theJSONReportIsTheOutputInfo() throws {

@@ -245,6 +245,24 @@ let badge = try Hokusai.text("SALE", layout: .fit(width: 300, height: 120)).png(
 
 Core operations include resize, extract, rotate, auto-orient, composite, blur, sharpen, trim (with background, line-art and margin controls), smart crop, tint, flatten/remove alpha, metadata inspection, and typed JPEG/PNG/WebP/AVIF output.
 
+### Advanced filters
+
+Typed operations beyond the common effects. Each keeps alpha deliberately, keeps the image's sample type (8 or 16 bits), and rejects bad parameters before any native work:
+
+```swift
+let kernel = try ConvolutionKernel(width: 3, height: 3, values: [0, -1, 0, -1, 5, -1, 0, -1, 0])
+let result = try image
+    .convolve(kernel)            // custom kernel; coefficients, scale and offset are validated
+    .linear(multiply: 1.1, add: -8)   // contrast and brightness on the colour channels
+    .recombine(.sepia)           // 3×3 colour matrix; .luminance, .swapRedBlue, or your own nine numbers
+    .erode().dilate()            // morphology on a mask: removes specks
+    .edges(.canny(sigma: 1.4))   // edge strength of the luminance: .sobel, .scharr, .prewitt, .canny
+```
+
+- **Channels** are named, not numbered: `extractChannel(.red / .green / .blue / .alpha / .luminance)` reads the image as sRGB first (a grey, CMYK or other source is converted) and returns a grey image; asking an opaque image for `.alpha` throws. `withAlpha(from:)` uses another pipeline's luminance as this image's alpha (same size required; an existing alpha is replaced), which with `extractChannel` moves alpha between images.
+- `dilate` and `erode` take the maximum or minimum of a square `2 × radius + 1` window on each channel; on a black-and-white mask (`threshold`) they widen or narrow the white. `edges` returns one channel, the image's sample type and its alpha; it measures change in luminance and is not object detection.
+- Not yet: custom morphology masks, boolean band operations, and the specialised operators (histogram matching, frequency-domain filters, Hough transforms). They are tracked as separate issues when a concrete use appears.
+
 ## Multi-page and animation
 
 Hokusai reads **one page at a time** and writes **one page at a time**. This is the contract for 2.0:
@@ -365,7 +383,7 @@ hokusai benchmark run --input photo.jpg --workloads blur-webp --evaluations 1,2,
 hokusai benchmark compare base.json result.json
 ```
 
-- **Steps are the API.** One step per public method: `auto-orient`, `resize`, `rotate`, `flip`, `flop`, `extract`, `extend`, `affine`, `trim`, `smart-crop`, `blur`, `sharpen`, `grayscale`, `tint`, `normalize`, `clahe`, `gamma`, `negate`, `median`, `threshold`, `modulate`, `convert-to`, `ensure-alpha`, `flatten`, `remove-alpha`, `composite`, `draw-text`, the encoders `jpeg`, `png`, `webp`, `avif`, `heif`, `tiff`, `gif`, `pdf`, and `metadata-policy`. A step takes the options of its method, with the method's defaults, so `resize` is `cover` and text is 24 pt black exactly as in Swift. An option belongs to the steps that have it: `png --quality 10` and `resize --palette` are errors, never accepted and ignored. A value that starts with a dash is written `--hue=-30`.
+- **Steps are the API.** One step per public method: `auto-orient`, `resize`, `rotate`, `flip`, `flop`, `extract`, `extend`, `affine`, `trim`, `smart-crop`, `blur`, `sharpen`, `grayscale`, `tint`, `normalize`, `clahe`, `gamma`, `negate`, `median`, `threshold`, `modulate`, `convert-to`, `ensure-alpha`, `flatten`, `remove-alpha`, `composite`, `draw-text`, the advanced filters `convolve`, `linear`, `recombine`, `dilate`, `erode`, `edges`, `extract-channel`, `with-alpha`, the encoders `jpeg`, `png`, `webp`, `avif`, `heif`, `tiff`, `gif`, `pdf`, and `metadata-policy`. A step takes the options of its method, with the method's defaults, so `resize` is `cover` and text is 24 pt black exactly as in Swift. An option belongs to the steps that have it: `png --quality 10` and `resize --palette` are errors, never accepted and ignored. A value that starts with a dash is written `--hue=-30`.
 - **Input.** A path, `-` for standard input, or `--text` / `--markup`. `--page`, `--access`, `--fail-on`, `--max-bytes`, `--max-pixels`, `--max-channels` and `--revalidate` are the fields of `InputOptions` and `InputLimits`.
 - **Output.** `-o <path>` writes a file; when no encoder step is given its extension chooses the encoder, as `write(to:)` does. `-o -` writes to standard output and needs an encoder step. `--json` prints the result (`OutputInfo`: format, size, byte count, MIME type) as one JSON object, on standard error when standard output carries the image. Not covered by a step: TIFF and PDF details beyond the options listed in `--help`, and layers built from pipelines rather than files.
 - **The older commands** `resize`, `thumbnail`, `convert`, `rotate`, `crop` and `text` still work, print a deprecation notice on standard error and will be removed in the next major version. Their defaults now match the library (`resize` is `cover`, text is 24 pt black), and `convert` refuses a flag its format has no use for (`--quality` to PNG) instead of ignoring it. `convert` and `text` named other things than the methods with those names; `hokusai run` has no such overlap (`convert-to` changes the colour space, an encoder step or the output extension chooses the format, and `draw-text` draws).

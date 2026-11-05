@@ -431,6 +431,103 @@ public struct Hokusai: Sendable {
         return appending(.median(size: size))
     }
 
+    // MARK: - Advanced filters
+
+    /// Convolves the colour channels with a custom kernel. Alpha is kept.
+    ///
+    /// See ``ConvolutionKernel`` for the arithmetic. The result is limited to the sample range,
+    /// and pixels near the border read the nearest edge pixel.
+    ///
+    /// ```swift
+    /// let crisp = try image.convolve(ConvolutionKernel(width: 3, height: 3, values: [0, -1, 0, -1, 5, -1, 0, -1, 0]))
+    /// ```
+    public func convolve(_ kernel: ConvolutionKernel) -> Self {
+        appending(.convolve(kernel))
+    }
+
+    /// Multiplies the colour channels by `multiply` and adds `add` (0...255 scale; 16-bit images
+    /// scale it), limiting the result to the sample range. Alpha is kept.
+    ///
+    /// `linear(multiply: 1.2, add: -10)` raises contrast around the dark end; `linear(multiply: 1, add: 20)`
+    /// brightens. For a different factor per channel, use ``recombine(_:)``.
+    public func linear(multiply: Double = 1, add: Double = 0) throws -> Self {
+        guard multiply.isFinite, (-1000...1000).contains(multiply) else {
+            throw HokusaiError.invalidOption(name: "multiply", reason: "must be a finite value from -1000 to 1000")
+        }
+        guard add.isFinite, (-65535...65535).contains(add) else {
+            throw HokusaiError.invalidOption(name: "add", reason: "must be a finite value from -65535 to 65535")
+        }
+        return appending(.linear(multiply: multiply, add: add))
+    }
+
+    /// Mixes the red, green and blue channels with a 3×3 matrix, for sepia and other colour
+    /// transforms. The image is read as sRGB; alpha is kept. See ``ColorMatrix``.
+    ///
+    /// ```swift
+    /// let warm = image.recombine(.sepia)
+    /// ```
+    public func recombine(_ matrix: ColorMatrix) -> Self {
+        appending(.recombine(matrix))
+    }
+
+    /// Grows bright areas: each sample becomes the maximum of the `2 × radius + 1` square around it.
+    ///
+    /// It works on each colour channel separately, so on a black-and-white mask (see
+    /// ``threshold(_:grayscale:)``) it widens the white. Alpha is kept.
+    ///
+    /// - Throws: ``HokusaiError/invalidOption(name:reason:)`` unless `radius` is in `1...50`.
+    public func dilate(radius: Int = 1) throws -> Self {
+        try Self.validate(radius: radius)
+        return appending(.dilate(radius: radius))
+    }
+
+    /// Shrinks bright areas: each sample becomes the minimum of the `2 × radius + 1` square around it.
+    /// The inverse of ``dilate(radius:)``; `erode` then `dilate` removes specks, `dilate` then
+    /// `erode` closes small gaps. Alpha is kept.
+    ///
+    /// - Throws: ``HokusaiError/invalidOption(name:reason:)`` unless `radius` is in `1...50`.
+    public func erode(radius: Int = 1) throws -> Self {
+        try Self.validate(radius: radius)
+        return appending(.erode(radius: radius))
+    }
+
+    /// Replaces the colour channels with the strength of the change in luminance (see ``EdgeDetector``).
+    /// The result has one colour channel, the image's sample type and its alpha.
+    ///
+    /// - Throws: ``HokusaiError/invalidOption(name:reason:)`` for a Canny `sigma` outside `0.1...20`.
+    public func edges(_ detector: EdgeDetector = .sobel) throws -> Self {
+        if case .canny(let sigma) = detector {
+            guard sigma.isFinite, (0.1...20).contains(sigma) else {
+                throw HokusaiError.invalidOption(name: "sigma", reason: "must be a finite value from 0.1 to 20")
+            }
+        }
+        return appending(.edges(detector))
+    }
+
+    /// Keeps one channel as a grey image, read in sRGB (a grey, CMYK or other source is converted first).
+    ///
+    /// A pipeline that asks for ``Channel/alpha`` of an image without alpha throws
+    /// ``HokusaiError/invalidOption(name:reason:)`` from the terminal method.
+    public func extractChannel(_ channel: Channel) -> Self {
+        appending(.extractChannel(channel))
+    }
+
+    /// Uses the luminance of `mask` as this image's alpha channel: white keeps a pixel, black hides it.
+    ///
+    /// The mask is another pipeline and must come out the same size as this one (resize one of
+    /// them if needed); a mismatch throws ``HokusaiError/invalidOption(name:reason:)`` from the
+    /// terminal method. An existing alpha channel is replaced. Combine with
+    /// ``extractChannel(_:)`` to move alpha from one image to another.
+    public func withAlpha(from mask: Hokusai) -> Self {
+        appending(.joinAlpha(mask.plan))
+    }
+
+    private static func validate(radius: Int) throws {
+        guard (1...50).contains(radius) else {
+            throw HokusaiError.invalidOption(name: "radius", reason: "must be in 1...50")
+        }
+    }
+
     /// Turns pixels at or above `level` (0...255) white and the rest black.
     ///
     /// With `grayscale` (the default) colour is first reduced to one luminance

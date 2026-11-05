@@ -57,6 +57,7 @@ struct ImagePlan: Sendable {
             if case .composite(let layers, _) = step.operation {
                 for layer in layers { urls += layer.plan.fileSources }
             }
+            if case .joinAlpha(let mask) = step.operation { urls += mask.fileSources }
         }
         return urls
     }
@@ -157,6 +158,14 @@ enum ImageOperation: Sendable {
     case removeAlpha
     case flatten(background: Color)
     case composite([LayerStep], space: CompositingSpace = .srgb)
+    case convolve(ConvolutionKernel)
+    case linear(multiply: Double, add: Double)
+    case recombine(ColorMatrix)
+    case dilate(radius: Int)
+    case erode(radius: Int)
+    case edges(EdgeDetector)
+    case extractChannel(Channel)
+    case joinAlpha(ImagePlan)
 
     /// The operation name used in typed error contexts.
     var name: String {
@@ -188,6 +197,14 @@ enum ImageOperation: Sendable {
         case .removeAlpha: "remove alpha"
         case .flatten: "flatten"
         case .composite: "composite layer"
+        case .convolve: "convolve"
+        case .linear: "linear"
+        case .recombine: "recombine"
+        case .dilate: "dilate"
+        case .erode: "erode"
+        case .edges: "edges"
+        case .extractChannel: "extract channel"
+        case .joinAlpha: "join alpha"
         }
     }
 }

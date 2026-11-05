@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added (advanced filters, #26)
+- `convolve(_:)` with a validated `ConvolutionKernel` (size, coefficient count, finite values, scale, offset), `linear(multiply:add:)`, and `recombine(_:)` with a 3×3 `ColorMatrix` (`.sepia`, `.luminance`, `.swapRedBlue` or your own).
+- `dilate(radius:)` and `erode(radius:)`, morphology on each channel with a square window.
+- `edges(_:)` with `EdgeDetector` (`.sobel`, `.scharr`, `.prewitt`, `.canny(sigma:)`): the strength of change in luminance, as one channel.
+- Named channels: `extractChannel(_:)` with `Channel` (`.red`, `.green`, `.blue`, `.alpha`, `.luminance`) and `withAlpha(from:)`, which uses another pipeline as the alpha channel.
+- Alpha is left alone by every one of them and the sample type (8 or 16 bit) is kept. Eight matching `hokusai run` steps: `convolve`, `linear`, `recombine`, `dilate`, `erode`, `edges`, `extract-channel`, `with-alpha`.
+
 ### Added (large uploads, #112)
 - `Hokusai(spooling:options:memoryLimit:spoolDirectory:)` (and the `ByteBuffer` form in `HokusaiNIO`) builds a pipeline from an upload that arrives in chunks. A small upload stays in memory; one past `memoryLimit` is spooled to a private temporary file, so the encoded body never has to fit in memory. `InputLimits.maxBytes` applies while the body is read and stops the read at the chunk that crosses it. The pipeline owns the file and removes it when the last copy is released; a failed, over-limit or cancelled read removes it at once.
 
