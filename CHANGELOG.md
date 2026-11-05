@@ -4,6 +4,9 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- `edges(.scharr)` returned no edges with libvips 8.16 (the supported baseline). It is now computed from two convolutions, so it gives the same result on every libvips version; a full black-to-white step is full white.
+
 ### Added (vector PDF, #13)
 - A new product, `HokusaiPDF`, for vector PDF documents: `VectorDocument` of `VectorPage`s with ordered items (background, rectangle, line, image, text). Text is laid out by Pango and written as real text, so it can be selected and searched; a typed `VectorTextStyle` sets family, size, weight, italic, colour, alignment, wrapping and line spacing, and text can be plain or Pango markup. Fills can be a colour or a linear gradient. Images are Hokusai pipelines, embedded as rasters. `data()` and `write(to:)` (atomic) produce the PDF, with document metadata.
 - `Hokusai.pdf()` is unchanged and stays a raster export. Pango 1.44 or later is needed by `HokusaiPDF` only; the `Hokusai` product does not depend on it.
