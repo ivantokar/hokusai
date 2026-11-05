@@ -4,12 +4,13 @@ name: CI
 # A GitHub Release is published from a tag only after that run is green, so the
 # released commit, not a similar one, was built and tested.
 #
-# Cost: a pull request that only touches documentation skips the build jobs, a
-# draft skips them until it is marked ready, and a ready pull request runs the two
-# Linux jobs (Swift 6.0 with libvips 8.16 and Swift 6.4 with libvips 8.18). The
-# full matrix, with macOS, runs after a merge to main, on a tag and on a manual
-# run. The single required check is `CI complete`, which passes when nothing it
-# waits on failed; a skipped job counts as passing.
+# Cost: nothing is run twice. A pull request that only touches documentation skips
+# the build jobs, a draft skips them until it is marked ready, and a ready pull
+# request runs Linux with Swift 6.4 and libvips 8.18. The merge to main then runs
+# what the pull request did not: Linux with the Swift 6.0 baseline and macOS. A tag
+# and a manual run build the whole matrix. The single required check is `CI
+# complete`, which passes when nothing it waits on failed; a skipped job counts as
+# passing.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -37,6 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      linux: ${{ steps.filter.outputs.linux }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,8 +46,18 @@ jobs:
       # Documentation-only means every changed path is Markdown, a licence, an
       # issue template or an image under docs/. Workflow, script and package
       # changes always count as code. Anything that is not a pull request builds.
+      # Which Linux legs run: a pull request gets the current toolchain, the merge to main gets
+      # the Swift 6.0 baseline that the pull request did not run (with macOS), and a tag or a
+      # manual run gets both.
       - id: filter
         run: |
+          baseline='{"name":"baseline","swift":"6.0","distro":"jammy","vips":"8.16.1","expect":"text,pdfInput,pdfOutput,svgInput,tiff","extra-packages":""}'
+          current='{"name":"current","swift":"6.4","distro":"noble","vips":"8.18.7","expect":"text,pdfInput,pdfOutput,svgInput,avif,heif,gif,tiff,palette","extra-packages":"libjxl-dev libhwy-dev libimagequant-dev libcgif-dev libheif-plugin-aomenc libheif-plugin-dav1d"}'
+          case "${{ github.event_name }}:${{ github.ref }}" in
+            pull_request:*) echo "linux=[$current]" >> "$GITHUB_OUTPUT" ;;
+            push:refs/tags/*|workflow_dispatch:*) echo "linux=[$baseline,$current]" >> "$GITHUB_OUTPUT" ;;
+            *) echo "linux=[$baseline]" >> "$GITHUB_OUTPUT" ;;
+          esac
           if [ "${{ github.event_name }}" != "pull_request" ]; then echo "code=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
           echo "$changed"
@@ -63,22 +75,10 @@ jobs:
     container: swift:${{ matrix.swift }}-${{ matrix.distro }}
     strategy:
       fail-fast: false
+      # The legs to run, with their settings, are built by the `changes` job. (An `include` list
+      # next to a name filter would add the legs that did not match as extra jobs.)
       matrix:
-        include:
-          - name: baseline
-            swift: "6.0"
-            distro: jammy # Cairo 1.16.0
-            vips: "8.16.1"
-            expect: "text,pdfInput,pdfOutput,svgInput,tiff"
-            extra-packages: ""
-          - name: current
-            swift: "6.4"
-            distro: noble
-            vips: "8.18.7"
-            expect: "text,pdfInput,pdfOutput,svgInput,avif,heif,gif,tiff,palette"
-            extra-packages: >-
-              libjxl-dev libhwy-dev libimagequant-dev libcgif-dev
-              libheif-plugin-aomenc libheif-plugin-dav1d
+        include: ${{ fromJSON(needs.changes.outputs.linux) }}
     env:
       VIPS_PREFIX: /opt/vips
       PKG_CONFIG_PATH: /opt/vips/lib/pkgconfig
@@ -207,18 +207,52 @@ jobs:
       - name: CLI smoke test
         run: .github/scripts/cli-smoke.sh
 
+  # Cheap checks on a pull request: seconds on a plain runner, no Swift toolchain, and part of
+  # the required `CI complete` through its needs. They also run on a draft, since a
+  # broken workflow or a missing changelog entry is cheaper to hear about early.
+  checks:
+    name: Workflow lint and changelog
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Catches workflow mistakes (bad expressions, unknown inputs, shell errors) before they
+      # break a run. Two things are ignored on purpose: SC1090 (the `source` of the Swift
+      # toolchain's environment file, which cannot be followed statically) and the pinned
+      # version's list of runner labels, which predates `macos-26`.
+      - name: Lint the workflows
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color -ignore 'SC1090' -ignore 'label "macos-26" is unknown'
+
+      # A change to the library's sources is a change users can see, so it needs a changelog
+      # entry. A pull request that has none for a good reason carries the `no-changelog` label.
+      - name: Require a changelog entry for source changes
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          if ! echo "$changed" | grep -q '^Sources/'; then echo "No source changes."; exit 0; fi
+          if echo "$changed" | grep -qx 'CHANGELOG.md'; then echo "CHANGELOG.md is updated."; exit 0; fi
+          if echo ",$LABELS," | grep -q ',no-changelog,'; then echo "Skipped by the no-changelog label."; exit 0; fi
+          echo "::error::Sources changed but CHANGELOG.md did not. Add an entry under [Unreleased], or add the no-changelog label."
+          exit 1
+
   # The one required check. Matrix jobs that are skipped report under an
   # unexpanded name, so they cannot be required themselves.
   complete:
     name: CI complete
     if: always()
-    needs: [changes, linux, macos]
+    needs: [changes, linux, macos, checks]
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "changes=${{ needs.changes.result }} linux=${{ needs.linux.result }} macos=${{ needs.macos.result }}"
+          echo "changes=${{ needs.changes.result }} linux=${{ needs.linux.result }} macos=${{ needs.macos.result }} checks=${{ needs.checks.result }}"
           # Only success and skipped pass. A job can also end "abandoned" when no
           # runner picks it up, which must not count as green.
-          for result in "${{ needs.changes.result }}" "${{ needs.linux.result }}" "${{ needs.macos.result }}"; do
+          for result in "${{ needs.changes.result }}" "${{ needs.linux.result }}" "${{ needs.macos.result }}" "${{ needs.checks.result }}"; do
             case "$result" in success|skipped) ;; *) echo "not green: $result"; exit 1 ;; esac
           done
