@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Fixed (colour and alpha, #121)
+- A background colour on a Lab, LabS, LCh, XYZ, scRGB, HSV or Yxy image (a TIFF written
+  by libvips can carry these) is converted to that colour model. It used to be copied
+  band by band, so `.white` filled a Lab image with yellow or near black. White is now
+  white in `extend`, `rotate`, `affine` and `resize(fit: .contain)`.
+- `resize` and `sharpen` premultiply alpha, as `blur` already did, so the colour of
+  fully transparent pixels no longer bleeds into the visible pixels beside them (the
+  hidden colour changed a neighbouring pixel by up to 128 levels in `resize`).
+
+### Added (verification, #121)
+- The 18-operation colour-model matrix now covers Lab, LabS, XYZ, scRGB (float), CMYK
+  with alpha and palette images, the alpha operations on 16-bit RGBA against 8-bit, and
+  hidden-colour checks for transparent pixels. Small TIFF fixtures in each model are in
+  Tests/.../Fixtures (written with the vips command line).
+
 ### Changed (file output, #134)
 - `write(to:)` writes through a temporary file in the destination's directory and
   renames it over the destination when the write finished, for every format

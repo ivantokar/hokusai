@@ -884,6 +884,29 @@ static inline int swift_vips_colourspace_bw(VipsImage *in, VipsImage **out) {
     return vips_colourspace(in, out, VIPS_INTERPRETATION_B_W, NULL);
 }
 
+/**
+ * @brief A one-pixel image holding the sRGB colour (`r`, `g`, `b` on 0...255) in `interpretation`.
+ *
+ * It is how a background colour is expressed in the colour model of an image that is not RGB,
+ * grey or CMYK (Lab, XYZ, scRGB, HSV and so on): libvips converts the pixel, so the colour keeps
+ * its meaning instead of its numbers being copied band by band.
+ */
+static inline int swift_vips_colour_pixel(double r, double g, double b, int interpretation, VipsImage **out) {
+    VipsImage *black = NULL, *constant = NULL, *bytes = NULL, *tagged = NULL;
+    const double scale[3] = {0, 0, 0};
+    const double offset[3] = {r, g, b};
+    int status = vips_black(&black, 1, 1, "bands", 3, NULL)
+        || vips_linear(black, &constant, scale, offset, 3, NULL)
+        || vips_cast(constant, &bytes, VIPS_FORMAT_UCHAR, NULL)
+        || vips_copy(bytes, &tagged, "interpretation", VIPS_INTERPRETATION_sRGB, NULL)
+        || vips_colourspace(tagged, out, (VipsInterpretation) interpretation, NULL);
+    if (black) g_object_unref(black);
+    if (constant) g_object_unref(constant);
+    if (bytes) g_object_unref(bytes);
+    if (tagged) g_object_unref(tagged);
+    return status ? -1 : 0;
+}
+
 static inline int swift_vips_colourspace_srgb(VipsImage *in, VipsImage **out) {
     return vips_colourspace(in, out, VIPS_INTERPRETATION_sRGB, NULL);
 }
