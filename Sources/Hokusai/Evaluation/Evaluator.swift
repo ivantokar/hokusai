@@ -437,6 +437,36 @@ enum Evaluator {
         case .flatten(let background):
             return try image.flatten(background: try background.rgba8())
 
+        case .convolve(let kernel):
+            return try image.convolved(kernel)
+
+        case .linear(let multiply, let add):
+            return try image.linear(multiply: multiply, add: add)
+
+        case .recombine(let matrix):
+            return try image.recombined(matrix)
+
+        case .dilate(let radius):
+            return try image.morphed(radius: radius, dilate: true)
+
+        case .erode(let radius):
+            return try image.morphed(radius: radius, dilate: false)
+
+        case .edges(let detector):
+            return try image.edgeStrength(detector)
+
+        case .extractChannel(let channel):
+            return try image.channel(channel)
+
+        case .joinAlpha(let maskPlan):
+            let scope = "alpha mask"
+            do {
+                let mask = try build(maskPlan, context: context, scope: scope)
+                return try image.replacingAlpha(with: mask)
+            } catch let error as HokusaiError {
+                throw error.scoped(scope)
+            }
+
         case .composite(let layers, let space):
             var native: [NativeLayer] = []
             for (index, layer) in layers.enumerated() {

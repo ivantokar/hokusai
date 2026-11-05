@@ -24,6 +24,10 @@ enum PipelineSteps {
             BlurStep.self, SharpenStep.self, GrayscaleStep.self, TintStep.self, NormalizeStep.self, ClaheStep.self,
             GammaStep.self, NegateStep.self, MedianStep.self, ThresholdStep.self, ModulateStep.self,
         ]),
+        ("Advanced filters", [
+            ConvolveStep.self, LinearStep.self, RecombineStep.self, DilateStep.self, ErodeStep.self, EdgesStep.self,
+            ExtractChannelStep.self, WithAlphaStep.self,
+        ]),
         ("Colour and alpha", [ConvertToStep.self, EnsureAlphaStep.self, FlattenStep.self, RemoveAlphaStep.self]),
         ("Composition and text", [CompositeStep.self, DrawTextStep.self]),
         ("Output encoders", [

@@ -525,6 +525,56 @@ static inline int swift_vips_median(VipsImage *in, VipsImage **out, int size) {
     return vips_median(in, out, size, NULL);
 }
 
+/**
+ * @brief Convolves `in` with a `width` x `height` kernel of `values` (row-major), dividing the sum
+ * by `scale` and adding `offset`. The kernel is copied into a mask image owned by this call.
+ */
+static inline int swift_vips_conv_matrix(
+    VipsImage *in, VipsImage **out, const double *values, int width, int height, double scale, double offset
+) {
+    VipsImage *mask = vips_image_new_from_memory_copy(values, (size_t) width * height * sizeof(double), width, height, 1, VIPS_FORMAT_DOUBLE);
+    if (mask == NULL) {
+        return -1;
+    }
+    vips_image_set_double(mask, "scale", scale);
+    vips_image_set_double(mask, "offset", offset);
+    const int status = vips_conv(in, out, mask, "precision", VIPS_PRECISION_FLOAT, NULL);
+    g_object_unref(mask);
+    return status;
+}
+
+/** @brief Multiplies each pixel's bands by a `width` x `height` matrix (width must equal the band count). */
+static inline int swift_vips_recomb_matrix(VipsImage *in, VipsImage **out, const double *values, int width, int height) {
+    VipsImage *matrix = vips_image_new_from_memory_copy(values, (size_t) width * height * sizeof(double), width, height, 1, VIPS_FORMAT_DOUBLE);
+    if (matrix == NULL) {
+        return -1;
+    }
+    const int status = vips_recomb(in, out, matrix, NULL);
+    g_object_unref(matrix);
+    return status;
+}
+
+/** @brief Rank filter: the `index`-th smallest value of each `width` x `height` window (0 = erode, w*h-1 = dilate). */
+static inline int swift_vips_rank(VipsImage *in, VipsImage **out, int width, int height, int index) {
+    return vips_rank(in, out, width, height, index, NULL);
+}
+
+static inline int swift_vips_sobel(VipsImage *in, VipsImage **out) {
+    return vips_sobel(in, out, NULL);
+}
+
+static inline int swift_vips_scharr(VipsImage *in, VipsImage **out) {
+    return vips_scharr(in, out, NULL);
+}
+
+static inline int swift_vips_prewitt(VipsImage *in, VipsImage **out) {
+    return vips_prewitt(in, out, NULL);
+}
+
+static inline int swift_vips_canny(VipsImage *in, VipsImage **out, double sigma) {
+    return vips_canny(in, out, "sigma", sigma, "precision", VIPS_PRECISION_FLOAT, NULL);
+}
+
 static inline int swift_vips_hist_local(VipsImage *in, VipsImage **out, int width, int height, int max_slope) {
     return vips_hist_local(in, out, width, height, "max_slope", max_slope, NULL);
 }
