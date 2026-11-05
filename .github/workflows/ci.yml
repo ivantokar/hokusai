@@ -5,10 +5,11 @@ name: CI
 # released commit, not a similar one, was built and tested.
 #
 # Cost: a pull request that only touches documentation skips the build jobs, a
-# draft skips them until it is marked ready, and macOS (the dearest runner) runs
-# for ready pull requests and tags but not again after the squash merge. The
-# single required check is `CI complete`, which passes when nothing it waits on
-# failed; a skipped job counts as passing.
+# draft skips them until it is marked ready, and a ready pull request runs the two
+# Linux jobs (Swift 6.0 with libvips 8.16 and Swift 6.4 with libvips 8.18). The
+# full matrix, with macOS, runs after a merge to main, on a tag and on a manual
+# run. The single required check is `CI complete`, which passes when nothing it
+# waits on failed; a skipped job counts as passing.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -144,10 +145,12 @@ jobs:
 
   macos:
     needs: changes
+    # macOS is the dearest runner and its setup is half of its time, so it runs where a regression
+    # must not slip through unseen (after a merge to main, on a tag, on a manual run) and not on
+    # every push to a pull request, which gets the two Linux jobs.
     if: >-
       needs.changes.outputs.code == 'true' &&
-      ((github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
-       startsWith(github.ref, 'refs/tags/'))
+      github.event_name != 'pull_request'
     name: macOS current (Swift 6.4, Homebrew libvips)
     runs-on: macos-26
     env:
