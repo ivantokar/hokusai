@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-05
+
+New API on top of 2.1: raw pixels, large uploads, advanced filters, a vector PDF product
+and a command line that matches the API. It is a minor release: everything is added next
+to the existing API, and the only behaviour changes are in the deprecated command-line
+commands (their defaults now match the library; see "Changed (command line)"). The
+adapters (`hokusai-hummingbird`, `hokusai-vapor`) need no release: they work with 2.2.0
+unchanged and can adopt `Hokusai(spooling:)` later.
+
 ### Fixed
 - `edges(.scharr)` returned no edges with libvips 8.16 (the supported baseline). It is now computed from two convolutions, so it gives the same result on every libvips version; a full black-to-white step is full white.
 
