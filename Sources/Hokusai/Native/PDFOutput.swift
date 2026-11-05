@@ -182,7 +182,7 @@ final class PDFOutputSink {
     private func writeToFile(_ bytes: UnsafePointer<UInt8>, count: Int, url: URL) -> Bool {
         let sink = fileSink ?? swift_vips_file_sink_new(url.path)
         fileSink = sink
-        guard swift_vips_file_sink_append(sink, bytes, Int64(count)) == 0 else {
+        guard swift_vips_file_sink_append(sink, bytes, gint64(count)) == 0 else {
             errorCode = swift_vips_file_sink_error(sink)
             return false
         }
