@@ -133,9 +133,9 @@ final class PDFOutputSink {
     private var buffer: UnsafeMutablePointer<UInt8>?
     private var capacity = 0
 
-    // File destination.
-    private var descriptor: Int32 = -1
-    private var isRegularFile = false
+    // File destination: the same sink as the raster encoders use, so a PDF is also written through
+    // a temporary file that replaces the destination only when the document is complete.
+    private var fileSink: UnsafeMutablePointer<SwiftVipsFileSink>?
 
     init(destination: Destination, isCancelled: @escaping () -> Bool = { false }) {
         self.destination = destination
@@ -143,7 +143,7 @@ final class PDFOutputSink {
     }
 
     deinit {
-        if descriptor >= 0 { close(descriptor) }
+        if let fileSink { _ = swift_vips_file_sink_finish(fileSink, 0) }
         if let buffer { free(buffer) }
     }
 
@@ -180,36 +180,26 @@ final class PDFOutputSink {
     }
 
     private func writeToFile(_ bytes: UnsafePointer<UInt8>, count: Int, url: URL) -> Bool {
-        if descriptor < 0 {
-            descriptor = open(url.path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0o666)
-            guard descriptor >= 0 else { errorCode = errno; return false }
-            var info = stat()
-            isRegularFile = fstat(descriptor, &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG
+        let sink = fileSink ?? swift_vips_file_sink_new(url.path)
+        fileSink = sink
+        guard swift_vips_file_sink_append(sink, bytes, gint64(count)) == 0 else {
+            errorCode = swift_vips_file_sink_error(sink)
+            return false
         }
-        var offset = 0
-        while offset < count {
-            let written = systemWrite(descriptor, bytes + offset, count - offset)
-            if written < 0 {
-                if errno == EINTR { continue }
-                errorCode = errno
-                return false
-            }
-            offset += written
-            byteCount += written
-        }
+        byteCount += count
         return true
     }
 
     /// Finishes the destination and returns the I/O failure, if any.
     ///
-    /// On success a file is closed (a failing close is reported). On failure a
-    /// regular file that was being written is closed and removed; devices and
-    /// pipes are only closed.
+    /// On success the temporary file replaces the destination (a failing close or rename is
+    /// reported). On failure it is removed and an existing destination is left as it was; a device
+    /// or a pipe, which is written in place, is only closed.
     func complete(success: Bool) -> HokusaiError? {
-        if case .file(let url) = destination, descriptor >= 0 {
-            if close(descriptor) != 0, errorCode == 0 { errorCode = errno }
-            descriptor = -1
-            if (!success || errorCode != 0), isRegularFile { unlink(url.path) }
+        if case .file = destination, let sink = fileSink {
+            fileSink = nil
+            let error = swift_vips_file_sink_finish(sink, success ? 1 : 0)
+            if error != 0, errorCode == 0 { errorCode = error }
         }
         return ioError
     }
