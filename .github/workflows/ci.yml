@@ -109,6 +109,17 @@ jobs:
       - name: Install libvips ${{ matrix.vips }}
         run: .github/scripts/install-libvips.sh "${{ matrix.vips }}" "$VIPS_PREFIX"
 
+      # Dependencies (swift-nio, ArgumentParser, ...) are most of a cold build and change only
+      # with Package.swift, so their build products are kept between runs. The key has no
+      # source hash on purpose: an exact hit restores them and the current sources are
+      # rebuilt on top; the first run of a new key saves them.
+      - name: Restore SwiftPM build products
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-linux-swift${{ matrix.swift }}-${{ hashFiles('Package.swift') }}
+          restore-keys: spm-linux-swift${{ matrix.swift }}-
+
       - name: Report native versions
         run: PATH="$VIPS_PREFIX/bin:$PATH" .github/scripts/report-native.sh
 
@@ -145,6 +156,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The SwiftPM build products are kept between runs (see the Linux job).
+      - name: Restore SwiftPM build products
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-macos-swift6.4-${{ hashFiles('Package.swift') }}
+          restore-keys: spm-macos-swift6.4-
+
       # Runner Xcode releases lag swift.org; install the 6.4 toolchain directly.
       - name: Install Swift 6.4
         run: |
@@ -156,6 +175,11 @@ jobs:
           echo "$HOME/.swiftly/bin" >> "$GITHUB_PATH"
 
       - name: Install libvips and Cairo PDF support
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+          HOMEBREW_NO_INSTALL_UPGRADE: "1"
+          HOMEBREW_NO_ENV_HINTS: "1"
         run: brew install vips cairo pkg-config
 
       - name: Report native versions
