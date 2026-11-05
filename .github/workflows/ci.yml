@@ -6,11 +6,11 @@ name: CI
 #
 # Cost: nothing is run twice. A pull request that only touches documentation skips
 # the build jobs, a draft skips them until it is marked ready, and a ready pull
-# request runs the two Linux jobs (Swift 6.0 with libvips 8.16 and Swift 6.4 with
-# libvips 8.18). The merge to main then runs only what the pull request did not,
-# which is macOS. A tag and a manual run build the whole matrix. The single
-# required check is `CI complete`, which passes when nothing it waits on failed; a
-# skipped job counts as passing.
+# request runs Linux with Swift 6.4 and libvips 8.18. The merge to main then runs
+# what the pull request did not: Linux with the Swift 6.0 baseline and macOS. A tag
+# and a manual run build the whole matrix. The single required check is `CI
+# complete`, which passes when nothing it waits on failed; a skipped job counts as
+# passing.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -38,6 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      linux: ${{ steps.filter.outputs.linux }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,8 +46,18 @@ jobs:
       # Documentation-only means every changed path is Markdown, a licence, an
       # issue template or an image under docs/. Workflow, script and package
       # changes always count as code. Anything that is not a pull request builds.
+      # Which Linux legs run: a pull request gets the current toolchain, the merge to main gets
+      # the Swift 6.0 baseline that the pull request did not run (with macOS), and a tag or a
+      # manual run gets both.
       - id: filter
         run: |
+          baseline='{"name":"baseline","swift":"6.0","distro":"jammy","vips":"8.16.1","expect":"text,pdfInput,pdfOutput,svgInput,tiff","extra-packages":""}'
+          current='{"name":"current","swift":"6.4","distro":"noble","vips":"8.18.7","expect":"text,pdfInput,pdfOutput,svgInput,avif,heif,gif,tiff,palette","extra-packages":"libjxl-dev libhwy-dev libimagequant-dev libcgif-dev libheif-plugin-aomenc libheif-plugin-dav1d"}'
+          case "${{ github.event_name }}:${{ github.ref }}" in
+            pull_request:*) echo "linux=[$current]" >> "$GITHUB_OUTPUT" ;;
+            push:refs/tags/*|workflow_dispatch:*) echo "linux=[$baseline,$current]" >> "$GITHUB_OUTPUT" ;;
+            *) echo "linux=[$baseline]" >> "$GITHUB_OUTPUT" ;;
+          esac
           if [ "${{ github.event_name }}" != "pull_request" ]; then echo "code=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
           echo "$changed"
@@ -58,32 +69,16 @@ jobs:
 
   linux:
     needs: changes
-    # Not repeated after the merge to main: the pull request already ran both Linux jobs on this
-    # code. A tag and a manual run build everything.
-    if: >-
-      needs.changes.outputs.code == 'true' && !github.event.pull_request.draft &&
-      (github.event_name != 'push' || startsWith(github.ref, 'refs/tags/'))
+    if: needs.changes.outputs.code == 'true' && !github.event.pull_request.draft
     name: Linux ${{ matrix.name }} (Swift ${{ matrix.swift }}, libvips ${{ matrix.vips }})
     runs-on: ubuntu-latest
     container: swift:${{ matrix.swift }}-${{ matrix.distro }}
     strategy:
       fail-fast: false
+      # The legs to run, with their settings, are built by the `changes` job. (An `include` list
+      # next to a name filter would add the legs that did not match as extra jobs.)
       matrix:
-        include:
-          - name: baseline
-            swift: "6.0"
-            distro: jammy # Cairo 1.16.0
-            vips: "8.16.1"
-            expect: "text,pdfInput,pdfOutput,svgInput,tiff"
-            extra-packages: ""
-          - name: current
-            swift: "6.4"
-            distro: noble
-            vips: "8.18.7"
-            expect: "text,pdfInput,pdfOutput,svgInput,avif,heif,gif,tiff,palette"
-            extra-packages: >-
-              libjxl-dev libhwy-dev libimagequant-dev libcgif-dev
-              libheif-plugin-aomenc libheif-plugin-dav1d
+        include: ${{ fromJSON(needs.changes.outputs.linux) }}
     env:
       VIPS_PREFIX: /opt/vips
       PKG_CONFIG_PATH: /opt/vips/lib/pkgconfig
