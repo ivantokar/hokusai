@@ -90,3 +90,21 @@ private extension ByteBuffer {
         writeBytes(data)
     }
 }
+
+public extension Hokusai {
+    /// Creates a pipeline from an upload that arrives as `ByteBuffer`s, spooling a large one to disk.
+    ///
+    /// This is ``Hokusai/init(spooling:options:memoryLimit:spoolDirectory:)`` for the body
+    /// type of NIO-based servers, so the buffers are read as they arrive and a large body
+    /// never has to fit in memory. Each buffer is copied once, transiently, to `Data`.
+    init<Buffers: AsyncSequence>(
+        spooling buffers: Buffers,
+        options: InputOptions = .init(),
+        memoryLimit: Int = 1_048_576,
+        spoolDirectory: URL? = nil
+    ) async throws where Buffers.Element == ByteBuffer {
+        try await self.init(
+            spooling: buffers.map { Data($0.readableBytesView) },
+            options: options, memoryLimit: memoryLimit, spoolDirectory: spoolDirectory)
+    }
+}

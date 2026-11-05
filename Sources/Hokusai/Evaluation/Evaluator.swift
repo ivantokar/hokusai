@@ -131,7 +131,7 @@ enum Evaluator {
     static func inspect(_ source: ImageSource, context: EvaluationContext) throws -> ImageMetadata {
         try context.checkCancellation()
         switch source {
-        case .file(let url, let options):
+        case .file(let url, let options, _):
             let image = try NativeImage.open(path: url.path, options: options)
             let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
             return image.sourceMetadata(sourceByteSize: size)
@@ -273,7 +273,7 @@ enum Evaluator {
            let kind = native.decoderShrinkKind, let plan = shrinkPlan(for: native, steps: steps, kind: kind) {
             let reduced: NativeImage
             switch source {
-            case .file(let url, let options): reduced = try NativeImage.open(path: url.path, options: options, decoderShrink: plan.factor, kind: kind)
+            case .file(let url, let options, _): reduced = try NativeImage.open(path: url.path, options: options, decoderShrink: plan.factor, kind: kind)
             case .data(let data, let options): reduced = try NativeImage.open(data: data, options: options, decoderShrink: plan.factor, kind: kind)
             case .text, .raw: reduced = native
             }
@@ -293,7 +293,7 @@ enum Evaluator {
 
     private static func openUnshrunk(_ source: ImageSource, trace: PlanTrace?) throws -> NativeImage {
         switch source {
-        case .file(let url, let options): try NativeImage.open(path: url.path, options: options)
+        case .file(let url, let options, _): try NativeImage.open(path: url.path, options: options)
         case .data(let data, let options): try NativeImage.open(data: data, options: options)
         case .text(let text): try NativeImage.renderText(text, trace: trace)
         case .raw(let raw): try NativeImage.open(raw: raw)

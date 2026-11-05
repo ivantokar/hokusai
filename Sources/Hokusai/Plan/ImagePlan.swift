@@ -52,7 +52,7 @@ struct ImagePlan: Sendable {
     var fileSources: [URL] {
         let chain = self.chain
         var urls: [URL] = []
-        if case .file(let url, _) = chain.source { urls.append(url) }
+        if case .file(let url, _, _) = chain.source { urls.append(url) }
         for step in chain.steps {
             if case .composite(let layers, _) = step.operation {
                 for layer in layers { urls += layer.plan.fileSources }
@@ -95,8 +95,9 @@ struct ImagePlan: Sendable {
 
 /// Where a plan's pixels come from. The source stays unopened until lowering.
 enum ImageSource: Sendable {
-    /// A local file, opened at evaluation time.
-    case file(URL, InputOptions)
+    /// A local file, opened at evaluation time. A spooled upload also carries the
+    /// file's owner, which removes it when the last plan using it is released.
+    case file(URL, InputOptions, SpooledFile? = nil)
     /// Owned encoded bytes, shared copy-on-write between branches.
     case data(Data, InputOptions)
     /// Generated text, rendered at evaluation time.
@@ -106,7 +107,7 @@ enum ImageSource: Sendable {
 
     var options: InputOptions {
         switch self {
-        case .file(_, let options), .data(_, let options): options
+        case .file(_, let options, _), .data(_, let options): options
         case .text: InputOptions()
         case .raw(let source): InputOptions(limits: source.limits)
         }
@@ -115,7 +116,7 @@ enum ImageSource: Sendable {
     /// The operation label for decoding this source.
     var decodeLabel: String {
         switch self {
-        case .file(let url, _): "decode \(url.lastPathComponent)"
+        case .file(let url, _, _): "decode \(url.lastPathComponent)"
         case .data: "decode input data"
         case .text: "render text"
         case .raw: "load raw pixels"
