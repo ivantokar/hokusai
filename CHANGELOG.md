@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed (file output, #134)
+- `write(to:)` writes through a temporary file in the destination's directory and
+  renames it over the destination when the write finished, for every format
+  including PDF. A write that fails or is cancelled at any moment leaves an
+  existing file exactly as it was; before, it was truncated at the first byte and
+  then removed. A replaced file keeps its permissions, a symbolic link stays a link
+  and its target is replaced, and a hard link to the old file is not followed.
+  Devices, pipes and files in a directory that cannot take a new file are written
+  in place as before.
+
 ## [2.1.0] - 2026-11-04
 
 The fixes from the post-release audit (#111) and the changes that followed it.

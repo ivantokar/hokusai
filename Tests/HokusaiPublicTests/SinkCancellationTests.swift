@@ -56,11 +56,9 @@ import Testing
             #expect(contents?.count == info.byteCount, "the file is the finished output")
         case .failure(let error):
             #expect(error is CancellationError, "unexpected error \(error)")
-            // A write that stops before its first byte never touches the destination. One that stops
-            // after it has already truncated the file, and Hokusai then removes what it wrote, so an
-            // existing file may be gone (documented in the README). What must never remain is a partial
-            // image: the file is the old one or it is absent.
-            #expect(contents == nil || contents == previous, "a cancelled write left \(contents?.count ?? 0) bytes of a partial file")
+            // The write goes through a temporary file, so a write that is cancelled at any moment
+            // leaves the existing destination exactly as it was.
+            #expect(contents == previous, "a cancelled write changed the existing file (\(contents?.count ?? 0) bytes)")
         }
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: folder.path).filter { $0 != destination.lastPathComponent }
         #expect(leftovers.isEmpty, "temporary files left behind: \(leftovers)")

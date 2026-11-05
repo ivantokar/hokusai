@@ -1106,8 +1106,11 @@ typedef struct {
     char *path;
     int fd;          /* -1 until the first write opens the file */
     int error;       /* errno of the first failure, else 0 */
-    int is_regular;  /* the opened file is a regular file, safe to unlink on failure */
+    int is_regular;  /* the opened file is a regular file written in place, safe to unlink on failure */
     gint64 written;
+    char *temp_path;  /* the sibling file being written when the destination is replaced atomically */
+    char *final_path; /* where the temporary file is renamed to on success */
+    mode_t final_mode; /* permissions of the file being replaced; 0 for a new file */
 } SwiftVipsFileSink;
 
 static inline SwiftVipsFileSink *swift_vips_file_sink_new(const char *path) {
@@ -1125,13 +1128,70 @@ static inline int swift_vips_file_sink_error(const SwiftVipsFileSink *sink) {
     return sink->error;
 }
 
-/* Opens the destination on first use. It is opened read-write so formats that
- * rewrite earlier bytes (TIFF) can seek and read back; a destination that
- * cannot be read falls back to write-only and simply cannot seek.
+/* Opens a new file next to `final_path` that is renamed over it when the write succeeds, so a
+ * write that fails or is cancelled leaves an existing destination exactly as it was.
+ * Returns the descriptor, or -1 when no temporary file can be made there (a directory that is
+ * not writable), in which case the caller writes in place. */
+static int swift_vips_file_sink_open_temporary(SwiftVipsFileSink *sink, const char *final_path) {
+    char *directory = g_path_get_dirname(final_path);
+    char *name = g_path_get_basename(final_path);
+    int fd = -1;
+    for (int attempt = 0; attempt < 100 && fd < 0; attempt++) {
+        char *candidate = g_strdup_printf("%s/.%s.hokusai-%d-%u", directory, name, (int) getpid(), g_random_int());
+        int flags = O_CREAT | O_EXCL | O_RDWR;
+#ifdef O_CLOEXEC
+        flags |= O_CLOEXEC;
+#endif
+        fd = open(candidate, flags, 0666);
+        if (fd >= 0) {
+            sink->temp_path = candidate;
+        } else {
+            g_free(candidate);
+            if (errno != EEXIST) {
+                break;
+            }
+        }
+    }
+    g_free(directory);
+    g_free(name);
+    if (fd >= 0) {
+        sink->final_path = g_strdup(final_path);
+    }
+    return fd;
+}
+
+/* Opens the destination on first use.
+ *
+ * A destination that is a regular file, or does not exist, is written through a temporary file
+ * in the same directory that is renamed over it on success (a symbolic link is followed, so the
+ * link stays a link and its target is replaced). Anything else, such as a device or a pipe, and a
+ * directory that is not writable, is written in place. The file is opened read-write so formats
+ * that rewrite earlier bytes (TIFF) can seek and read back; a destination that cannot be read
+ * falls back to write-only and simply cannot seek.
  * Returns 0, or -1 with the errno recorded. */
 static int swift_vips_file_sink_open(SwiftVipsFileSink *sink) {
     if (sink->fd >= 0) {
         return 0;
+    }
+    struct stat info;
+    int exists = stat(sink->path, &info) == 0;
+    if (!exists || S_ISREG(info.st_mode)) {
+        char *target = NULL;
+        if (exists) {
+            target = realpath(sink->path, NULL); /* through a symbolic link, to the file itself */
+        }
+        const char *final_path = target != NULL ? target : sink->path;
+        if (exists || errno == ENOENT) {
+            int fd = swift_vips_file_sink_open_temporary(sink, final_path);
+            if (fd >= 0) {
+                sink->fd = fd;
+                sink->final_mode = exists ? (info.st_mode & 07777) : 0;
+                sink->is_regular = 0; /* the temporary file is removed by finish, not unlinked in place */
+                free(target);
+                return 0;
+            }
+        }
+        free(target);
     }
     int flags = O_CREAT | O_TRUNC;
 #ifdef O_CLOEXEC
@@ -1145,8 +1205,8 @@ static int swift_vips_file_sink_open(SwiftVipsFileSink *sink) {
         sink->error = errno;
         return -1;
     }
-    struct stat info;
-    sink->is_regular = fstat(sink->fd, &info) == 0 && S_ISREG(info.st_mode);
+    struct stat opened;
+    sink->is_regular = fstat(sink->fd, &opened) == 0 && S_ISREG(opened.st_mode);
     return 0;
 }
 
@@ -1220,24 +1280,44 @@ static inline VipsTarget *swift_vips_file_target_new(SwiftVipsFileSink *sink) {
 /**
  * @brief Finish a file sink and release it.
  *
- * On success the file is closed, and a failing close is reported. On failure
- * a regular file this sink opened is closed and removed so no partial image
- * is left behind; other kinds of file (devices, pipes) are only closed.
- * Returns the errno of the first failure, or 0.
+ * On success the file is closed, a failing close is reported and a temporary file is renamed over
+ * the destination (with the permissions of the file it replaces). On failure a temporary file is
+ * removed, leaving the destination untouched, and a regular file written in place is closed and
+ * removed so no partial image is left behind; other kinds of file (devices, pipes) are only
+ * closed. Returns the errno of the first failure, or 0.
  */
 static inline int swift_vips_file_sink_finish(SwiftVipsFileSink *sink, int succeeded) {
     if (sink->fd >= 0) {
+        if (sink->temp_path != NULL && succeeded && sink->error == 0 && sink->final_mode != 0) {
+            fchmod(sink->fd, sink->final_mode); /* a replaced file keeps its permissions */
+        }
         if (close(sink->fd) != 0 && sink->error == 0) {
             sink->error = errno;
         }
-        if ((!succeeded || sink->error != 0) && sink->is_regular) {
+        if (sink->temp_path != NULL) {
+            if (succeeded && sink->error == 0) {
+                if (rename(sink->temp_path, sink->final_path) != 0) {
+                    sink->error = errno;
+                    unlink(sink->temp_path);
+                }
+            } else {
+                unlink(sink->temp_path);
+            }
+        } else if ((!succeeded || sink->error != 0) && sink->is_regular) {
             unlink(sink->path);
         }
     }
     int error = sink->error;
+    g_free(sink->temp_path);
+    g_free(sink->final_path);
     g_free(sink->path);
     g_free(sink);
     return error;
+}
+
+/** @brief Appends `length` bytes to the sink; 0, or -1 with the errno recorded in the sink. Used by the PDF writer. */
+static inline int swift_vips_file_sink_append(SwiftVipsFileSink *sink, const void *data, gint64 length) {
+    return swift_vips_file_sink_write(NULL, data, length, sink) == length ? 0 : -1;
 }
 
 /** @brief Receives a run of encoded bytes; returns the count accepted, or -1 to make the encoder fail. */
