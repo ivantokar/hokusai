@@ -40,10 +40,6 @@ acceptance criteria live in GitHub issues, and the code is checked against them.
   against a ref.
 - A release is a `v*` tag. CI runs on the tag, on the exact commit it names; a
   GitHub Release is published only from a tag whose run is green.
-- CI is cheap by design: a pull request that changes only documentation skips
-  the build jobs, a draft skips them (and the benchmark) until it is marked
-  ready, and macOS runs for ready pull requests and tags only. The one required
-  check is `CI complete`. The benchmark comparison takes about fifteen minutes, so it runs only on a pull request labelled `benchmark`; add the label to a performance-sensitive change. Open a pull request as a draft while it is still
-  changing, and push in batches.
+- CI is cheap by design. A pull request that changes only documentation skips the build jobs, and a draft skips them (and the benchmark) until it is marked ready. A ready pull request runs the two Linux jobs (Swift 6.0 with libvips 8.16, Swift 6.4 with libvips 8.18); the full matrix, with macOS, runs after the merge to main, on a `v*` tag and on a manual run (`gh workflow run ci.yml --ref <ref>`). The one required check is `CI complete`. A macOS-only regression therefore shows up on main, and is fixed forward. The benchmark runs only on a pull request labelled `benchmark`. Open a pull request as a draft while it is still changing, and push in batches.
 - Commit messages and pull request descriptions are plain text; do not add
   attribution trailers.
