@@ -27,6 +27,16 @@ if $BIN convert --input "$FIXTURE" --output "$OUT/mismatch.jpg" --format webp; t
 fi
 test ! -e "$OUT/mismatch.jpg"
 
+# The pipeline command: ordered steps, one decode and one encode, a typed result.
+$BIN run "$FIXTURE" auto-orient resize --width 100 --height 60 blur --sigma 1 webp --quality 70 -o "$OUT/run.webp" --json | grep -q '"format":"webp"'
+$BIN run "$FIXTURE" resize --width 50 png -o - > "$OUT/stdout.png"
+head -c 4 "$OUT/stdout.png" | LC_ALL=C grep -aq PNG
+if $BIN run "$FIXTURE" png --quality 10 -o "$OUT/bad.png"; then
+    echo "expected non-zero exit for an option the step does not have" >&2
+    exit 1
+fi
+$BIN inspect --input "$OUT/run.webp" --json | grep -q '"format":"webp"'
+
 $BIN convert --input "$FIXTURE" --output "$OUT/converted.png"
 $BIN inspect --input "$OUT/converted.png"
 

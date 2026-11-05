@@ -2,6 +2,8 @@ import ArgumentParser
 import Hokusai
 
 struct ResizeCommand: ReportingCommand {
+    static let replacement: String? = "`hokusai run <input> resize --width ... -o <output>`"
+
     static let configuration = CommandConfiguration(
         commandName: "resize",
         abstract: "Resize an image."
@@ -16,8 +18,8 @@ struct ResizeCommand: ReportingCommand {
     @Option(help: "Target height.")
     var height: Int?
 
-    @Option(help: "Fit mode.")
-    var fit = ResizeFitArgument.inside
+    @Option(help: "Fit mode (cover by default, as in the library).")
+    var fit = ResizeFitArgument.cover
 
     @Option(help: "Resampling kernel.")
     var kernel = ResizeKernelArgument.lanczos3

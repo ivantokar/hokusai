@@ -2,6 +2,8 @@ import ArgumentParser
 import Hokusai
 
 struct ThumbnailCommand: ReportingCommand {
+    static let replacement: String? = "`hokusai run <input> resize --width ... -o <output>` (thumbnails are `resize` with `--fit` and `--position`)"
+
     static let configuration = CommandConfiguration(
         commandName: "thumbnail",
         abstract: "Create a thumbnail with the normal Hokusai resize.",

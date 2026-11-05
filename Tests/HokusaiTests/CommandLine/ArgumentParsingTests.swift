@@ -27,7 +27,7 @@ import Testing
     @Test func documentedWordsAreAcceptedInAnyCase() throws {
         let resize = try ResizeCommand.parse(base + ["--width", "10", "--fit", "COVER", "--kernel", "Mitchell"])
         #expect(resize.fit == .cover && resize.kernel == .mitchell)
-        #expect(try ResizeCommand.parse(base + ["--width", "10"]).fit == .inside)
+        #expect(try ResizeCommand.parse(base + ["--width", "10"]).fit == .cover, "the library default, not the CLI's old inside")
         #expect(try ResizeCommand.parse(base + ["--width", "10"]).kernel == .lanczos3)
         #expect(try TextCommand.parse(base + ["--text", "hi", "--align", "Right"]).typography.align == .right)
     }

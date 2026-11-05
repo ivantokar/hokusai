@@ -11,8 +11,15 @@ struct InspectCommand: ReportingCommand {
     @OptionGroup var files: InputFileOptions
     @OptionGroup var diagnostics: DiagnosticsOptions
 
+    @Flag(help: "Print the metadata as one JSON object instead of a table.")
+    var json = false
+
     func execute(reporter: any Reporter) async throws {
         let metadata = try await Hokusai(url: files.inputURL).metadata()
+        if json {
+            print(try MetadataSummary.json(for: metadata, input: files.input))
+            return
+        }
 
         reporter.header("Image Metadata")
         reporter.panel(reporter.displayPath(files.input), rows: MetadataSummary.rows(for: metadata))

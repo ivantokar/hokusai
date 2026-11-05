@@ -58,4 +58,21 @@ enum EncoderFactory {
             return .pdf(PDFOptions())
         }
     }
+
+    /// The flags that were given but that `format` has no use for, so a command can refuse them
+    /// instead of reporting success for an effect that never happened.
+    static func ignoredFlags(for format: OutputFormatArgument, settings: EncoderSettings) -> [String] {
+        let usesQuality: Set<OutputFormatArgument> = [.jpeg, .webp, .avif, .heif, .tiff]
+        let usesCompression: Set<OutputFormatArgument> = [.png]
+        let usesEffort: Set<OutputFormatArgument> = [.webp, .avif, .heif, .gif]
+        let usesProgressive: Set<OutputFormatArgument> = [.jpeg, .png, .gif]
+        let usesLossless: Set<OutputFormatArgument> = [.webp, .avif, .heif]
+        var ignored: [String] = []
+        if settings.quality != nil, !usesQuality.contains(format) { ignored.append("--quality") }
+        if settings.compressionLevel != nil, !usesCompression.contains(format) { ignored.append("--compression") }
+        if settings.effort != nil, !usesEffort.contains(format) { ignored.append("--effort") }
+        if settings.progressive, !usesProgressive.contains(format) { ignored.append("--progressive") }
+        if settings.lossless, !usesLossless.contains(format) { ignored.append("--lossless") }
+        return ignored
+    }
 }

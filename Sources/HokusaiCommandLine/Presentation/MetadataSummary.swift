@@ -1,3 +1,4 @@
+import Foundation
 import Hokusai
 
 /// The rows `inspect` shows for an image's source metadata.
@@ -36,5 +37,33 @@ enum MetadataSummary {
             rows.append(("Embedded", embedded.joined(separator: ", ")))
         }
         return rows
+    }
+
+    /// The same facts as one JSON object, for scripts: the public `ImageMetadata`, without the
+    /// contents of the embedded blocks.
+    static func json(for metadata: ImageMetadata, input: String) throws -> String {
+        let oriented = metadata.orientedSize
+        var object: [String: Any] = [
+            "input": input,
+            "width": metadata.width,
+            "height": metadata.height,
+            "orientedWidth": oriented.width,
+            "orientedHeight": oriented.height,
+            "channels": metadata.pixel.channels,
+            "hasAlpha": metadata.pixel.hasAlpha,
+            "interpretation": "\(metadata.pixel.interpretation)",
+            "sampleFormat": "\(metadata.pixel.sampleFormat)",
+            "pages": metadata.pages.count,
+            "isAnimated": metadata.isAnimated,
+            "embedded": [
+                "exif": metadata.exif != nil, "icc": metadata.iccProfile != nil, "xmp": metadata.xmp != nil, "iptc": metadata.iptc != nil,
+            ],
+        ]
+        object["format"] = metadata.format?.rawValue ?? NSNull()
+        if let orientation = metadata.orientation { object["orientation"] = "\(orientation)" }
+        if let bits = metadata.pixel.bitsPerSample { object["bitsPerSample"] = bits }
+        if let density = metadata.density { object["density"] = ["horizontal": density.horizontal, "vertical": density.vertical] }
+        if let size = metadata.sourceByteSize { object["sourceByteSize"] = size }
+        return String(decoding: try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]), as: UTF8.self)
     }
 }

@@ -2,6 +2,8 @@ import ArgumentParser
 import Hokusai
 
 struct RotateCommand: ReportingCommand {
+    static let replacement: String? = "`hokusai run <input> rotate --degrees 90 -o <output>`"
+
     static let configuration = CommandConfiguration(
         commandName: "rotate",
         abstract: "Rotate image by degrees."
