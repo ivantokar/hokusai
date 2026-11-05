@@ -47,7 +47,7 @@ jobs:
       # the growth bound of the memory test is skipped; its other checks stay.
       HOKUSAI_SANITIZED: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Same native setup as the "Linux current" job in ci.yml.
       - name: Install native build dependencies
@@ -63,7 +63,7 @@ jobs:
             libheif-plugin-aomenc libheif-plugin-dav1d
 
       - name: Restore libvips build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /opt/vips
           key: vips-8.18.7-noble-${{ hashFiles('.github/scripts/install-libvips.sh') }}
@@ -90,7 +90,7 @@ jobs:
 
       - name: Keep the log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sanitizer-${{ matrix.sanitizer }}
           path: sanitizer.log

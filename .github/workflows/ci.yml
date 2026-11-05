@@ -40,7 +40,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       linux: ${{ steps.filter.outputs.linux }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       # Documentation-only means every changed path is Markdown, a licence, an
@@ -88,7 +88,7 @@ jobs:
       # instead of skipping when one is missing.
       HOKUSAI_EXPECT_CAPABILITIES: ${{ matrix.expect }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install native build dependencies
         run: |
@@ -102,7 +102,7 @@ jobs:
             ${{ matrix.extra-packages }}
 
       - name: Restore libvips build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /opt/vips
           key: vips-${{ matrix.vips }}-${{ matrix.distro }}-${{ hashFiles('.github/scripts/install-libvips.sh') }}
@@ -115,7 +115,7 @@ jobs:
       # source hash on purpose: an exact hit restores them and the current sources are
       # rebuilt on top; the first run of a new key saves them.
       - name: Restore SwiftPM build products
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .build
           key: spm-linux-swift${{ matrix.swift }}-${{ hashFiles('Package.swift') }}
@@ -157,11 +157,11 @@ jobs:
       EXPECTED_SWIFT: "6.4"
       HOKUSAI_EXPECT_CAPABILITIES: "text,pdfInput,pdfOutput,svgInput,avif,heif,gif,tiff"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The SwiftPM build products are kept between runs (see the Linux job).
       - name: Restore SwiftPM build products
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .build
           key: spm-macos-swift6.4-${{ hashFiles('Package.swift') }}
@@ -215,7 +215,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
