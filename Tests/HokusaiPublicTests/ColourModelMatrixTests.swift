@@ -119,4 +119,104 @@ import Testing
             #expect(corner[0] >= 235 && corner[1] >= 235 && corner[2] >= 235, "\(name) on \(model): the padding is \(corner)")
         }
     }
+    // MARK: - Lab, XYZ, scRGB and float sources (#121)
+
+    /// 64 x 40 TIFFs written by libvips in each interpretation (float except `labs`, which is 16-bit, and CMYK with an alpha band).
+    private static let models = ["lab", "labs", "xyz", "scrgb", "cmyk-alpha"]
+
+    private func model(_ name: String) throws -> Hokusai { try Hokusai(data: fixtureData(named: "model-\(name)", ext: "tif")) }
+
+    private func rgb64() throws -> Hokusai {
+        try Hokusai(data: fixtureData(named: "landscape-asym", ext: "jpg")).resize(width: 64, height: 40, fit: .fill)
+    }
+
+    @Test(arguments: models, operations.map(\.name))
+    func everyOperationOnANonRGBModelEndsInTheRGBSizeOrATypedError(model name: String, operation operationName: String) async throws {
+        let operation = try #require(Self.operations.first { $0.name == operationName })
+        let expected = try await rasterize(operation.apply(rgb64()))
+        do {
+            let actual = try await rasterize(operation.apply(model(name)))
+            #expect((actual.width, actual.height) == (expected.width, expected.height), "\(operationName) on \(name)")
+        } catch is HokusaiError {
+            // A typed refusal is acceptable; a trap or an untyped error is not.
+        }
+    }
+
+    @Test(arguments: models, ["resize contain", "rotate", "extend"])
+    func aWhiteBackgroundIsWhiteOnANonRGBModel(model name: String, operation operationName: String) async throws {
+        let operation = try #require(Self.operations.first { $0.name == operationName })
+        let result = try await rasterize(operation.apply(model(name)))
+        let corner = result.pixel(0, 0)
+        #expect(corner[0] >= 235 && corner[1] >= 235 && corner[2] >= 235, "\(operationName) on \(name): the padding is \(corner)")
+    }
+    // MARK: - Alpha: 16-bit and premultiplied (#121)
+
+    private static let alphaOperations: [(name: String, apply: @Sendable (Hokusai) throws -> Hokusai)] = [
+        ("blur", { try $0.blur(sigma: 1.5) }),
+        ("sharpen", { try $0.sharpen(sigma: 1) }),
+        ("resize", { try $0.resize(width: 9) }),
+        ("rotate", { try $0.rotate(by: 33) }),
+        ("flatten", { try $0.flatten(background: Color(red: 0.2, green: 0.6, blue: 0.9)) }),
+        ("median", { try $0.median(size: 3) }),
+        ("gamma", { try $0.gamma(2.2) }),
+        ("negate", { try $0.negate() }),
+    ]
+
+    private func rgba16() throws -> Hokusai {
+        try Hokusai(data: tiff(bands: 4, bits: 16, photometric: 2, alphaBand: true) { x, y in
+            [level(x, y) * 257, (255 - level(x, y)) * 257, (60 + x * 7) * 257, alpha(x, y) * 257]
+        })
+    }
+
+    private func rgba8() throws -> Hokusai {
+        try Raster(width: size, height: size) { x, y in
+            [UInt8(level(x, y)), UInt8(255 - level(x, y)), UInt8(60 + x * 7), UInt8(alpha(x, y))]
+        }.pipeline()
+    }
+
+    @Test(arguments: alphaOperations.map(\.name))
+    func sixteenBitAlphaGivesTheSamePictureAsEightBit(name: String) async throws {
+        let operation = try #require(Self.alphaOperations.first { $0.name == name })
+        let expected = try await rasterize(operation.apply(rgba8()))
+        let actual = try await rasterize(operation.apply(rgba16()))
+        #expect((actual.width, actual.height) == (expected.width, expected.height))
+        let worst = zip(actual.pixels, expected.pixels).map { abs(Int($0) - Int($1)) }.max() ?? 0
+        // Sharpening amplifies the rounding of the 8-bit input, so it gets a little more room.
+        #expect(worst <= (name == "sharpen" ? 5 : 3), "\(name) on 16-bit RGBA: largest difference from 8-bit is \(worst)")
+    }
+
+    /// Two pictures with the same visible pixels, whose fully transparent pixels hold red in one and
+    /// black in the other. An operation that treats colour and alpha separately lets the hidden
+    /// colour bleed into its neighbours; one that premultiplies does not.
+    private func hiddenColour(_ hidden: [UInt8]) throws -> Hokusai {
+        try Raster(width: size, height: size) { x, y in
+            x < 8 ? hidden + [0] : [30, 90, UInt8(150 + y), 255]
+        }.pipeline()
+    }
+
+    @Test(arguments: ["blur", "sharpen", "resize", "rotate", "median"])
+    func theColourOfTransparentPixelsNeverBleeds(name: String) async throws {
+        let operation = try #require(Self.alphaOperations.first { $0.name == name })
+        let red = try await rasterize(operation.apply(hiddenColour([255, 0, 0])))
+        let black = try await rasterize(operation.apply(hiddenColour([0, 0, 0])))
+        var worst = 0
+        for index in stride(from: 0, to: red.pixels.count, by: 4) where red.pixels[index + 3] > 8 && black.pixels[index + 3] > 8 {
+            for band in 0..<3 { worst = max(worst, abs(Int(red.pixels[index + band]) - Int(black.pixels[index + band]))) }
+        }
+        #expect(worst <= 3, "\(name): the hidden colour changed a visible pixel by \(worst)")
+    }
+    @Test(arguments: operations.map(\.name))
+    func aPalettePNGGivesTheRGBSizeForEveryOperation(name: String) async throws {
+        let operation = try #require(Self.operations.first { $0.name == name })
+        let palette = try Hokusai(data: fixtureData(named: "palette", ext: "png"))
+        let expected = try await rasterize(operation.apply(rasterToRGB(palette)))
+        let actual = try await rasterize(operation.apply(palette))
+        #expect((actual.width, actual.height) == (expected.width, expected.height), "\(name) on a palette image")
+    }
+
+    /// The same picture as RGB, so the expected sizes do not depend on the palette.
+    private func rasterToRGB(_ image: Hokusai) async throws -> Hokusai {
+        let converted = try await image.convert(to: .sRGB).png().data().data
+        return try Hokusai(data: converted)
+    }
 }

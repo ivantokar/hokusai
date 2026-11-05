@@ -94,6 +94,23 @@ extension NativeImage {
     /// their number: four bands are CMYK, not RGBA, in a CMYK image, whose
     /// fourth band is ink and whose alpha, if any, is the fifth. A CMYK fill is
     /// the plain RGB to CMYK mapping (no profile), so white is no ink at all.
+    /// The colour in the image's own model for interpretations that are not RGB, grey or CMYK:
+    /// Lab, LCh, XYZ, scRGB, HSV and Yxy. The sRGB colour is converted by libvips, so white is
+    /// white in a Lab image instead of `[255, 255, 255]` read as lightness, a and b.
+    private func convertedFill(_ rgba: [Double], interpretation: Int32) -> [Double]? {
+        let converting: Set<Int32> = [
+            VIPS_INTERPRETATION_LAB, VIPS_INTERPRETATION_LABS, VIPS_INTERPRETATION_LCH, VIPS_INTERPRETATION_XYZ,
+            VIPS_INTERPRETATION_scRGB, VIPS_INTERPRETATION_HSV, VIPS_INTERPRETATION_YXY, VIPS_INTERPRETATION_CMC,
+        ].reduce(into: Set<Int32>()) { $0.insert($1.rawValue) }
+        guard converting.contains(interpretation), bands >= 3,
+            let pixel = try? NativeImage.producing({ swift_vips_colour_pixel(rgba[0], rgba[1], rgba[2], interpretation, $0) }, failure: { .nativeTransform("background colour") }),
+            let colour = try? pixel.pixel(x: 0, y: 0), colour.count >= 3
+        else { return nil }
+        // Alpha, when the image has it, is on the scale of its band format: 0...1 for scRGB, else 0...255.
+        let alpha = interpretation == VIPS_INTERPRETATION_scRGB.rawValue ? rgba[3] / 255 : rgba[3]
+        return Array(colour.prefix(3)) + (bands > 3 ? [alpha] : []) + Array(repeating: 0, count: max(0, bands - 4))
+    }
+
     func fill(_ rgba: [Double]) -> [Double] {
         guard rgba.count == 4 else { return rgba }
         let luminance = 0.2126 * rgba[0] + 0.7152 * rgba[1] + 0.0722 * rgba[2]
@@ -103,6 +120,8 @@ extension NativeImage {
             let black = 255 - max(rgba[0], rgba[1], rgba[2])
             let ink = black >= 255 ? [0, 0, 0] : rgba[0...2].map { 255 * (255 - $0 - black) / (255 - black) }
             values = ink + [black] + (bands > 4 ? [rgba[3]] : []) + Array(repeating: 255, count: max(0, bands - 5))
+        } else if let converted = convertedFill(rgba, interpretation: interpretation) {
+            values = converted
         } else {
             switch bands {
             case 1: values = [luminance]
@@ -154,7 +173,10 @@ extension NativeImage {
         let vipsKernel = try kernel.vipsKernel()
         let hscale = Double(finalWidth) / Double(self.width)
         let vscale = Double(finalHeight) / Double(self.height)
-        let resized = try applying("resize") { swift_vips_resize($0, $1, hscale, vscale, vipsKernel) }
+        // Premultiplied, so the colour of transparent pixels does not bleed into the pixels beside them.
+        let resized = try premultiplied("resize") { image in
+            try image.applying("resize") { swift_vips_resize($0, $1, hscale, vscale, vipsKernel) }
+        }
 
         // Cover and contain need a second step after proportional resampling.
         guard let width, let height else { return resized }

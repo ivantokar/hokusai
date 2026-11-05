@@ -87,9 +87,12 @@ extension NativeImage {
 
     /// Unsharp mask on luminance; libvips keeps alpha untouched.
     func sharpen(_ options: SharpenOptions) throws -> NativeImage {
-        try applying("sharpen") {
-            swift_vips_sharpen_full(
-                $0, $1, options.sigma, options.threshold, options.maxBrightening, options.maxDarkening, options.flat, options.jagged)
+        // Premultiplied, so the colour of transparent pixels does not enter the sharpening of visible ones.
+        try premultiplied("sharpen") { image in
+            try image.applying("sharpen") {
+                swift_vips_sharpen_full(
+                    $0, $1, options.sigma, options.threshold, options.maxBrightening, options.maxDarkening, options.flat, options.jagged)
+            }
         }
     }
 }
