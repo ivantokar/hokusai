@@ -5,16 +5,16 @@ import Hokusai
 /// Typography flags of `text`, mapped onto the public ``TextStyle`` and ``TextLayout``.
 struct TextStyleOptions: ParsableArguments {
     @Option(help: "Font family or Pango font description, e.g. \"sans\" or \"Serif Bold\".")
-    var font = "sans"
+    var font = TextStyle().font
 
     @Option(help: "Path to a font file to load instead of an installed family.")
     var fontFile: String?
 
     @Option(help: "Font size.")
-    var fontSize = 48
+    var fontSize = TextStyle().fontSize
 
     @Option(help: "Text colour as r,g,b[,a] (0...255).", transform: ColorParser.parse)
-    var color: Color = .white
+    var color: Color = TextStyle().color
 
     @Option(help: "Text alignment.")
     var align = TextAlignmentArgument.left

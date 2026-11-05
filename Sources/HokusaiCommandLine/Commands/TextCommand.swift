@@ -2,6 +2,8 @@ import ArgumentParser
 import Hokusai
 
 struct TextCommand: ReportingCommand {
+    static let replacement: String? = "`hokusai run <input> draw-text --text ... -o <output>`"
+
     static let configuration = CommandConfiguration(
         commandName: "text",
         abstract: "Draw text on image."

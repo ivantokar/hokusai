@@ -316,16 +316,30 @@ Branch on the case, not on message text. `FailureContext` carries a Hokusai-owne
 
 ## CLI
 
+`hokusai run` writes a pipeline the way the library does: an input, steps named after the API methods in the order they apply, and an output. The image is decoded once and encoded once, however many steps there are.
+
 ```bash
+# autoOrient -> resize -> blur -> webp, as one evaluation
+hokusai run photo.jpg auto-orient resize --width 1200 --height 630 --fit cover blur --sigma 1.5 webp --quality 82 -o social.webp --json
+
+# generated text is a source, like Hokusai.text(...)
+hokusai run --text "Hokusai" --font-size 48 png -o title.png
+
+# standard input and output
+cat photo.jpg | hokusai run - resize --width 400 jpeg -o - > small.jpg
+
+hokusai run photo.jpg resize --help        # the options of one step
+hokusai run --help                         # every step
 hokusai info
-hokusai inspect --input photo.jpg
-hokusai resize --input photo.jpg --output social.webp --width 1200 --height 630 --fit cover
-hokusai convert --input photo.jpg --output photo.avif --quality 60
-hokusai thumbnail --input photo.jpg --output thumb.jpg --width 400
-hokusai text --input photo.jpg --output captioned.png --text "Hokusai" --color 255,255,255
+hokusai inspect --input photo.jpg --json
 hokusai benchmark run --input photo.jpg --workloads blur-webp --evaluations 1,2,4 --vips-concurrency 1,auto --json-output result.json
 hokusai benchmark compare base.json result.json
 ```
+
+- **Steps are the API.** One step per public method: `auto-orient`, `resize`, `rotate`, `flip`, `flop`, `extract`, `extend`, `affine`, `trim`, `smart-crop`, `blur`, `sharpen`, `grayscale`, `tint`, `normalize`, `clahe`, `gamma`, `negate`, `median`, `threshold`, `modulate`, `convert-to`, `ensure-alpha`, `flatten`, `remove-alpha`, `composite`, `draw-text`, the encoders `jpeg`, `png`, `webp`, `avif`, `heif`, `tiff`, `gif`, `pdf`, and `metadata-policy`. A step takes the options of its method, with the method's defaults, so `resize` is `cover` and text is 24 pt black exactly as in Swift. An option belongs to the steps that have it: `png --quality 10` and `resize --palette` are errors, never accepted and ignored. A value that starts with a dash is written `--hue=-30`.
+- **Input.** A path, `-` for standard input, or `--text` / `--markup`. `--page`, `--access`, `--fail-on`, `--max-bytes`, `--max-pixels`, `--max-channels` and `--revalidate` are the fields of `InputOptions` and `InputLimits`.
+- **Output.** `-o <path>` writes a file; when no encoder step is given its extension chooses the encoder, as `write(to:)` does. `-o -` writes to standard output and needs an encoder step. `--json` prints the result (`OutputInfo`: format, size, byte count, MIME type) as one JSON object, on standard error when standard output carries the image. Not covered by a step: TIFF and PDF details beyond the options listed in `--help`, and layers built from pipelines rather than files.
+- **The older commands** `resize`, `thumbnail`, `convert`, `rotate`, `crop` and `text` still work, print a deprecation notice on standard error and will be removed in the next major version. Their defaults now match the library (`resize` is `cover`, text is 24 pt black), and `convert` refuses a flag its format has no use for (`--quality` to PNG) instead of ignoring it. `convert` and `text` named other things than the methods with those names; `hokusai run` has no such overlap (`convert-to` changes the colour space, an encoder step or the output extension chooses the format, and `draw-text` draws).
 
 The command line is a client of the public API and adds no image processing of its own. Each command parses its arguments, builds an ordinary Hokusai pipeline, and reports the result. The code lives in `HokusaiCommandLine`, which depends only on the public `Hokusai` module; the `hokusai` executable is just its entry point.
 

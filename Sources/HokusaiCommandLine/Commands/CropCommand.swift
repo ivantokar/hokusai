@@ -2,6 +2,8 @@ import ArgumentParser
 import Hokusai
 
 struct CropCommand: ReportingCommand {
+    static let replacement: String? = "`hokusai run <input> extract --x ... --y ... --width ... --height ... -o <output>`"
+
     static let configuration = CommandConfiguration(
         commandName: "crop",
         abstract: "Crop image by rectangle."

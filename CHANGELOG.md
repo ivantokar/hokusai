@@ -4,6 +4,30 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added (command line, #115)
+- `hokusai run`: a pipeline written the way the library writes it. An input (a path, `-`
+  for standard input, or `--text` / `--markup`), steps named after the API methods in the
+  order they apply, and an output (`-o <path>`, or `-o -` for standard output). The image
+  is decoded once and encoded once. There is one step for every public operation
+  (`auto-orient`, `resize`, `rotate`, `extract`, `extend`, `affine`, `trim`, `smart-crop`,
+  `blur`, `sharpen`, `tint`, `normalize`, `clahe`, `gamma`, `median`, `threshold`,
+  `modulate`, `convert-to`, `flatten`, `composite`, `draw-text`, and so on), one per
+  encoder (`jpeg`, `png`, `webp`, `avif`, `heif`, `tiff`, `gif`, `pdf`) and
+  `metadata-policy`. Each takes the options of its method with the method's defaults, and
+  an option is only accepted by the steps that have it. The input options are the fields
+  of `InputOptions` and `InputLimits`.
+- `--json` on `run` (the `OutputInfo` of the write) and on `inspect` (the source metadata)
+  for scripts.
+
+### Changed (command line, #115)
+- The older commands `resize`, `thumbnail`, `convert`, `rotate`, `crop` and `text` print a
+  deprecation notice on standard error and will be removed in the next major version; use
+  `hokusai run`.
+- Their defaults match the library: `resize` fits with `cover` (it was `inside`), and
+  text is the library's size and colour (24 and black; it was 48 and white).
+- `convert` refuses a flag its output format has no use for (`--quality` to PNG,
+  `--lossless` to JPEG, `--effort` to PDF) instead of accepting it and doing nothing.
+
 ### Fixed (colour and alpha, #121)
 - A background colour on a Lab, LabS, LCh, XYZ, scRGB, HSV or Yxy image (a TIFF written
   by libvips can carry these) is converted to that colour model. It used to be copied

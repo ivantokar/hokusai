@@ -2,6 +2,8 @@ import ArgumentParser
 import Hokusai
 
 struct ConvertCommand: ReportingCommand {
+    static let replacement: String? = "`hokusai run <input> webp --quality 80 -o <output>` (an encoder step, or just the output extension)"
+
     static let configuration = CommandConfiguration(
         commandName: "convert",
         abstract: "Convert image format."
@@ -12,7 +14,11 @@ struct ConvertCommand: ReportingCommand {
     @OptionGroup var diagnostics: DiagnosticsOptions
 
     func validate() throws {
-        _ = try OutputFormatResolver.resolve(explicit: encoding.format, outputPath: files.output)
+        let format = try OutputFormatResolver.resolve(explicit: encoding.format, outputPath: files.output)
+        let ignored = EncoderFactory.ignoredFlags(for: format, settings: encoding.settings)
+        guard ignored.isEmpty else {
+            throw ValidationError("\(ignored.joined(separator: ", ")) \(ignored.count == 1 ? "does" : "do") not apply to \(format.rawValue) output")
+        }
     }
 
     /// Re-encodes with the selected format. Without `--strip-metadata`

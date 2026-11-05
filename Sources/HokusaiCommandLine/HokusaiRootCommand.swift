@@ -10,6 +10,7 @@ public struct HokusaiRootCommand: AsyncParsableCommand {
         commandName: "hokusai",
         abstract: "First-party CLI for trying Hokusai image operations and benchmarks.",
         subcommands: [
+            RunCommand.self,
             InfoCommand.self,
             InspectCommand.self,
             ResizeCommand.self,
