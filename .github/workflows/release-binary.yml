@@ -1,0 +1,65 @@
+name: Release binary
+
+# Attaches the prebuilt macOS CLI to a GitHub Release so the Homebrew formula installs an archive
+# instead of compiling Swift on the user's machine (#147). It runs when a release is published,
+# which happens only after the tag's CI run is green, and by hand for a release that already exists:
+#   gh workflow run release-binary.yml -f tag=v2.2.1
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and attach to, for example v2.2.1
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  macos-arm64:
+    name: hokusai for macOS arm64
+    runs-on: macos-26
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+
+      - name: Install Swift 6.4
+        run: |
+          curl -fsSLO https://download.swift.org/swiftly/darwin/swiftly.pkg
+          installer -pkg swiftly.pkg -target CurrentUserHomeDirectory
+          ~/.swiftly/bin/swiftly init --quiet-shell-followup --assume-yes --skip-install
+          . ~/.swiftly/env.sh
+          swiftly install --use --assume-yes 6.4
+          echo "$HOME/.swiftly/bin" >> "$GITHUB_PATH"
+
+      - name: Install libvips and Cairo
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+          HOMEBREW_NO_ENV_HINTS: "1"
+        run: brew install vips cairo pkg-config
+
+      - name: Build
+        run: swift build -c release --product hokusai
+
+      # The binary links the Homebrew libraries by their stable /opt/homebrew/opt path, so it
+      # runs after a library upgrade and needs the formula's dependencies installed.
+      - name: Check the binary
+        run: |
+          otool -L .build/release/hokusai | grep -E 'vips|cairo'
+          test "$(.build/release/hokusai --version)" = "${TAG#v}"
+          .build/release/hokusai info
+
+      - name: Package and attach
+        run: |
+          name="hokusai-${TAG#v}-arm64-apple-darwin"
+          mkdir "$name"
+          cp .build/release/hokusai LICENSE "$name"/
+          tar -czf "$name.tar.gz" "$name"
+          shasum -a 256 "$name.tar.gz" | tee "$name.tar.gz.sha256"
+          gh release upload "$TAG" "$name.tar.gz" "$name.tar.gz.sha256" --clobber

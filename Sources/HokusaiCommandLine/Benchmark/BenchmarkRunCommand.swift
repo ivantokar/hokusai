@@ -83,6 +83,9 @@ struct BenchmarkRunCommand: ReportingCommand {
     }
 }
 
+/// The released version of the library and CLI. `hokusai --version` prints it and benchmark
+/// results record it. Change it with the release: a test compares it to the newest
+/// release heading in CHANGELOG.md.
 enum HokusaiVersion {
-    static let current = "2.0.0-dev"
+    static let current = "2.2.0"
 }
