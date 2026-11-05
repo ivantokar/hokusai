@@ -1,0 +1,14 @@
+# Keeps the versions of the GitHub Actions the workflows use current (the runner already
+# warns that Node 20 actions are deprecated). Monthly and grouped, so it opens one pull
+# request a month and not one per action; every pull request costs a CI run.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"

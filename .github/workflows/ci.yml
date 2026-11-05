@@ -207,18 +207,51 @@ jobs:
       - name: CLI smoke test
         run: .github/scripts/cli-smoke.sh
 
+  # Cheap checks on a pull request: seconds on a plain runner, no Swift toolchain, and part of
+  # the required `CI complete` through its needs. They also run on a draft, since a
+  # broken workflow or a missing changelog entry is cheaper to hear about early.
+  checks:
+    name: Workflow lint and changelog
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Catches workflow mistakes (bad expressions, unknown inputs, shell errors) before they
+      # break a run. SC1090 is the `source` of the Swift toolchain's environment file, which
+      # cannot be followed statically.
+      - name: Lint the workflows
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color -ignore 'SC1090'
+
+      # A change to the library's sources is a change users can see, so it needs a changelog
+      # entry. A pull request that has none for a good reason carries the `no-changelog` label.
+      - name: Require a changelog entry for source changes
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          if ! echo "$changed" | grep -q '^Sources/'; then echo "No source changes."; exit 0; fi
+          if echo "$changed" | grep -qx 'CHANGELOG.md'; then echo "CHANGELOG.md is updated."; exit 0; fi
+          if echo ",$LABELS," | grep -q ',no-changelog,'; then echo "Skipped by the no-changelog label."; exit 0; fi
+          echo "::error::Sources changed but CHANGELOG.md did not. Add an entry under [Unreleased], or add the no-changelog label."
+          exit 1
+
   # The one required check. Matrix jobs that are skipped report under an
   # unexpanded name, so they cannot be required themselves.
   complete:
     name: CI complete
     if: always()
-    needs: [changes, linux, macos]
+    needs: [changes, linux, macos, checks]
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "changes=${{ needs.changes.result }} linux=${{ needs.linux.result }} macos=${{ needs.macos.result }}"
+          echo "changes=${{ needs.changes.result }} linux=${{ needs.linux.result }} macos=${{ needs.macos.result }} checks=${{ needs.checks.result }}"
           # Only success and skipped pass. A job can also end "abandoned" when no
           # runner picks it up, which must not count as green.
-          for result in "${{ needs.changes.result }}" "${{ needs.linux.result }}" "${{ needs.macos.result }}"; do
+          for result in "${{ needs.changes.result }}" "${{ needs.linux.result }}" "${{ needs.macos.result }}" "${{ needs.checks.result }}"; do
             case "$result" in success|skipped) ;; *) echo "not green: $result"; exit 1 ;; esac
           done
