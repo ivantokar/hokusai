@@ -220,6 +220,12 @@ import Testing
         #expect(colour[0] == colour[1] && colour[1] == colour[2], "the result is one channel")
     }
 
+    @Test func aFullStepGivesFullScharrStrengthOnBothSidesOfTheBoundary() async throws {
+        let result = try await step().edges(.scharr).raw()
+        #expect(pixel(result, 5, 4)[0] == 255 && pixel(result, 6, 4)[0] == 255, "\(pixel(result, 5, 4)), \(pixel(result, 6, 4))")
+        #expect(pixel(result, 4, 4)[0] == 0 && pixel(result, 7, 4)[0] == 0)
+    }
+
     @Test func aFlatImageHasNoEdges() async throws {
         for detector in [EdgeDetector.sobel, .scharr, .prewitt, .canny()] {
             let result = try await solid(8, 8, [120, 130, 140, 255]).edges(detector).raw()

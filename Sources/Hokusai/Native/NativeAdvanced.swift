@@ -68,12 +68,31 @@ extension NativeImage {
             let edge: NativeImage
             switch detector {
             case .sobel: edge = try grey.applying("edges") { swift_vips_sobel($0, $1) }
-            case .scharr: edge = try grey.applying("edges") { swift_vips_scharr($0, $1) }
+            case .scharr: edge = try grey.scharrStrength()
             case .prewitt: edge = try grey.applying("edges") { swift_vips_prewitt($0, $1) }
             case .canny(let sigma): edge = try grey.applying("edges") { swift_vips_canny($0, $1, sigma) }
             }
             return try edge.castRounded(to: original, operation: "edges")
         }
+    }
+
+    /// Scharr edge strength: `|dx| + |dy|` of the two Scharr kernels, divided by 16 so that a step from
+    /// black to white gives full white.
+    ///
+    /// Built from convolutions rather than libvips' own `scharr`, which returns zeros for ordinary
+    /// edges in libvips 8.16, so the result does not depend on the libvips version.
+    fileprivate func scharrStrength() throws -> NativeImage {
+        let floating = try applying("edges") { swift_vips_cast($0, $1, Int32(VIPS_FORMAT_FLOAT.rawValue)) }
+        func gradient(_ values: [Double]) throws -> NativeImage {
+            let response = try values.withUnsafeBufferPointer { kernel in
+                try floating.applying("edges") { swift_vips_conv_matrix($0, $1, kernel.baseAddress, 3, 3, 16, 0) }
+            }
+            return try response.applying("edges") { swift_vips_abs($0, $1) }
+        }
+        let horizontal = try gradient([-3, 0, 3, -10, 0, 10, -3, 0, 3])
+        let vertical = try gradient([-3, -10, -3, 0, 0, 0, 3, 10, 3])
+        return try Self.producing({ output in swift_vips_add(horizontal.pointer, vertical.pointer, output) },
+                                  failure: { .nativeTransform("edges") })
     }
 
     /// One channel of the image as a single grey band; the image is first read as sRGB.

@@ -559,12 +559,16 @@ static inline int swift_vips_rank(VipsImage *in, VipsImage **out, int width, int
     return vips_rank(in, out, width, height, index, NULL);
 }
 
-static inline int swift_vips_sobel(VipsImage *in, VipsImage **out) {
-    return vips_sobel(in, out, NULL);
+static inline int swift_vips_abs(VipsImage *in, VipsImage **out) {
+    return vips_abs(in, out, NULL);
 }
 
-static inline int swift_vips_scharr(VipsImage *in, VipsImage **out) {
-    return vips_scharr(in, out, NULL);
+static inline int swift_vips_add(VipsImage *left, VipsImage *right, VipsImage **out) {
+    return vips_add(left, right, out, NULL);
+}
+
+static inline int swift_vips_sobel(VipsImage *in, VipsImage **out) {
+    return vips_sobel(in, out, NULL);
 }
 
 static inline int swift_vips_prewitt(VipsImage *in, VipsImage **out) {
