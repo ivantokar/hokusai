@@ -154,6 +154,20 @@ One encoder configuration means the same thing wherever it is written: `data()` 
 - Raster formats are encoded straight into the memory buffer or file; nothing is staged as a second copy. PDF is written directly to a file as Cairo produces it; `data()` collects the same writer's bytes (see PDF output). TIFF is the exception that must be encoded in memory first when it is streamed.
 - The file is written through a temporary file in the same directory (`.name.hokusai-…`) and renamed over the destination only when the write finished, so a write that fails or is cancelled at any moment leaves an existing file exactly as it was and leaves no partial image, and a reader never sees half a file. The temporary file is created when the first bytes are written, so a pipeline that fails before producing output never touches the destination. A replaced file keeps its permissions; a symbolic link stays a link and its target is replaced; a hard link to the old file is not followed (the other name keeps the old content). A destination that is not a regular file, such as a device or a pipe, and a file in a directory you cannot create files in, are written in place as before. A destination that is a file the pipeline reads, including through a symbolic link or a hard link, is refused with `HokusaiError.invalidOption` (`output URL`) before anything is written, and the file is left as it was; write to a different file and replace the original yourself. A destination that cannot be opened or written (missing folder, permissions, full disk) throws `HokusaiError.io` with a `.write` operation and the system's reason.
 
+### Large uploads
+
+A server that receives an image as a stream of chunks does not have to hold it in memory to decode it:
+
+```swift
+let image = try await Hokusai(spooling: request.body, options: .init(limits: .init(maxBytes: 200_000_000)))
+```
+
+(`request.body` is a sequence of `ByteBuffer`; the `Data` form is `Hokusai(spooling:)` in the core module, the `ByteBuffer` form comes with `HokusaiNIO`.)
+
+- The upload stays in memory while it is within `memoryLimit` (1 MiB by default) and moves to a temporary file when it grows past it, so the encoded upload never takes more than `memoryLimit` plus one chunk of memory. libvips reads the image from the file with random access; the decode does not need the body as one buffer. The memory libvips uses to decode and transform the image is a separate matter (`InputOptions.access`, `InputLimits.maxPixels`).
+- `InputLimits.maxBytes` applies while the body is read: the chunk that crosses it throws `HokusaiError.resource` (`encodedBytes`) and the rest of the body is never requested.
+- The pipeline owns the file. It is removed when the last copy of the pipeline, and any evaluation running on it, is released; a failed or cancelled read removes it at once. A process that is killed first leaves its file: files are named `hokusai-upload-…`, are readable by their owner only, and sit in `spoolDirectory` (the system temporary directory by default), so a server can sweep that directory at startup.
+
 ### Raw pixels
 
 Pixels that already live in memory (a renderer, a camera buffer, a computer-vision step, a binary protocol) go in and out without being encoded:

@@ -28,7 +28,7 @@ public struct Hokusai: Sendable {
     let plan: ImagePlan
     let terminal: TerminalConfig
 
-    private init(plan: ImagePlan, terminal: TerminalConfig = TerminalConfig()) {
+    init(plan: ImagePlan, terminal: TerminalConfig = TerminalConfig()) {
         self.plan = plan
         self.terminal = terminal
     }

@@ -4,6 +4,9 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added (large uploads, #112)
+- `Hokusai(spooling:options:memoryLimit:spoolDirectory:)` (and the `ByteBuffer` form in `HokusaiNIO`) builds a pipeline from an upload that arrives in chunks. A small upload stays in memory; one past `memoryLimit` is spooled to a private temporary file, so the encoded body never has to fit in memory. `InputLimits.maxBytes` applies while the body is read and stops the read at the chunk that crosses it. The pipeline owns the file and removes it when the last copy is released; a failed, over-limit or cancelled read removes it at once.
+
 ### Added (raw pixels, #22)
 - `Hokusai(raw:width:height:format:rowStride:premultiplied:limits:)` takes pixels you already hold, and `raw(_:premultiplied:background:)` returns them as a `RawImage` that states its dimensions, `RawPixelFormat` (`gray8`, `grayAlpha8`, `rgb8`, `rgba8` and their 16-bit forms), row stride and alpha convention. Raw and encoded pipelines share every transformation. Byte count, stride and dimensions are validated, with overflow detection, before any native call; `InputLimits` apply; the bytes are copied, never borrowed.
 
