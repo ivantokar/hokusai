@@ -3,8 +3,10 @@
 
 #include <pango/pangocairo.h>
 #include <cairo-pdf.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #if CAIRO_VERSION < CAIRO_VERSION_ENCODE(1, 16, 0)
 #error "HokusaiPDF requires Cairo 1.16 or later"
@@ -23,18 +25,43 @@
  * on the C side, so the Swift renderer sees plain integers and doubles.
  */
 
-/** @brief A growing byte buffer that receives the PDF Cairo writes. */
+/**
+ * @brief Where the PDF Cairo writes goes: a growing byte buffer, or a file descriptor.
+ *
+ * With `to_file` set, bytes go straight to `fd` and only `length` (the bytes written) is kept, so a
+ * large document never sits in memory as a whole. `error` holds the `errno` of a failed write.
+ */
 typedef struct {
     unsigned char *data;
     size_t length;
     size_t capacity;
     int failed;
+    int to_file;
+    int fd;
+    int error;
 } HokusaiPDFBuffer;
 
 static inline cairo_status_t hokusai_pdf_write(void *closure, const unsigned char *data, unsigned int length) {
     HokusaiPDFBuffer *buffer = (HokusaiPDFBuffer *) closure;
     if (buffer->failed) {
         return CAIRO_STATUS_WRITE_ERROR;
+    }
+    if (buffer->to_file) {
+        size_t offset = 0;
+        while (offset < length) {
+            ssize_t written = write(buffer->fd, data + offset, length - offset);
+            if (written < 0) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                buffer->failed = 1;
+                buffer->error = errno;
+                return CAIRO_STATUS_WRITE_ERROR;
+            }
+            offset += (size_t) written;
+        }
+        buffer->length += length;
+        return CAIRO_STATUS_SUCCESS;
     }
     if (buffer->length + length > buffer->capacity) {
         size_t capacity = buffer->capacity ? buffer->capacity : 65536;
@@ -52,6 +79,12 @@ static inline cairo_status_t hokusai_pdf_write(void *closure, const unsigned cha
     memcpy(buffer->data + buffer->length, data, length);
     buffer->length += length;
     return CAIRO_STATUS_SUCCESS;
+}
+
+/** @brief Send the PDF to `fd` instead of keeping it in memory. */
+static inline void hokusai_pdf_buffer_use_file(HokusaiPDFBuffer *buffer, int fd) {
+    buffer->to_file = 1;
+    buffer->fd = fd;
 }
 
 static inline cairo_surface_t *hokusai_pdf_surface_create(HokusaiPDFBuffer *buffer, double width, double height) {

@@ -4,51 +4,148 @@ import CPangoCairo
 
 /// Draws pages with Cairo and Pango into a PDF.
 ///
-/// This type is synchronous and holds no state; ``VectorDocument`` runs it on a background queue.
+/// The drawing is synchronous. ``Session`` draws one page at a time, so the caller can evaluate the
+/// images of a page just before drawing it and let them go afterwards. A session is not thread
+/// safe: ``VectorDocument`` runs every call on one serial queue.
 enum VectorRenderer {
-    struct ImageKey: Hashable, Sendable {
-        let page: Int
-        let item: Int
-    }
-
-    static func render(pages: [VectorPage], images: [ImageKey: RawImage], metadata: PDFDocumentMetadata?) throws -> VectorOutput {
-        guard hokusai_vector_pdf_available() != 0 else {
-            throw HokusaiError.unsupported(feature: "vector PDF", reason: "this Cairo build has no PDF surface")
+    /// A PDF being drawn, page by page, into memory or into a file.
+    final class Session: @unchecked Sendable {
+        /// Where the PDF goes. A file is written as Cairo produces it, through a temporary file in
+        /// the destination's directory that replaces the destination when the document is finished.
+        enum Destination {
+            case memory
+            case file(URL)
         }
-        var buffer = HokusaiPDFBuffer()
-        defer { hokusai_pdf_buffer_free(&buffer) }
 
-        let first = pages[0].size.dimensions
-        guard let surface = hokusai_pdf_surface_create(&buffer, first.width, first.height) else {
-            throw encodeFailure("could not create the PDF surface")
-        }
-        defer { cairo_surface_destroy(surface) }
-        try check(surface: surface, "create the PDF surface")
-        if let metadata { apply(metadata, to: surface) }
+        private let buffer = UnsafeMutablePointer<HokusaiPDFBuffer>.allocate(capacity: 1)
+        private var surface: OpaquePointer?
+        private var context: OpaquePointer?
+        private let destination: Destination
+        private var temporary: URL?
+        private var pagesDrawn = 0
+        private var released = false
 
-        guard let cr = cairo_create(surface) else {
-            throw encodeFailure("could not create a drawing context")
-        }
-        defer { cairo_destroy(cr) }
-
-        for (pageIndex, page) in pages.enumerated() {
-            if Task.isCancelled { throw CancellationError() }
-            let size = page.size.dimensions
-            cairo_pdf_surface_set_size(surface, size.width, size.height)
-            for (itemIndex, item) in page.items.enumerated() {
-                try draw(item, on: cr, pageSize: size, image: images[ImageKey(page: pageIndex, item: itemIndex)])
-                try check(context: cr, "draw page \(pageIndex + 1)")
+        init(firstPage: (width: Double, height: Double), metadata: PDFDocumentMetadata?, destination: Destination) throws {
+            buffer.initialize(to: HokusaiPDFBuffer())
+            self.destination = destination
+            do {
+                guard hokusai_vector_pdf_available() != 0 else {
+                    throw HokusaiError.unsupported(feature: "vector PDF", reason: "this Cairo build has no PDF surface")
+                }
+                if case .file(let url) = destination { try openTemporary(beside: url) }
+                guard let surface = hokusai_pdf_surface_create(buffer, firstPage.width, firstPage.height) else {
+                    throw VectorRenderer.encodeFailure("could not create the PDF surface")
+                }
+                self.surface = surface
+                try VectorRenderer.check(surface: surface, "create the PDF surface")
+                if let metadata { VectorRenderer.apply(metadata, to: surface) }
+                guard let cr = cairo_create(surface) else {
+                    throw VectorRenderer.encodeFailure("could not create a drawing context")
+                }
+                context = cr
+            } catch {
+                release()
+                throw error
             }
-            cairo_show_page(cr)
-            try check(context: cr, "finish page \(pageIndex + 1)")
         }
-        cairo_surface_finish(surface)
-        try check(surface: surface, "write the PDF")
-        guard !buffer.failed.boolValue, let bytes = buffer.data else {
-            throw encodeFailure("could not collect the PDF bytes")
+
+        deinit { release() }
+
+        /// Draws one page. `images` holds the evaluated image of each image item, by item index.
+        func draw(_ page: VectorPage, images: [Int: RawImage], cancellation: CancellationFlag) throws {
+            guard let surface, let cr = context else { throw VectorRenderer.encodeFailure("the document is already finished") }
+            let pageNumber = pagesDrawn + 1
+            let size = page.size.dimensions
+            do {
+                cairo_pdf_surface_set_size(surface, size.width, size.height)
+                for (itemIndex, item) in page.items.enumerated() {
+                    try cancellation.check()
+                    try VectorRenderer.draw(item, on: cr, pageSize: size, image: images[itemIndex])
+                    try VectorRenderer.check(context: cr, "draw page \(pageNumber)")
+                }
+                cairo_show_page(cr)
+                try VectorRenderer.check(context: cr, "finish page \(pageNumber)")
+            } catch {
+                throw translated(error)
+            }
+            pagesDrawn += 1
         }
-        let data = Data(bytes: bytes, count: buffer.length)
-        return VectorOutput(data: data, info: VectorOutputInfo(pageCount: pages.count, byteCount: data.count))
+
+        /// Finishes the PDF. For a file destination the data is empty: the file is complete and has
+        /// replaced the destination.
+        func finish(cancellation: CancellationFlag) throws -> VectorOutput {
+            guard let surface else { throw VectorRenderer.encodeFailure("the document is already finished") }
+            do {
+                cairo_surface_finish(surface)
+                try VectorRenderer.check(surface: surface, "write the PDF")
+                if buffer.pointee.failed != 0 { throw VectorRenderer.encodeFailure("could not collect the PDF bytes") }
+            } catch {
+                throw translated(error)
+            }
+            let byteCount = buffer.pointee.length
+            let info = VectorOutputInfo(pageCount: pagesDrawn, byteCount: byteCount)
+            switch destination {
+            case .memory:
+                guard let bytes = buffer.pointee.data else { throw VectorRenderer.encodeFailure("could not collect the PDF bytes") }
+                return VectorOutput(data: Data(bytes: bytes, count: byteCount), info: info)
+            case .file(let url):
+                try cancellation.check()
+                try commitTemporary(to: url)
+                return VectorOutput(data: Data(), info: info)
+            }
+        }
+
+        // MARK: File output
+
+        private func openTemporary(beside url: URL) throws {
+            let name = ".\(url.lastPathComponent).hokusai-\(UUID().uuidString)"
+            let path = url.deletingLastPathComponent().appendingPathComponent(name)
+            // Created with the usual 0666 modified by the umask, like a file a plain write creates.
+            let descriptor = open(path.path, O_WRONLY | O_CREAT | O_EXCL, 0o666)
+            guard descriptor >= 0 else {
+                throw HokusaiError.io(url: url, operation: .write, reason: "could not create a temporary file: \(String(cString: strerror(errno)))")
+            }
+            temporary = path
+            hokusai_pdf_buffer_use_file(buffer, descriptor)
+        }
+
+        private func commitTemporary(to url: URL) throws {
+            guard let temporary else { return }
+            let descriptor = buffer.pointee.fd
+            buffer.pointee.fd = -1
+            let synced = fsync(descriptor) == 0
+            let syncError = errno
+            let closed = close(descriptor) == 0
+            let closeError = errno
+            guard synced, closed else {
+                throw HokusaiError.io(url: url, operation: .write, reason: String(cString: strerror(synced ? closeError : syncError)))
+            }
+            guard rename(temporary.path, url.path) == 0 else {
+                throw HokusaiError.io(url: url, operation: .write, reason: "could not replace the file: \(String(cString: strerror(errno)))")
+            }
+            self.temporary = nil
+        }
+
+        /// A failed write to the file is an I/O error of that file, not a Cairo failure.
+        private func translated(_ error: Error) -> Error {
+            guard case .file(let url) = destination, buffer.pointee.failed != 0, buffer.pointee.error != 0 else { return error }
+            return HokusaiError.io(url: url, operation: .write, reason: String(cString: strerror(buffer.pointee.error)))
+        }
+
+        private func release() {
+            guard !released else { return }
+            released = true
+            if let context { cairo_destroy(context) }
+            if let surface { cairo_surface_destroy(surface) }
+            context = nil
+            surface = nil
+            if buffer.pointee.to_file != 0, buffer.pointee.fd >= 0 { close(buffer.pointee.fd) }
+            // A temporary that was never committed is an unfinished or cancelled document.
+            if let temporary { unlink(temporary.path) }
+            temporary = nil
+            hokusai_pdf_buffer_free(buffer)
+            buffer.deallocate()
+        }
     }
 
     // MARK: - Items
@@ -87,7 +184,7 @@ enum VectorRenderer {
             cairo_restore(cr)
 
         case .image(_, let frame, let fit, let opacity):
-            guard let image else { throw encodeFailure("an image was not evaluated") }
+            guard let image else { throw VectorRenderer.encodeFailure("an image was not evaluated") }
             try drawImage(image, in: frame, fit: fit, opacity: opacity, on: cr)
 
         case .text(let content, let origin, let width, let style):
@@ -126,7 +223,7 @@ enum VectorRenderer {
             let half = (abs(area.width * dx) + abs(area.height * dy)) / 2
             let (cx, cy) = (area.x + area.width / 2, area.y + area.height / 2)
             guard let pattern = cairo_pattern_create_linear(cx - dx * half, cy - dy * half, cx + dx * half, cy + dy * half) else {
-                throw encodeFailure("could not create a gradient")
+                throw VectorRenderer.encodeFailure("could not create a gradient")
             }
             defer { cairo_pattern_destroy(pattern) }
             for stop in stops {
@@ -139,7 +236,7 @@ enum VectorRenderer {
     private static func drawImage(_ raw: RawImage, in frame: VectorRect, fit: VectorImageFit, opacity: Double, on cr: OpaquePointer) throws {
         let width = Int32(raw.width), height = Int32(raw.height)
         let stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, width)
-        guard stride > 0 else { throw encodeFailure("an image is too wide") }
+        guard stride > 0 else { throw VectorRenderer.encodeFailure("an image is too wide") }
         var pixels = [UInt8](repeating: 0, count: Int(stride) * Int(height))
         raw.data.withUnsafeBytes { source in
             pixels.withUnsafeMutableBufferPointer { destination in
@@ -149,7 +246,7 @@ enum VectorRenderer {
         }
         try pixels.withUnsafeMutableBufferPointer { buffer in
             guard let surface = cairo_image_surface_create_for_data(buffer.baseAddress, CAIRO_FORMAT_ARGB32, width, height, stride) else {
-                throw encodeFailure("could not wrap an image")
+                throw VectorRenderer.encodeFailure("could not wrap an image")
             }
             defer { cairo_surface_destroy(surface) }
             try check(surface: surface, "wrap an image")
@@ -219,18 +316,18 @@ enum VectorRenderer {
     private static func check(context cr: OpaquePointer, _ operation: String) throws {
         let status = cairo_status(cr)
         guard status == CAIRO_STATUS_SUCCESS else {
-            throw encodeFailure("could not \(operation): \(String(cString: cairo_status_to_string(status)))")
+            throw VectorRenderer.encodeFailure("could not \(operation): \(String(cString: cairo_status_to_string(status)))")
         }
     }
 
     private static func check(surface: OpaquePointer, _ operation: String) throws {
         let status = cairo_surface_status(surface)
         guard status == CAIRO_STATUS_SUCCESS else {
-            throw encodeFailure("could not \(operation): \(String(cString: cairo_status_to_string(status)))")
+            throw VectorRenderer.encodeFailure("could not \(operation): \(String(cString: cairo_status_to_string(status)))")
         }
     }
 
-    private static func encodeFailure(_ reason: String) -> HokusaiError {
+    fileprivate static func encodeFailure(_ reason: String) -> HokusaiError {
         .encode(FailureContext(operation: "encode vector pdf", reason: reason))
     }
 }
