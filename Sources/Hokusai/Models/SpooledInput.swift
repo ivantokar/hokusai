@@ -46,8 +46,8 @@ extension Hokusai {
     ///
     /// This bounds the memory of the *encoded* upload. The memory libvips uses to decode and
     /// transform the image is a separate matter (see ``InputOptions/AccessMode`` and
-    /// ``InputLimits/maxPixels``). Writing to the file happens on the calling task, one chunk
-    /// at a time.
+    /// ``InputLimits/maxPixels``). The file is written one chunk at a time on a background
+    /// queue, so a slow disk does not hold a thread of Swift's cooperative pool.
     ///
     /// - Parameters:
     ///   - chunks: The upload, in order. Chunks of any size, including empty ones.
@@ -86,12 +86,12 @@ extension Hokusai {
                 if chunk.isEmpty { continue }
                 total = next
                 if let writer = spool {
-                    try writer.append(chunk)
+                    try await writer.append(chunk)
                 } else if total > memoryLimit {
-                    let writer = try SpoolWriter(directory: spoolDirectory ?? FileManager.default.temporaryDirectory)
+                    let writer = try await SpoolWriter.create(directory: spoolDirectory ?? FileManager.default.temporaryDirectory)
                     spool = writer
-                    try writer.append(memory)
-                    try writer.append(chunk)
+                    try await writer.append(memory)
+                    try await writer.append(chunk)
                     memory = Data()
                 } else {
                     memory.append(chunk)
@@ -101,11 +101,11 @@ extension Hokusai {
                 throw HokusaiError.invalidInput(reason: "encoded data is empty")
             }
         } catch {
-            spool?.discard()
+            await spool?.discard()
             throw error
         }
         if let spool {
-            let file = try spool.finish()
+            let file = try await spool.finish()
             self.init(plan: .source(.file(file.url, options, file)))
         } else {
             self.init(plan: .source(.data(memory, options)))
@@ -114,14 +114,19 @@ extension Hokusai {
 }
 
 /// Appends to a new temporary file and hands it over as a ``SpooledFile`` when finished.
-private final class SpoolWriter {
+///
+/// Every file operation runs on one serial queue and the caller suspends while it does, so
+/// blocking I/O never occupies a thread of the cooperative pool. The state is touched only on that
+/// queue, after creation.
+private final class SpoolWriter: @unchecked Sendable {
+    private static let queue = DispatchQueue(label: "hokusai.spool", qos: .utility)
     private var descriptor: Int32
     private let url: URL
 
-    init(directory: URL) throws {
+    private init(directory: URL) throws {
         var template = Array(directory.appendingPathComponent("hokusai-upload-XXXXXX").path.utf8CString)
         let descriptor = mkstemp(&template)
-        let path = String(cString: template)
+        let path = String(decoding: template.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
         guard descriptor >= 0 else {
             throw HokusaiError.io(
                 url: directory, operation: .write,
@@ -135,35 +140,51 @@ private final class SpoolWriter {
         if descriptor >= 0 { close(descriptor) }
     }
 
-    func append(_ data: Data) throws {
-        try data.withUnsafeBytes { bytes in
-            var offset = 0
-            while offset < bytes.count {
-                let written = write(descriptor, bytes.baseAddress! + offset, bytes.count - offset)
-                if written < 0 {
-                    if errno == EINTR { continue }
-                    throw HokusaiError.io(url: url, operation: .write, reason: String(cString: strerror(errno)))
+    private static func run<Result: Sendable>(_ work: @escaping @Sendable () throws -> Result) async throws -> Result {
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async { continuation.resume(with: Swift.Result { try work() }) }
+        }
+    }
+
+    static func create(directory: URL) async throws -> SpoolWriter {
+        try await run { try SpoolWriter(directory: directory) }
+    }
+
+    func append(_ data: Data) async throws {
+        try await Self.run { [self] in
+            try data.withUnsafeBytes { bytes in
+                var offset = 0
+                while offset < bytes.count {
+                    let written = write(descriptor, bytes.baseAddress! + offset, bytes.count - offset)
+                    if written < 0 {
+                        if errno == EINTR { continue }
+                        throw HokusaiError.io(url: url, operation: .write, reason: String(cString: strerror(errno)))
+                    }
+                    offset += written
                 }
-                offset += written
             }
         }
     }
 
     /// Closes the file and gives ownership of it to a ``SpooledFile``.
-    func finish() throws -> SpooledFile {
-        let result = close(descriptor)
-        descriptor = -1
-        guard result == 0 else {
-            unlink(url.path)
-            throw HokusaiError.io(url: url, operation: .write, reason: String(cString: strerror(errno)))
+    func finish() async throws -> SpooledFile {
+        try await Self.run { [self] in
+            let result = close(descriptor)
+            descriptor = -1
+            guard result == 0 else {
+                unlink(url.path)
+                throw HokusaiError.io(url: url, operation: .write, reason: String(cString: strerror(errno)))
+            }
+            return SpooledFile(url: url)
         }
-        return SpooledFile(url: url)
     }
 
     /// Closes and removes the file after a failure.
-    func discard() {
-        if descriptor >= 0 { close(descriptor) }
-        descriptor = -1
-        unlink(url.path)
+    func discard() async {
+        _ = try? await Self.run { [self] in
+            if descriptor >= 0 { close(descriptor) }
+            descriptor = -1
+            unlink(url.path)
+        }
     }
 }

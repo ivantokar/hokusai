@@ -4,6 +4,27 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [2.2.2] - 2026-11-06
+
+Fixes for vector PDF documents and spooled uploads (#158, #159, #160).
+
+### Fixed
+
+- Cancelling the task that writes a `VectorDocument` stops the work with `CancellationError`, as
+  documented. The drawing ran on a dispatch queue that cannot see the calling task's cancellation, so
+  a cancelled `data()` could return a finished PDF and a cancelled `write(to:)` could still replace the
+  destination file. A shared cancellation signal now reaches the drawing, and a file is replaced only
+  if the document was finished without cancellation (#158).
+- A vector document no longer holds the decoded rasters of every page while it draws. Pages are drawn
+  one at a time: the images of a page are evaluated just before it is drawn and released after it, so
+  memory is that of one page. In a test with 30 pages of 9 MB images the peak growth fell from about
+  350 MB to about 50 MB. `VectorDocument.write(to:)` also no longer assembles the whole PDF in memory:
+  Cairo writes it to a temporary file next to the destination, which replaces the destination when the
+  document is complete (#159).
+- Blocking file I/O no longer runs on Swift's cooperative threads. The writes of a spooled upload
+  (`Hokusai(spooling:)`) and the file output of `VectorDocument.write(to:)` run on background queues
+  while the calling task is suspended, so a slow disk cannot delay unrelated async work (#160).
+
 ## [2.2.1] - 2026-11-05
 
 ### Added
