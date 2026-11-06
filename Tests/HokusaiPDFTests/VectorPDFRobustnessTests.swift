@@ -4,6 +4,8 @@ import HokusaiPDF
 import Testing
 #if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
 #endif
 
 /// Cancellation, memory and file output of a vector document (#158, #159, #160).
@@ -108,7 +110,8 @@ import Darwin
     }
 }
 
-/// Samples this process's resident memory on a thread and reports the largest growth over the start.
+/// Samples this process's memory in use on a thread (resident size on macOS, heap bytes in use on
+/// glibc) and reports the largest growth over the start.
 private final class MemorySampler: @unchecked Sendable {
     private let lock = NSLock()
     private var peak = 0
@@ -145,10 +148,13 @@ private final class MemorySampler: @unchecked Sendable {
             }
         }
         return result == KERN_SUCCESS ? Int(info.resident_size) : 0
+        #elseif canImport(Glibc)
+        // Bytes in use, not the resident size: glibc keeps freed memory in per-thread arenas, so the
+        // resident size does not fall when a raster is released and would not show what is alive.
+        let info = mallinfo2()
+        return Int(info.uordblks) + Int(info.hblkhd)
         #else
-        guard let statm = try? String(contentsOfFile: "/proc/self/statm", encoding: .utf8),
-              let pages = statm.split(separator: " ").dropFirst().first.flatMap({ Int($0) }) else { return 0 }
-        return pages * Int(sysconf(Int32(_SC_PAGESIZE)))
+        return 0
         #endif
     }
 }
