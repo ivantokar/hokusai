@@ -4,8 +4,6 @@ import HokusaiPDF
 import Testing
 #if canImport(Darwin)
 import Darwin
-#elseif canImport(Glibc)
-import Glibc
 #endif
 
 /// Cancellation, memory and file output of a vector document (#158, #159, #160).
@@ -92,7 +90,12 @@ import Glibc
     // MARK: Memory (#159)
 
     /// The memory a document with many large images needs is that of one page, not of all of them.
-    @Test func imagesAreHeldOnePageAtATime() async throws {
+    ///
+    /// Measured on macOS only. On glibc the resident size does not fall when a raster is released
+    /// (freed memory stays in per-thread arenas), so it cannot tell a raster that is alive from one
+    /// that was freed; the check there would measure the allocator, not the document.
+    @Test(.enabled(if: MemorySampler.isMeaningful))
+    func imagesAreHeldOnePageAtATime() async throws {
         let side = 1500                                // 9 MB of RGBA per image
         let pixels = Data(count: side * side * 4)
         let source = try Hokusai(raw: pixels, width: side, height: side, format: .rgba8)
@@ -110,13 +113,21 @@ import Glibc
     }
 }
 
-/// Samples this process's memory in use on a thread (resident size on macOS, heap bytes in use on
-/// glibc) and reports the largest growth over the start.
+/// Samples this process's resident memory on a thread and reports the largest growth over the start.
 private final class MemorySampler: @unchecked Sendable {
     private let lock = NSLock()
     private var peak = 0
     private var running = true
     private var baseline = 0
+
+    /// Whether the resident size follows the memory that is alive.
+    static let isMeaningful: Bool = {
+        #if canImport(Darwin)
+        return true
+        #else
+        return false
+        #endif
+    }()
 
     func start() {
         baseline = Self.resident()
@@ -148,11 +159,6 @@ private final class MemorySampler: @unchecked Sendable {
             }
         }
         return result == KERN_SUCCESS ? Int(info.resident_size) : 0
-        #elseif canImport(Glibc)
-        // Bytes in use, not the resident size: glibc keeps freed memory in per-thread arenas, so the
-        // resident size does not fall when a raster is released and would not show what is alive.
-        let info = mallinfo2()
-        return Int(info.uordblks) + Int(info.hblkhd)
         #else
         return 0
         #endif
