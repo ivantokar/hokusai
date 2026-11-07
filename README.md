@@ -10,6 +10,18 @@ Hokusai is a Swift image-processing library powered by [libvips](https://www.lib
 
 libvips processes images on demand, using small regions of pixel data at a time and available CPU cores efficiently. Hokusai exposes that capability through Swift without spawning child processes.
 
+**Documentation: <https://ivantokar.com/oss/hokusai/>** (English) · [Українською](https://ivantokar.com/oss/hokusai/uk/). Guides for every operation, recipes, integrations and the CLI reference; every code sample and image there is produced by running the library.
+
+## Packages
+
+| Package | What it is for |
+| --- | --- |
+| **Hokusai** (this repository) | The core library, with the optional `HokusaiNIO` (SwiftNIO buffers) and `HokusaiPDF` (vector PDF documents) products and the `hokusai` command-line tool |
+| [**Hokusai Vapor**](https://github.com/ivantokar/hokusai-vapor) | Adapter for [Vapor](https://vapor.codes): read an upload into a pipeline and stream the result as a response |
+| [**Hokusai Hummingbird**](https://github.com/ivantokar/hokusai-hummingbird) | The same for [Hummingbird](https://github.com/hummingbird-project/hummingbird) |
+
+The adapters are thin: they connect a web framework to the core library and change nothing about how images are processed. Using a plain Swift app, a script or the command line, you only need the core library.
+
 ## Requirements
 
 Required:
@@ -475,7 +487,9 @@ the core pipeline.
 
 ## Related projects
 
+- [Documentation](https://ivantokar.com/oss/hokusai/)
 - [Hokusai Vapor](https://github.com/ivantokar/hokusai-vapor)
+- [Hokusai Hummingbird](https://github.com/ivantokar/hokusai-hummingbird)
 - [Archived Vapor example](https://github.com/ivantokar/hokusai-vapor-example)
 - [API documentation](Sources/Hokusai/Hokusai.docc/Hokusai.md)
 - [Contributing](CONTRIBUTING.md)
