@@ -488,8 +488,9 @@ the core pipeline.
 ## Related projects
 
 - [Documentation](https://ivantokar.com/oss/hokusai/)
+- [Examples](https://github.com/ivantokar/hokusai-examples): a web playground on Vapor and Hummingbird, and a macOS playground
 - [Hokusai Vapor](https://github.com/ivantokar/hokusai-vapor)
 - [Hokusai Hummingbird](https://github.com/ivantokar/hokusai-hummingbird)
-- [Archived Vapor example](https://github.com/ivantokar/hokusai-vapor-example)
+- [Archived Vapor example](https://github.com/ivantokar/hokusai-vapor-example) (superseded by Examples)
 - [API documentation](Sources/Hokusai/Hokusai.docc/Hokusai.md)
 - [Contributing](CONTRIBUTING.md)
