@@ -3,14 +3,17 @@ name: Sanitizers
 # Non-gating (#50): AddressSanitizer and ThreadSanitizer over the whole suite,
 # including the fresh-process tests, on the current Linux toolchain. It is never
 # a required PR check: native libraries can produce false positives, and a
-# flaky gate is worse than none. It runs nightly, on demand, and on a pull
-# request that edits this file so the file itself is exercised.
+# flaky gate is worse than none. It runs weekly (Monday night), on demand, and on
+# a pull request that edits this file so the file itself is exercised. The sanitizers
+# slow the suite about tenfold and the code changes in bursts, so a nightly run mostly
+# repeated the previous result. Run it by hand before tagging a release:
+#   gh workflow run sanitizers.yml
 #
 # Schedules only fire on the default branch. For release/2.0, run it by hand:
 #   gh workflow run sanitizers.yml --ref release/2.0
 on:
   schedule:
-    - cron: "17 3 * * *"
+    - cron: "17 3 * * 1"
   workflow_dispatch:
   pull_request:
     paths:
